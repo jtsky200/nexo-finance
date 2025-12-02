@@ -548,30 +548,33 @@ export default function Finance() {
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={monthlyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="month" className="text-xs" />
-                  <YAxis className="text-xs" tickFormatter={(value) => `${value}`} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="month" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
                   <Tooltip 
                     formatter={(value: number) => [`CHF ${value.toFixed(2)}`, '']}
-                    labelStyle={{ color: '#1a1a1a' }}
+                    cursor={{ fill: 'transparent' }}
                     contentStyle={{ 
-                      backgroundColor: 'hsl(var(--background))', 
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px'
+                      backgroundColor: '#fff', 
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '6px',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                     }}
                   />
-                  <Legend />
+                  <Legend wrapperStyle={{ paddingTop: '10px' }} />
                   <Bar 
                     dataKey="income" 
                     name={t('finance.income')} 
                     fill="#22c55e" 
                     radius={[4, 4, 0, 0]}
+                    isAnimationActive={false}
                   />
                   <Bar 
                     dataKey="expenses" 
                     name={t('finance.expenses')} 
                     fill="#ef4444" 
                     radius={[4, 4, 0, 0]}
+                    isAnimationActive={false}
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -603,6 +606,7 @@ export default function Finance() {
                         outerRadius={100}
                         paddingAngle={2}
                         dataKey="value"
+                        isAnimationActive={false}
                       >
                         {categoryData.map((_, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -611,9 +615,10 @@ export default function Finance() {
                       <Tooltip 
                         formatter={(value: number) => [`CHF ${value.toFixed(2)}`, '']}
                         contentStyle={{ 
-                          backgroundColor: 'hsl(var(--background))', 
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px'
+                          backgroundColor: '#fff', 
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '6px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                         }}
                       />
                     </PieChart>

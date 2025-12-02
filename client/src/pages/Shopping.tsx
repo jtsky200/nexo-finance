@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useShoppingList, createShoppingItem, deleteShoppingItem, markShoppingItemAsBought, createFinanceEntry } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
-import { motion, AnimatePresence } from 'framer-motion';
+// Animations removed for better performance
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
 // Swiss stores
@@ -676,6 +676,7 @@ export default function Shopping() {
                           outerRadius={40}
                           paddingAngle={2}
                           dataKey="value"
+                          isAnimationActive={false}
                         >
                           {categoryChartData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={entry.color} />
@@ -974,80 +975,67 @@ export default function Shopping() {
               </Card>
             ) : (
               <div className="space-y-4">
-                <AnimatePresence>
-                  {Object.entries(groupedItems).map(([category, categoryItems]) => {
-                    const config = categoryConfig[category] || categoryConfig['Sonstiges'];
-                    const Icon = config.icon;
-                    return (
-                      <motion.div
-                        key={category}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                      >
-                        <Card>
-                          <CardHeader className="py-3 px-4">
-                            <div className="flex items-center gap-2">
-                              <div className={`p-1.5 rounded-lg ${config.bg}`}>
-                                <Icon className={`w-4 h-4 ${config.color}`} />
+                {Object.entries(groupedItems).map(([category, categoryItems]) => {
+                  const config = categoryConfig[category] || categoryConfig['Sonstiges'];
+                  const Icon = config.icon;
+                  return (
+                    <Card key={category}>
+                      <CardHeader className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <div className={`p-1.5 rounded-lg ${config.bg}`}>
+                            <Icon className={`w-4 h-4 ${config.color}`} />
+                          </div>
+                          <CardTitle className="text-sm font-medium">{category}</CardTitle>
+                          <Badge variant="secondary" className="ml-auto">
+                            {categoryItems.length}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="py-0 px-2 pb-2">
+                        <div className="space-y-1">
+                          {categoryItems.map((item) => {
+                            const store = stores.find(s => s.id === (item as any).store);
+                            return (
+                              <div
+                                key={item.id}
+                                className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 group"
+                              >
+                                <Checkbox
+                                  checked={false}
+                                  onCheckedChange={() => handleMarkAsBought(item.id, item.estimatedPrice)}
+                                  className="h-5 w-5"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-medium truncate">{item.item}</p>
+                                    {store && (
+                                      <Badge variant="outline" className="text-xs shrink-0">
+                                        <span className={`w-1.5 h-1.5 rounded-full ${store.color} mr-1`} />
+                                        {store.name}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-muted-foreground">
+                                    {item.quantity > 1 && `${item.quantity}x · `}
+                                    {formatPrice(item.estimatedPrice)}
+                                  </p>
+                                </div>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                                  onClick={() => handleDelete(item.id)}
+                                >
+                                  <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                                </Button>
                               </div>
-                              <CardTitle className="text-sm font-medium">{category}</CardTitle>
-                              <Badge variant="secondary" className="ml-auto">
-                                {categoryItems.length}
-                              </Badge>
-                            </div>
-                          </CardHeader>
-                          <CardContent className="py-0 px-2 pb-2">
-                            <div className="space-y-1">
-                              {categoryItems.map((item) => {
-                                const store = stores.find(s => s.id === (item as any).store);
-                                return (
-                                  <motion.div
-                                    key={item.id}
-                                    layout
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0, x: -100 }}
-                                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 group transition-colors"
-                                  >
-                                    <Checkbox
-                                      checked={false}
-                                      onCheckedChange={() => handleMarkAsBought(item.id, item.estimatedPrice)}
-                                      className="h-5 w-5"
-                                    />
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2">
-                                        <p className="font-medium truncate">{item.item}</p>
-                                        {store && (
-                                          <Badge variant="outline" className="text-xs shrink-0">
-                                            <span className={`w-1.5 h-1.5 rounded-full ${store.color} mr-1`} />
-                                            {store.name}
-                                          </Badge>
-                                        )}
-                                      </div>
-                                      <p className="text-sm text-muted-foreground">
-                                        {item.quantity > 1 && `${item.quantity}x · `}
-                                        {formatPrice(item.estimatedPrice)}
-                                      </p>
-                                    </div>
-                                    <Button
-                                      size="icon"
-                                      variant="ghost"
-                                      className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
-                                      onClick={() => handleDelete(item.id)}
-                                    >
-                                      <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
-                                    </Button>
-                                  </motion.div>
-                                );
-                              })}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </motion.div>
-                    );
-                  })}
-                </AnimatePresence>
+                            );
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </div>

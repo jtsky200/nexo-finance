@@ -146,7 +146,18 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         amount: amountInCents,
         description: editingInvoice.description,
         date: new Date(editingInvoice.date),
+        dueDate: editingInvoice.dueDate ? new Date(editingInvoice.dueDate) : undefined,
+        reminderEnabled: editingInvoice.reminderEnabled,
+        reminderDate: editingInvoice.reminderDate ? new Date(editingInvoice.reminderDate) : undefined,
+        notes: editingInvoice.notes || undefined,
+        isRecurring: editingInvoice.isRecurring,
+        recurringInterval: editingInvoice.isRecurring ? editingInvoice.recurringInterval : undefined,
       });
+
+      // Update status separately if changed
+      if (editingInvoice.status) {
+        await updateInvoiceStatus(person.id, editingInvoice.id, editingInvoice.status);
+      }
       
       toast.success('Rechnung aktualisiert');
       setEditingInvoice(null);
@@ -348,6 +359,12 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                           ...invoice,
                           amount: (invoice.amount / 100).toFixed(2),
                           date: new Date(invoice.date).toISOString().split('T')[0],
+                          dueDate: invoice.dueDate ? new Date(invoice.dueDate).toISOString().split('T')[0] : '',
+                          reminderDate: invoice.reminderDate ? new Date(invoice.reminderDate).toISOString().split('T')[0] : '',
+                          reminderEnabled: invoice.reminderEnabled || false,
+                          isRecurring: invoice.isRecurring || false,
+                          recurringInterval: invoice.recurringInterval || 'monthly',
+                          notes: invoice.notes || '',
                         })}
                       >
                         <Edit2 className="h-4 w-4" />
@@ -671,6 +688,163 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                     className="mt-2 h-10"
                   />
                 </div>
+              </div>
+
+              {/* Richtung für externe Personen */}
+              {person?.type === 'external' && (
+                <div>
+                  <Label>Richtung</Label>
+                  <Select
+                    value={editingInvoice.direction || 'incoming'}
+                    onValueChange={(value) => setEditingInvoice({ ...editingInvoice, direction: value })}
+                  >
+                    <SelectTrigger className="mt-2 h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="incoming">
+                        <span className="flex items-center gap-2">
+                          <ArrowDownLeft className="w-4 h-4 text-green-600" />
+                          Person schuldet mir
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="outgoing">
+                        <span className="flex items-center gap-2">
+                          <ArrowUpRight className="w-4 h-4 text-red-600" />
+                          Ich schulde Person
+                        </span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Status */}
+              <div>
+                <Label>Status</Label>
+                <Select
+                  value={editingInvoice.status || 'open'}
+                  onValueChange={(value) => setEditingInvoice({ ...editingInvoice, status: value })}
+                >
+                  <SelectTrigger className="mt-2 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="open">
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-red-500" />
+                        Offen
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="paid">
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-green-500" />
+                        Bezahlt
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="postponed">
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-orange-500" />
+                        Verschoben
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Fälligkeitsdatum */}
+              <div>
+                <Label className="flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  Fälligkeitsdatum
+                </Label>
+                <Input
+                  type="date"
+                  value={editingInvoice.dueDate || ''}
+                  onChange={(e) => setEditingInvoice({ ...editingInvoice, dueDate: e.target.value })}
+                  className="mt-2 h-10"
+                />
+              </div>
+
+              {/* Erinnerung */}
+              <div className="space-y-3 p-4 border rounded-lg">
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    id="editReminderEnabled"
+                    checked={editingInvoice.reminderEnabled || false}
+                    onCheckedChange={(checked) => setEditingInvoice({ 
+                      ...editingInvoice, 
+                      reminderEnabled: checked as boolean,
+                      reminderDate: checked ? editingInvoice.dueDate : ''
+                    })}
+                  />
+                  <Label htmlFor="editReminderEnabled" className="flex items-center gap-2 cursor-pointer">
+                    <Bell className="w-4 h-4" />
+                    Erinnerung aktivieren
+                  </Label>
+                </div>
+                
+                {editingInvoice.reminderEnabled && (
+                  <div>
+                    <Label>Erinnerungsdatum</Label>
+                    <Input
+                      type="date"
+                      value={editingInvoice.reminderDate || ''}
+                      onChange={(e) => setEditingInvoice({ ...editingInvoice, reminderDate: e.target.value })}
+                      className="mt-2 h-10"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Wiederkehrende Rechnung */}
+              <div className="space-y-3 p-4 border rounded-lg">
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    id="editIsRecurring"
+                    checked={editingInvoice.isRecurring || false}
+                    onCheckedChange={(checked) => setEditingInvoice({ 
+                      ...editingInvoice, 
+                      isRecurring: checked as boolean
+                    })}
+                  />
+                  <Label htmlFor="editIsRecurring" className="flex items-center gap-2 cursor-pointer">
+                    <Repeat className="w-4 h-4" />
+                    Wiederkehrende Rechnung
+                  </Label>
+                </div>
+                
+                {editingInvoice.isRecurring && (
+                  <div>
+                    <Label>Wiederholungsintervall</Label>
+                    <Select
+                      value={editingInvoice.recurringInterval || 'monthly'}
+                      onValueChange={(value) => setEditingInvoice({ ...editingInvoice, recurringInterval: value })}
+                    >
+                      <SelectTrigger className="mt-2 h-10">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="weekly">Wöchentlich</SelectItem>
+                        <SelectItem value="monthly">Monatlich</SelectItem>
+                        <SelectItem value="quarterly">Vierteljährlich</SelectItem>
+                        <SelectItem value="yearly">Jährlich</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              {/* Notizen */}
+              <div>
+                <Label>Notizen</Label>
+                <Textarea
+                  value={editingInvoice.notes || ''}
+                  onChange={(e) => setEditingInvoice({ ...editingInvoice, notes: e.target.value })}
+                  placeholder="Optionale Notizen..."
+                  className="mt-2"
+                  rows={2}
+                />
               </div>
             </div>
             <DialogFooter className="mt-4 gap-2">

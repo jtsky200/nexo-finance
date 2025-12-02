@@ -594,12 +594,12 @@ exports.createInvoice = (0, https_1.onCall)(async (request) => {
     return Object.assign({ id: docRef.id }, invoiceData);
 });
 exports.updateInvoice = (0, https_1.onCall)(async (request) => {
-    var _a;
+    var _a, _b;
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
     const userId = request.auth.uid;
-    const { personId, invoiceId, amount, description, date, dueDate, reminderDate, reminderEnabled, notes } = request.data;
+    const { personId, invoiceId, amount, description, date, dueDate, reminderDate, reminderEnabled, notes, isRecurring, recurringInterval } = request.data;
     // Verify person belongs to user
     const personRef = db.collection('people').doc(personId);
     const personDoc = await personRef.get();
@@ -635,6 +635,37 @@ exports.updateInvoice = (0, https_1.onCall)(async (request) => {
         }
         else if (!reminderEnabled) {
             updateData.reminderDate = null;
+        }
+    }
+    // Handle recurring settings
+    if (isRecurring !== undefined) {
+        updateData.isRecurring = isRecurring;
+        if (isRecurring && recurringInterval) {
+            updateData.recurringInterval = recurringInterval;
+            // Calculate next due date if due date is set
+            const effectiveDueDate = dueDate || ((_b = oldInvoiceData === null || oldInvoiceData === void 0 ? void 0 : oldInvoiceData.dueDate) === null || _b === void 0 ? void 0 : _b.toDate());
+            if (effectiveDueDate) {
+                const nextDue = new Date(effectiveDueDate);
+                switch (recurringInterval) {
+                    case 'weekly':
+                        nextDue.setDate(nextDue.getDate() + 7);
+                        break;
+                    case 'monthly':
+                        nextDue.setMonth(nextDue.getMonth() + 1);
+                        break;
+                    case 'quarterly':
+                        nextDue.setMonth(nextDue.getMonth() + 3);
+                        break;
+                    case 'yearly':
+                        nextDue.setFullYear(nextDue.getFullYear() + 1);
+                        break;
+                }
+                updateData.nextDueDate = admin.firestore.Timestamp.fromDate(nextDue);
+            }
+        }
+        else if (!isRecurring) {
+            updateData.recurringInterval = null;
+            updateData.nextDueDate = null;
         }
     }
     // Handle amount change

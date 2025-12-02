@@ -848,8 +848,28 @@ export default function Finance() {
 
           {/* People Tab */}
           {activeTab === 'people' && (<div className="space-y-4">
+            {/* Quick Link to Full People Page */}
+            <Card className="bg-muted/30 border-dashed">
+              <CardContent className="pt-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-semibold text-lg">{t('finance.peopleOverview', 'Personen & Schulden')}</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {t('finance.peopleDescription', 'Detaillierte Verwaltung von Personen und deren Rechnungen')}
+                    </p>
+                  </div>
+                  <Button asChild>
+                    <a href="/people">
+                      <Users className="w-4 h-4 mr-2" />
+                      {t('finance.openPeoplePage', 'Zur Personen-Seite')}
+                    </a>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
             <div className="flex justify-between items-center">
-              <h2 className="text-lg sm:text-xl font-semibold">{t('finance.people')}</h2>
+              <h2 className="text-lg sm:text-xl font-semibold">{t('finance.quickOverview', 'Schnellübersicht')}</h2>
               <Button size="sm" onClick={() => setShowAddPersonDialog(true)}>
                 <Plus className="w-4 h-4 mr-2" />
                 <span className="hidden sm:inline">{t('finance.addPerson')}</span>
@@ -862,10 +882,14 @@ export default function Finance() {
                 <p className="text-center text-muted-foreground col-span-full py-8">{t('common.loading')}</p>
               ) : people.length > 0 ? (
                 people.map((person: any) => (
-                  <Card key={person.id}>
+                  <Card key={person.id} className="hover:shadow-md transition-shadow">
                     <CardHeader className="pb-3">
                       <CardTitle className="flex items-center gap-2 text-base">
-                        <Users className="h-4 w-4" />
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                          <span className="text-sm font-semibold text-primary">
+                            {person.name.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
                         {person.name}
                       </CardTitle>
                     </CardHeader>
@@ -905,9 +929,18 @@ export default function Finance() {
                   </Card>
                 ))
               ) : (
-                <p className="text-center text-muted-foreground py-8 col-span-full">
-                  {t('finance.noPeople')}
-                </p>
+                <Card className="col-span-full">
+                  <CardContent className="py-8 text-center">
+                    <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+                    <p className="text-muted-foreground mb-4">
+                      {t('finance.noPeople')}
+                    </p>
+                    <Button onClick={() => setShowAddPersonDialog(true)}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      {t('finance.addFirstPerson', 'Erste Person hinzufügen')}
+                    </Button>
+                  </CardContent>
+                </Card>
               )}
             </div></div>
           )}

@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, TrendingUp, TrendingDown, Users, ShoppingCart, Trash2, Eye } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, Users, ShoppingCart, Trash2, Eye, Filter, X } from 'lucide-react';
 import { useFinanceEntries, usePeople, usePersonDebts, createPerson, deletePerson, updateFinanceEntry } from '@/lib/firebaseHooks';
 import AddFinanceEntryDialog from '@/components/AddFinanceEntryDialog';
 import ShoppingListModal from '@/components/ShoppingListModal';
@@ -26,8 +26,21 @@ export default function Finance() {
   const [defaultType, setDefaultType] = useState<'einnahme' | 'ausgabe'>('ausgabe');
   const [newPerson, setNewPerson] = useState({ name: '', email: '', phone: '', currency: 'CHF' });
   const [activeTab, setActiveTab] = useState('overview');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
   const { data: allEntries = [], isLoading } = useFinanceEntries();
+
+  // Get unique categories from all entries
+  const categories = useMemo(() => {
+    const cats = new Set(allEntries.map(e => e.category));
+    return Array.from(cats).filter(Boolean).sort();
+  }, [allEntries]);
+
+  // Filter entries by category
+  const filteredEntries = useMemo(() => {
+    if (categoryFilter === 'all') return allEntries;
+    return allEntries.filter(e => e.category === categoryFilter);
+  }, [allEntries, categoryFilter]);
   const { data: people = [], isLoading: peopleLoading } = usePeople();
 
   const formatDate = (date: Date | any) => {
@@ -50,13 +63,13 @@ export default function Finance() {
   };
 
   const incomeEntries = useMemo(
-    () => allEntries.filter(e => e.type === 'einnahme'),
-    [allEntries]
+    () => filteredEntries.filter(e => e.type === 'einnahme'),
+    [filteredEntries]
   );
 
   const expenseEntries = useMemo(
-    () => allEntries.filter(e => e.type === 'ausgabe'),
-    [allEntries]
+    () => filteredEntries.filter(e => e.type === 'ausgabe'),
+    [filteredEntries]
   );
 
   const totalIncome = useMemo(
@@ -98,7 +111,10 @@ export default function Finance() {
     try {
       await deletePerson(personId);
       toast.success(t('finance.personDeleted'));
+      // Reload page to refresh data
+      window.location.reload();
     } catch (error: any) {
+      console.error('Error deleting person:', error);
       toast.error(t('common.error') + ': ' + error.message);
     }
   };
@@ -294,10 +310,41 @@ export default function Finance() {
           {activeTab === 'overview' && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base sm:text-lg">{t('finance.allEntries')}</CardTitle>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <CardTitle className="text-base sm:text-lg">{t('finance.allEntries')}</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                      <SelectTrigger className="w-[180px] h-8 text-sm">
+                        <SelectValue placeholder={t('finance.filterByCategory', 'Nach Kategorie filtern')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">{t('finance.allCategories', 'Alle Kategorien')}</SelectItem>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {categoryFilter !== 'all' && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setCategoryFilter('all')}
+                        className="h-8 px-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {categoryFilter !== 'all' && (
+                  <CardDescription className="mt-2">
+                    {t('finance.showingCategory', 'Zeigt')}: <Badge variant="secondary">{categoryFilter}</Badge>
+                  </CardDescription>
+                )}
               </CardHeader>
               <CardContent>
-                {renderEntryList(allEntries)}
+                {renderEntryList(filteredEntries)}
               </CardContent>
             </Card>
           )}
@@ -389,6 +436,7 @@ export default function Finance() {
                         <Button
                           size="sm"
                           variant="ghost"
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
                           onClick={() => handleDeletePerson(person.id)}
                         >
                           <Trash2 className="h-4 w-4" />

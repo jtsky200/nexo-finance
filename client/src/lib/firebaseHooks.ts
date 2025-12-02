@@ -109,35 +109,38 @@ export function useFinanceEntries(filters?: { startDate?: Date; endDate?: Date; 
   const [entries, setEntries] = useState<FinanceEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const fetchEntries = async () => {
+    try {
+      setIsLoading(true);
+      const getEntriesFunc = httpsCallable(functions, 'getFinanceEntries');
+      const result = await getEntriesFunc(filters || {});
+      const data = result.data as { entries: any[] };
+      
+      const mappedEntries = data.entries.map((e: any) => ({
+        ...e,
+        date: e.date?.toDate ? e.date.toDate() : new Date(e.date),
+        createdAt: e.createdAt?.toDate ? e.createdAt.toDate() : new Date(e.createdAt),
+        updatedAt: e.updatedAt?.toDate ? e.updatedAt.toDate() : new Date(e.updatedAt),
+      }));
+      
+      setEntries(mappedEntries);
+      setError(null);
+    } catch (err) {
+      setError(err as Error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchEntries = async () => {
-      try {
-        setIsLoading(true);
-        const getEntriesFunc = httpsCallable(functions, 'getFinanceEntries');
-        const result = await getEntriesFunc(filters || {});
-        const data = result.data as { entries: any[] };
-        
-        const mappedEntries = data.entries.map((e: any) => ({
-          ...e,
-          date: e.date?.toDate ? e.date.toDate() : new Date(e.date),
-          createdAt: e.createdAt?.toDate ? e.createdAt.toDate() : new Date(e.createdAt),
-          updatedAt: e.updatedAt?.toDate ? e.updatedAt.toDate() : new Date(e.updatedAt),
-        }));
-        
-        setEntries(mappedEntries);
-        setError(null);
-      } catch (err) {
-        setError(err as Error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchEntries();
-  }, [filters?.startDate, filters?.endDate, filters?.type]);
+  }, [filters?.startDate, filters?.endDate, filters?.type, refreshKey]);
 
-  return { data: entries, isLoading, error };
+  const refetch = () => setRefreshKey(k => k + 1);
+
+  return { data: entries, isLoading, error, refetch };
 }
 
 export async function createFinanceEntry(data: Omit<FinanceEntry, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) {

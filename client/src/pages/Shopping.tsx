@@ -56,7 +56,7 @@ const listTemplates = [
   },
   { 
     name: 'Party / Gäste', 
-    icon: Sparkles,
+    icon: ShoppingBag,
     items: ['Chips', 'Getränke', 'Dips', 'Servietten', 'Snacks', 'Dessert'] 
   },
   { 

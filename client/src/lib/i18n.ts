@@ -101,6 +101,11 @@ const resources = {
         allCategories: 'Alle Kategorien',
         showingCategory: 'Zeigt',
         noIncome: 'Keine Einnahmen vorhanden',
+        // Chart & Export
+        monthlyOverview: 'Monatsübersicht',
+        last6Months: 'Einnahmen vs. Ausgaben der letzten 6 Monate',
+        exportSuccess: 'Export erfolgreich',
+        exportError: 'Export fehlgeschlagen',
       },
       
       // Shopping List
@@ -353,6 +358,11 @@ const resources = {
         allCategories: 'All categories',
         showingCategory: 'Showing',
         noIncome: 'No income entries',
+        // Chart & Export
+        monthlyOverview: 'Monthly Overview',
+        last6Months: 'Income vs. Expenses over the last 6 months',
+        exportSuccess: 'Export successful',
+        exportError: 'Export failed',
       },
       
       // Shopping List

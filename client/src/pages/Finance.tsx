@@ -9,12 +9,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, TrendingUp, TrendingDown, Users, ShoppingCart, Trash2, Eye, Filter, X } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, Users, ShoppingCart, Trash2, Eye, Filter, X, Download, BarChart3 } from 'lucide-react';
 import { useFinanceEntries, usePeople, usePersonDebts, createPerson, deletePerson, updateFinanceEntry } from '@/lib/firebaseHooks';
 import AddFinanceEntryDialog from '@/components/AddFinanceEntryDialog';
 import ShoppingListModal from '@/components/ShoppingListModal';
 import PersonInvoicesDialog from '@/components/PersonInvoicesDialog';
 import { toast } from 'sonner';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export default function Finance() {
   const { t } = useTranslation();
@@ -83,6 +84,172 @@ export default function Finance() {
   );
 
   const balance = totalIncome - totalExpenses;
+
+  // Monthly data for chart
+  const monthlyData = useMemo(() => {
+    const months: { [key: string]: { month: string, income: number, expenses: number } } = {};
+    const monthNames = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+    
+    // Initialize last 6 months
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      months[key] = {
+        month: monthNames[date.getMonth()],
+        income: 0,
+        expenses: 0
+      };
+    }
+
+    // Aggregate data
+    allEntries.forEach(entry => {
+      try {
+        const entryDate = entry.date?.toDate ? entry.date.toDate() : new Date(entry.date);
+        if (isNaN(entryDate.getTime())) return;
+        
+        const key = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
+        if (months[key]) {
+          if (entry.type === 'einnahme') {
+            months[key].income += entry.amount / 100;
+          } else {
+            months[key].expenses += entry.amount / 100;
+          }
+        }
+      } catch {
+        // Skip invalid dates
+      }
+    });
+
+    return Object.values(months);
+  }, [allEntries]);
+
+  // Export functions
+  const exportToCSV = () => {
+    const headers = ['Datum', 'Typ', 'Kategorie', 'Betrag', 'Währung', 'Zahlungsmethode', 'Status', 'Notizen'];
+    const rows = allEntries.map(entry => {
+      const date = entry.date?.toDate ? entry.date.toDate() : new Date(entry.date);
+      const dateStr = isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString('de-CH');
+      return [
+        dateStr,
+        entry.type === 'einnahme' ? 'Einnahme' : 'Ausgabe',
+        entry.category || '',
+        (entry.amount / 100).toFixed(2),
+        entry.currency || 'CHF',
+        entry.paymentMethod || '',
+        (entry as any).status || 'open',
+        (entry.notes || '').replace(/,/g, ';').replace(/\n/g, ' ')
+      ].join(',');
+    });
+    
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `finanzen_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success(t('finance.exportSuccess', 'Export erfolgreich'));
+  };
+
+  const exportToPDF = () => {
+    // Create a printable HTML document
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error(t('finance.exportError', 'Export fehlgeschlagen'));
+      return;
+    }
+
+    const totalIncomeFormatted = formatAmount(totalIncome * 100);
+    const totalExpensesFormatted = formatAmount(totalExpenses * 100);
+    const balanceFormatted = formatAmount(balance * 100);
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Finanzübersicht - ${new Date().toLocaleDateString('de-CH')}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
+          h1 { color: #1a1a1a; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }
+          .summary { display: flex; gap: 20px; margin: 20px 0; }
+          .summary-card { background: #f8fafc; padding: 15px 25px; border-radius: 8px; flex: 1; }
+          .summary-card h3 { margin: 0 0 5px 0; font-size: 12px; color: #64748b; text-transform: uppercase; }
+          .summary-card p { margin: 0; font-size: 24px; font-weight: bold; }
+          .income { color: #16a34a; }
+          .expense { color: #dc2626; }
+          .balance { color: ${balance >= 0 ? '#16a34a' : '#dc2626'}; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+          th { background: #f1f5f9; font-weight: 600; }
+          tr:hover { background: #f8fafc; }
+          .type-einnahme { color: #16a34a; }
+          .type-ausgabe { color: #dc2626; }
+          .footer { margin-top: 40px; text-align: center; color: #94a3b8; font-size: 12px; }
+          @media print { body { padding: 20px; } }
+        </style>
+      </head>
+      <body>
+        <h1>📊 Finanzübersicht</h1>
+        <p style="color: #64748b;">Exportiert am ${new Date().toLocaleDateString('de-CH', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+        
+        <div class="summary">
+          <div class="summary-card">
+            <h3>Einnahmen</h3>
+            <p class="income">${totalIncomeFormatted}</p>
+          </div>
+          <div class="summary-card">
+            <h3>Ausgaben</h3>
+            <p class="expense">${totalExpensesFormatted}</p>
+          </div>
+          <div class="summary-card">
+            <h3>Saldo</h3>
+            <p class="balance">${balanceFormatted}</p>
+          </div>
+        </div>
+
+        <h2>Alle Transaktionen (${allEntries.length})</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Typ</th>
+              <th>Kategorie</th>
+              <th>Betrag</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${allEntries.map(entry => {
+              const date = entry.date?.toDate ? entry.date.toDate() : new Date(entry.date);
+              const dateStr = isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString('de-CH');
+              return `
+                <tr>
+                  <td>${dateStr}</td>
+                  <td class="type-${entry.type}">${entry.type === 'einnahme' ? '↗ Einnahme' : '↘ Ausgabe'}</td>
+                  <td>${entry.category || '-'}</td>
+                  <td class="type-${entry.type}">${formatAmount(entry.amount, entry.currency)}</td>
+                  <td>${(entry as any).status === 'paid' ? '✓ Bezahlt' : '○ Offen'}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+        
+        <div class="footer">
+          <p>Nexo Finance • ${new Date().getFullYear()}</p>
+        </div>
+        
+        <script>window.onload = () => window.print();</script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    toast.success(t('finance.exportSuccess', 'Export erfolgreich'));
+  };
 
   const openDialog = (type: 'einnahme' | 'ausgabe') => {
     setDefaultType(type);
@@ -267,6 +434,62 @@ export default function Finance() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Monthly Overview Chart */}
+        <Card>
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-muted-foreground" />
+                <CardTitle className="text-base sm:text-lg">{t('finance.monthlyOverview', 'Monatsübersicht')}</CardTitle>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={exportToCSV}>
+                  <Download className="w-4 h-4 mr-2" />
+                  CSV
+                </Button>
+                <Button variant="outline" size="sm" onClick={exportToPDF}>
+                  <Download className="w-4 h-4 mr-2" />
+                  PDF
+                </Button>
+              </div>
+            </div>
+            <CardDescription>{t('finance.last6Months', 'Einnahmen vs. Ausgaben der letzten 6 Monate')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[300px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="month" className="text-xs" />
+                  <YAxis className="text-xs" tickFormatter={(value) => `${value}`} />
+                  <Tooltip 
+                    formatter={(value: number) => [`CHF ${value.toFixed(2)}`, '']}
+                    labelStyle={{ color: '#1a1a1a' }}
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--background))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                  />
+                  <Legend />
+                  <Bar 
+                    dataKey="income" 
+                    name={t('finance.income')} 
+                    fill="#22c55e" 
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar 
+                    dataKey="expenses" 
+                    name={t('finance.expenses')} 
+                    fill="#ef4444" 
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Tabs */}
         <div className="space-y-4">

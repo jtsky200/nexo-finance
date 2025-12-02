@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { 
   Plus, Trash2, Check, ShoppingCart, ShoppingBag, Package, 
   Clock, Copy, Share2, Download, Settings, Edit2, Camera, 
-  Upload, Receipt, Store, X, AlertTriangle, Wallet, Save,
+  Upload, FileText, Store, X, AlertTriangle, Wallet, Save, Video, VideoOff,
   Lightbulb, RotateCcw, ListChecks, Tag, Banknote, ScanLine,
   Apple, Home as HomeIcon, Shirt, Zap, Heart, MoreHorizontal, ChevronRight
 } from 'lucide-react';
@@ -119,6 +119,8 @@ export default function Shopping() {
   const [isScanning, setIsScanning] = useState(false);
   const [scannedItems, setScannedItems] = useState<Array<{ name: string; price: number; quantity: number }>>([]);
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   
   // Confirm dialog state
   const [showFinanceConfirm, setShowFinanceConfirm] = useState(false);
@@ -384,6 +386,57 @@ export default function Shopping() {
   };
 
   // Receipt Scanner Functions
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
+      });
+      setCameraStream(stream);
+      setIsCameraActive(true);
+      
+      // Attach stream to video element
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
+      }
+    } catch (error) {
+      console.error('Camera error:', error);
+      toast.error('Kamera konnte nicht gestartet werden. Bitte Berechtigung erteilen.');
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+      setCameraStream(null);
+    }
+    setIsCameraActive(false);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current) {
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(videoRef.current, 0, 0);
+        const imageData = canvas.toDataURL('image/jpeg');
+        setReceiptImage(imageData);
+        stopCamera();
+        setScannerMode('upload');
+        processReceipt(imageData);
+      }
+    }
+  };
+
+  // Cleanup camera on dialog close
+  useEffect(() => {
+    if (!showReceiptScanner && cameraStream) {
+      stopCamera();
+    }
+  }, [showReceiptScanner]);
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -1131,12 +1184,28 @@ export default function Shopping() {
                 onClick={() => fileInputRef.current?.click()}
               >
                 {receiptImage ? (
-                  <img src={receiptImage} alt="Receipt" className="max-h-48 mx-auto rounded" />
+                  <div className="space-y-3">
+                    <img src={receiptImage} alt="Quittung" className="max-h-48 mx-auto rounded" />
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setReceiptImage(null);
+                        setScannedItems([]);
+                      }}
+                    >
+                      Anderes Bild wählen
+                    </Button>
+                  </div>
                 ) : (
                   <>
-                    <Receipt className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
+                    <FileText className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
                     <p className="text-sm text-muted-foreground">
                       Klicke hier oder ziehe ein Bild hierher
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      JPG, PNG oder HEIC
                     </p>
                   </>
                 )}
@@ -1152,8 +1221,42 @@ export default function Shopping() {
 
             {/* Camera View */}
             {scannerMode === 'camera' && (
-              <div className="border rounded-lg overflow-hidden bg-black aspect-video flex items-center justify-center">
-                <p className="text-white/60 text-sm">Kamera-Funktion in Entwicklung</p>
+              <div className="space-y-3">
+                <div className="border rounded-lg overflow-hidden bg-black aspect-video relative">
+                  {isCameraActive ? (
+                    <video 
+                      ref={videoRef}
+                      autoPlay 
+                      playsInline 
+                      muted
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <Camera className="w-12 h-12 text-white/40 mb-3" />
+                      <p className="text-white/60 text-sm">Kamera nicht aktiv</p>
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2 justify-center">
+                  {!isCameraActive ? (
+                    <Button onClick={startCamera} className="flex-1">
+                      <Video className="w-4 h-4 mr-2" />
+                      Kamera starten
+                    </Button>
+                  ) : (
+                    <>
+                      <Button onClick={stopCamera} variant="outline">
+                        <VideoOff className="w-4 h-4 mr-2" />
+                        Stoppen
+                      </Button>
+                      <Button onClick={capturePhoto} className="flex-1">
+                        <Camera className="w-4 h-4 mr-2" />
+                        Foto aufnehmen
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
             )}
 

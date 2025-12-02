@@ -169,14 +169,17 @@ export default function Finance() {
     const rows = allEntries.map(entry => {
       const date = entry.date?.toDate ? entry.date.toDate() : new Date(entry.date);
       const dateStr = isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString('de-CH');
+      const isIncome = entry.type === 'einnahme';
+      // Status nur für Ausgaben, bei Einnahmen leer
+      const statusText = isIncome ? '' : ((entry as any).status === 'paid' ? 'Bezahlt' : 'Offen');
       return [
         dateStr,
-        entry.type === 'einnahme' ? 'Einnahme' : 'Ausgabe',
+        isIncome ? 'Einnahme' : 'Ausgabe',
         entry.category || '',
         (entry.amount / 100).toFixed(2),
         entry.currency || 'CHF',
         entry.paymentMethod || '',
-        (entry as any).status || 'open',
+        statusText,
         (entry.notes || '').replace(/,/g, ';').replace(/\n/g, ' ')
       ].join(',');
     });
@@ -263,13 +266,16 @@ export default function Finance() {
             ${allEntries.map(entry => {
               const date = entry.date?.toDate ? entry.date.toDate() : new Date(entry.date);
               const dateStr = isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString('de-CH');
+              const isIncome = entry.type === 'einnahme';
+              // Status nur für Ausgaben anzeigen, nicht für Einnahmen
+              const statusText = isIncome ? '-' : ((entry as any).status === 'paid' ? '✓ Bezahlt' : '○ Offen');
               return `
                 <tr>
                   <td>${dateStr}</td>
-                  <td class="type-${entry.type}">${entry.type === 'einnahme' ? '↗ Einnahme' : '↘ Ausgabe'}</td>
+                  <td class="type-${entry.type}">${isIncome ? '↑ Einnahme' : '↓ Ausgabe'}</td>
                   <td>${entry.category || '-'}</td>
                   <td class="type-${entry.type}">${formatAmount(entry.amount, entry.currency)}</td>
-                  <td>${(entry as any).status === 'paid' ? '✓ Bezahlt' : '○ Offen'}</td>
+                  <td>${statusText}</td>
                 </tr>
               `;
             }).join('')}

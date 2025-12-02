@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "nexo-jtsky100"
-  }
+  },
+  "targets": {
+    "nexo-jtsky100": {
+      "hosting": {
+        "web": [
+          "nexo-jtsky100"
+        ],
+        "mobile": [
+          "m-nexo-jtsky100"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

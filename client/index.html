@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
 
   <head>
     <meta charset="UTF-8" />
@@ -7,11 +7,22 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>Nexo - Personal Finance & Tax Assistant</title>    
-    <!-- THIS IS THE START OF A COMMENT BLOCK, BLOCK TO BE DELETED: Google Fonts here, example:
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-    THIS IS THE END OF A COMMENT BLOCK, BLOCK TO BE DELETED -->
+    <!-- Mobile redirect script -->
+    <script>
+      (function() {
+        // Check if user is on a mobile device
+        var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        // Check screen width as fallback
+        var isSmallScreen = window.innerWidth <= 768;
+        // Check if user has explicitly chosen desktop version
+        var preferDesktop = localStorage.getItem('preferDesktop') === 'true';
+        
+        if ((isMobile || isSmallScreen) && !preferDesktop) {
+          // Redirect to mobile version
+          window.location.href = 'https://m-nexo-jtsky100.web.app' + window.location.pathname;
+        }
+      })();
+    </script>
   </head>
 
   <body>

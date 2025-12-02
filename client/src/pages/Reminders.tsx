@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -28,6 +29,7 @@ export default function Reminders() {
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('upcoming');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const { data: reminders = [], isLoading, refetch } = useReminders();
 
@@ -268,15 +270,14 @@ export default function Reminders() {
   };
 
   // Handle delete
-  const handleDelete = async (id: string) => {
-    if (!confirm(t('reminders.confirmDelete', 'Möchten Sie diese Erinnerung wirklich löschen?'))) {
-      return;
-    }
+  const handleDelete = async () => {
+    if (!deleteConfirmId) return;
 
     try {
-      await deleteReminder(id);
+      await deleteReminder(deleteConfirmId);
       toast.success(t('reminders.deleted', 'Erinnerung gelöscht'));
       refetch();
+      setDeleteConfirmId(null);
     } catch (error: any) {
       toast.error(t('common.error') + ': ' + error.message);
     }
@@ -349,7 +350,7 @@ export default function Reminders() {
                   {t('common.edit', 'Bearbeiten')}
                 </DropdownMenuItem>
                 <DropdownMenuItem 
-                  onClick={() => handleDelete(reminder.id)}
+                  onClick={() => setDeleteConfirmId(reminder.id)}
                   className="text-red-600 focus:text-red-600"
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
@@ -665,6 +666,24 @@ export default function Reminders() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('reminders.confirmDeleteTitle', 'Erinnerung löschen?')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('reminders.confirmDeleteDesc', 'Diese Erinnerung wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel', 'Abbrechen')}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+              {t('common.delete', 'Löschen')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 }

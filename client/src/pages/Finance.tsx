@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, TrendingUp, TrendingDown, Users, ShoppingCart, Trash2, Eye, Filter, X, Download, BarChart3 } from 'lucide-react';
 import { useFinanceEntries, usePeople, usePersonDebts, createPerson, deletePerson, updateFinanceEntry } from '@/lib/firebaseHooks';
@@ -28,6 +29,7 @@ export default function Finance() {
   const [newPerson, setNewPerson] = useState({ name: '', email: '', phone: '', currency: 'CHF' });
   const [activeTab, setActiveTab] = useState('overview');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [deletePersonId, setDeletePersonId] = useState<string | null>(null);
 
   const { data: allEntries = [], isLoading } = useFinanceEntries();
 
@@ -289,12 +291,13 @@ export default function Finance() {
     }
   };
 
-  const handleDeletePerson = async (personId: string) => {
-    if (!confirm(t('finance.confirmDeletePerson'))) return;
+  const handleDeletePerson = async () => {
+    if (!deletePersonId) return;
     
     try {
-      await deletePerson(personId);
+      await deletePerson(deletePersonId);
       toast.success(t('finance.personDeleted'));
+      setDeletePersonId(null);
       // Reload page to refresh data
       window.location.reload();
     } catch (error: any) {
@@ -761,7 +764,7 @@ export default function Finance() {
                           size="sm"
                           variant="ghost"
                           className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => handleDeletePerson(person.id)}
+                          onClick={() => setDeletePersonId(person.id)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -834,6 +837,24 @@ export default function Finance() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Person Confirmation Dialog */}
+      <AlertDialog open={!!deletePersonId} onOpenChange={(open) => !open && setDeletePersonId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('finance.confirmDeletePersonTitle', 'Person löschen?')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('finance.confirmDeletePersonDesc', 'Diese Person und alle zugehörigen Rechnungen werden dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel', 'Abbrechen')}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeletePerson} className="bg-red-600 hover:bg-red-700">
+              {t('common.delete', 'Löschen')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 }

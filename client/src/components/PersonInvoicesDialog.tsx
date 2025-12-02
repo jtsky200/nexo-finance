@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,6 +31,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange }: Per
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<any>(null);
+  const [deleteInvoiceId, setDeleteInvoiceId] = useState<string | null>(null);
   const [newInvoice, setNewInvoice] = useState({
     amount: '',
     description: '',
@@ -135,13 +137,14 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange }: Per
     }
   };
 
-  const handleDeleteInvoice = async (invoiceId: string) => {
-    if (!confirm(t('finance.confirmDelete'))) return;
+  const handleDeleteInvoice = async () => {
+    if (!deleteInvoiceId) return;
 
     try {
-      await deleteInvoice(person.id, invoiceId);
+      await deleteInvoice(person.id, deleteInvoiceId);
       toast.success(t('finance.invoiceDeleted'));
       refetch();
+      setDeleteInvoiceId(null);
     } catch (error: any) {
       toast.error(t('common.error') + ': ' + error.message);
     }
@@ -287,7 +290,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange }: Per
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => handleDeleteInvoice(invoice.id)}
+                            onClick={() => setDeleteInvoiceId(invoice.id)}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -502,6 +505,24 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange }: Per
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Delete Invoice Confirmation Dialog */}
+      <AlertDialog open={!!deleteInvoiceId} onOpenChange={(open) => !open && setDeleteInvoiceId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('finance.confirmDeleteInvoiceTitle', 'Rechnung löschen?')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('finance.confirmDeleteInvoiceDesc', 'Diese Rechnung wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel', 'Abbrechen')}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteInvoice} className="bg-red-600 hover:bg-red-700">
+              {t('common.delete', 'Löschen')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

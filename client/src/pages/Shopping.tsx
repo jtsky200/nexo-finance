@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { 
@@ -80,6 +81,7 @@ export default function Shopping() {
   const [selectedTemplate, setSelectedTemplate] = useState<typeof listTemplates[0] | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'category' | 'price'>('category');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const categories = ['Lebensmittel', 'Haushalt', 'Hygiene', 'Elektronik', 'Kleidung', 'Sonstiges'];
 
@@ -199,13 +201,13 @@ export default function Shopping() {
   };
 
   const handleClearBought = async () => {
-    if (!confirm('Alle eingekauften Artikel löschen?')) return;
     try {
       for (const item of boughtItems) {
         await deleteShoppingItem(item.id);
       }
       toast.success('Eingekaufte Artikel gelöscht');
       refetch();
+      setShowClearConfirm(false);
     } catch (error: any) {
       toast.error('Fehler: ' + error.message);
     }
@@ -283,7 +285,7 @@ export default function Shopping() {
                 <Button 
                   variant="outline" 
                   className="h-auto py-3 flex-col gap-1"
-                  onClick={handleClearBought}
+                  onClick={() => setShowClearConfirm(true)}
                   disabled={boughtItems.length === 0}
                 >
                   <RotateCcw className="w-5 h-5" />
@@ -542,7 +544,7 @@ export default function Shopping() {
                     Eingekauft ({boughtItems.length})
                   </CardTitle>
                   {boughtItems.length > 0 && (
-                    <Button variant="ghost" size="sm" onClick={handleClearBought}>
+                    <Button variant="ghost" size="sm" onClick={() => setShowClearConfirm(true)}>
                       Leeren
                     </Button>
                   )}
@@ -588,6 +590,22 @@ export default function Shopping() {
           </div>
         </div>
       </div>
+
+      {/* Clear Confirmation Dialog */}
+      <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eingekaufte Artikel löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Alle {boughtItems.length} eingekauften Artikel werden aus der Liste entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={handleClearBought}>Löschen</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Template Dialog */}
       <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
@@ -30,6 +31,7 @@ export default function Bills() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('pending');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // Fetch all payment reminders
   const { data: allReminders = [], isLoading, refetch } = useReminders({});
@@ -300,15 +302,14 @@ export default function Bills() {
   };
 
   // Handle delete
-  const handleDelete = async (id: string) => {
-    if (!confirm(t('bills.confirmDelete', 'Möchten Sie diese Rechnung wirklich löschen?'))) {
-      return;
-    }
+  const handleDelete = async () => {
+    if (!deleteConfirmId) return;
 
     try {
-      await deleteReminder(id);
+      await deleteReminder(deleteConfirmId);
       toast.success(t('bills.deleted', 'Rechnung gelöscht'));
       refetch();
+      setDeleteConfirmId(null);
     } catch (error: any) {
       toast.error(t('common.error') + ': ' + error.message);
     }
@@ -422,7 +423,7 @@ export default function Bills() {
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem 
-                    onClick={() => handleDelete(bill.id)}
+                    onClick={() => setDeleteConfirmId(bill.id)}
                     className="text-red-600 focus:text-red-600"
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
@@ -766,6 +767,24 @@ export default function Bills() {
         onOpenChange={setScannerOpen}
         onInvoiceScanned={handleScannedData}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('bills.confirmDeleteTitle', 'Rechnung löschen?')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('bills.confirmDeleteDesc', 'Diese Rechnung wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel', 'Abbrechen')}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+              {t('common.delete', 'Löschen')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 }

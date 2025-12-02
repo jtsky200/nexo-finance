@@ -17,8 +17,8 @@ import {
   Plus, Trash2, Check, ShoppingCart, ShoppingBag, Package, 
   Clock, Copy, Share2, Download, Settings, Edit2, Camera, 
   Upload, FileText, Store, X, AlertTriangle, Wallet, Save, Video, VideoOff,
-  Lightbulb, RotateCcw, ListChecks, Tag, Banknote, ScanLine,
-  Apple, Home as HomeIcon, Shirt, Zap, Heart, MoreHorizontal, ChevronRight
+  RotateCcw, ListChecks, Tag, Banknote, ScanLine,
+  Apple, Home as HomeIcon, Shirt, Cpu, Heart, MoreHorizontal, ChevronRight
 } from 'lucide-react';
 import { useShoppingList, createShoppingItem, deleteShoppingItem, markShoppingItemAsBought, createFinanceEntry } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
@@ -43,7 +43,7 @@ const categoryConfig: Record<string, { icon: any; color: string; bg: string; cha
   'Lebensmittel': { icon: Apple, color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30', chartColor: '#16a34a' },
   'Haushalt': { icon: HomeIcon, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30', chartColor: '#2563eb' },
   'Hygiene': { icon: Heart, color: 'text-pink-600', bg: 'bg-pink-100 dark:bg-pink-900/30', chartColor: '#db2777' },
-  'Elektronik': { icon: Zap, color: 'text-yellow-600', bg: 'bg-yellow-100 dark:bg-yellow-900/30', chartColor: '#ca8a04' },
+  'Elektronik': { icon: Cpu, color: 'text-yellow-600', bg: 'bg-yellow-100 dark:bg-yellow-900/30', chartColor: '#ca8a04' },
   'Kleidung': { icon: Shirt, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30', chartColor: '#9333ea' },
   'Sonstiges': { icon: Package, color: 'text-gray-600', bg: 'bg-gray-100 dark:bg-gray-900/30', chartColor: '#6b7280' },
 };

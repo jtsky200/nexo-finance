@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
-  TrendingUp, 
-  TrendingDown, 
+  ArrowUp, 
+  ArrowDown, 
   Plus,
   X
 } from 'lucide-react';
@@ -167,14 +167,14 @@ export default function MobileFinance() {
           onClick={() => openAddDialog('einnahme')}
           className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 border-l-2 border-l-green-600 active:opacity-80 transition-opacity"
         >
-          <TrendingUp className="w-5 h-5 status-success" />
+          <ArrowUp className="w-5 h-5 status-success" />
           <span className="font-medium text-sm">Einnahme</span>
         </button>
         <button
           onClick={() => openAddDialog('ausgabe')}
           className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 border-l-2 border-l-red-600 active:opacity-80 transition-opacity"
         >
-          <TrendingDown className="w-5 h-5 status-error" />
+          <ArrowDown className="w-5 h-5 status-error" />
           <span className="font-medium text-sm">Ausgabe</span>
         </button>
       </div>
@@ -227,9 +227,9 @@ export default function MobileFinance() {
                     isIncome ? 'bg-status-success' : 'bg-status-error'
                   }`}>
                     {isIncome ? (
-                      <TrendingUp className="w-5 h-5 status-success" />
+                      <ArrowUp className="w-5 h-5 status-success" />
                     ) : (
-                      <TrendingDown className="w-5 h-5 status-error" />
+                      <ArrowDown className="w-5 h-5 status-error" />
                     )}
                   </div>
                   <div>

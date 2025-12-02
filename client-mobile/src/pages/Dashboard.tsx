@@ -2,8 +2,8 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'wouter';
 import { 
-  TrendingUp, 
-  TrendingDown, 
+  ArrowUp, 
+  ArrowDown, 
   Wallet,
   ShoppingCart,
   Bell,
@@ -55,14 +55,14 @@ export default function MobileDashboard() {
           <div>
             <p className="text-xs opacity-60">{t('finance.income', 'Einnahmen')}</p>
             <p className="text-lg font-medium flex items-center gap-1 mt-0.5">
-              <TrendingUp className="w-4 h-4 opacity-70" />
+              <ArrowUp className="w-4 h-4 opacity-70" />
               {formatAmount(totalIncome)}
             </p>
           </div>
           <div>
             <p className="text-xs opacity-60">{t('finance.expenses', 'Ausgaben')}</p>
             <p className="text-lg font-medium flex items-center gap-1 mt-0.5">
-              <TrendingDown className="w-4 h-4 opacity-70" />
+              <ArrowDown className="w-4 h-4 opacity-70" />
               {formatAmount(totalExpenses)}
             </p>
           </div>

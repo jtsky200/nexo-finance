@@ -1,19 +1,47 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
   Receipt,
   Plus,
   Check,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Camera,
+  X,
+  Upload,
+  ScanLine,
+  Calendar
 } from 'lucide-react';
 import MobileLayout from '@/components/MobileLayout';
-import { useReminders, updateReminder } from '@/lib/firebaseHooks';
+import { useReminders, createReminder, updateReminder } from '@/lib/firebaseHooks';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
 export default function MobileBills() {
   const { t } = useTranslation();
   const { data: allReminders = [], isLoading, refetch } = useReminders({});
+  
+  // Dialog states
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  
+  // Form state
+  const [newBill, setNewBill] = useState({
+    title: '',
+    amount: '',
+    dueDate: '',
+    iban: '',
+    reference: ''
+  });
+
+  // Camera refs
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   // Filter only payment reminders
   const bills = useMemo(() => 
@@ -56,6 +84,148 @@ export default function MobileBills() {
     }
   };
 
+  // Add new bill
+  const handleAddBill = async () => {
+    if (!newBill.title || !newBill.amount) {
+      toast.error('Bitte Titel und Betrag eingeben');
+      return;
+    }
+
+    try {
+      await createReminder({
+        title: newBill.title,
+        type: 'zahlung',
+        status: 'offen',
+        amount: Math.round(parseFloat(newBill.amount) * 100),
+        dueDate: newBill.dueDate ? new Date(newBill.dueDate) : new Date(),
+        description: newBill.iban ? `IBAN: ${newBill.iban}` : '',
+      });
+      
+      toast.success('Rechnung hinzugefügt ✓');
+      setShowAddDialog(false);
+      setNewBill({ title: '', amount: '', dueDate: '', iban: '', reference: '' });
+      await refetch();
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
+  // Camera functions
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      setShowCamera(true);
+    } catch (error) {
+      toast.error('Kamera konnte nicht gestartet werden');
+      console.error(error);
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setShowCamera(false);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0);
+        // Process the image for QR code
+        processImage(canvas);
+      }
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          if (canvasRef.current) {
+            const canvas = canvasRef.current;
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0);
+              processImage(canvas);
+            }
+          }
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const processImage = async (canvas: HTMLCanvasElement) => {
+    setIsScanning(true);
+    try {
+      // Try to detect QR code using BarcodeDetector API
+      if ('BarcodeDetector' in window) {
+        const barcodeDetector = new (window as any).BarcodeDetector({
+          formats: ['qr_code']
+        });
+        const barcodes = await barcodeDetector.detect(canvas);
+        
+        if (barcodes.length > 0) {
+          const qrData = barcodes[0].rawValue;
+          parseSwissQRCode(qrData);
+          toast.success('QR-Code erkannt! ✓');
+          stopCamera();
+        } else {
+          toast.error('Kein QR-Code gefunden');
+        }
+      } else {
+        toast.error('QR-Code Erkennung nicht unterstützt');
+      }
+    } catch (error) {
+      console.error('QR scan error:', error);
+      toast.error('Fehler beim Scannen');
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const parseSwissQRCode = (data: string) => {
+    try {
+      const lines = data.split('\n');
+      // Swiss QR-Bill format parsing
+      if (lines.length > 10) {
+        const iban = lines[3] || '';
+        const amount = lines[18] || '';
+        const reference = lines[28] || '';
+        
+        setNewBill(prev => ({
+          ...prev,
+          iban: iban,
+          amount: amount,
+          reference: reference,
+          title: 'Gescannte Rechnung'
+        }));
+        setShowAddDialog(true);
+      }
+    } catch (error) {
+      console.error('Parse error:', error);
+    }
+  };
+
   return (
     <MobileLayout title={t('nav.bills', 'Rechnungen')}>
       {/* Summary */}
@@ -68,6 +238,38 @@ export default function MobileBills() {
         <p className="text-sm opacity-75 mt-1">
           {openBills.length} {t('bills.bills', 'Rechnungen')}
         </p>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setShowAddDialog(true)}
+          className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 active:scale-98 transition-transform"
+        >
+          <Plus className="w-5 h-5 text-primary" />
+          <span className="font-medium">Manuell</span>
+        </button>
+        <button
+          onClick={startCamera}
+          className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 active:scale-98 transition-transform"
+        >
+          <Camera className="w-5 h-5 text-primary" />
+          <span className="font-medium">Scannen</span>
+        </button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 active:scale-98 transition-transform"
+        >
+          <Upload className="w-5 h-5 text-primary" />
+          <span className="font-medium">Bild</span>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileUpload}
+        />
       </div>
 
       {/* Open Bills */}
@@ -155,11 +357,168 @@ export default function MobileBills() {
         </>
       )}
 
-      {/* FAB */}
-      <button className="fixed right-4 bottom-20 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center active:scale-95 transition-transform safe-bottom">
-        <Plus className="w-6 h-6" />
-      </button>
+      {/* Hidden canvas for image processing */}
+      <canvas ref={canvasRef} className="hidden" />
+
+      {/* Add Bill Dialog */}
+      {showAddDialog && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-end">
+          <div className="bg-background w-full rounded-t-3xl p-6 safe-bottom animate-in slide-in-from-bottom">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold">Neue Rechnung</h2>
+              <button
+                onClick={() => setShowAddDialog(false)}
+                className="w-10 h-10 rounded-full bg-muted flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm text-muted-foreground">Titel / Beschreibung</Label>
+                <Input
+                  value={newBill.title}
+                  onChange={(e) => setNewBill({ ...newBill, title: e.target.value })}
+                  placeholder="z.B. Stromrechnung"
+                  className="mobile-input mt-1"
+                />
+              </div>
+
+              <div>
+                <Label className="text-sm text-muted-foreground">Betrag (CHF)</Label>
+                <Input
+                  type="number"
+                  value={newBill.amount}
+                  onChange={(e) => setNewBill({ ...newBill, amount: e.target.value })}
+                  placeholder="0.00"
+                  className="mobile-input mt-1"
+                  step="0.01"
+                />
+              </div>
+
+              <div>
+                <Label className="text-sm text-muted-foreground">Fälligkeitsdatum</Label>
+                <Input
+                  type="date"
+                  value={newBill.dueDate}
+                  onChange={(e) => setNewBill({ ...newBill, dueDate: e.target.value })}
+                  className="mobile-input mt-1"
+                />
+              </div>
+
+              <div>
+                <Label className="text-sm text-muted-foreground">IBAN (optional)</Label>
+                <Input
+                  value={newBill.iban}
+                  onChange={(e) => setNewBill({ ...newBill, iban: e.target.value })}
+                  placeholder="CH..."
+                  className="mobile-input mt-1"
+                />
+              </div>
+
+              <div>
+                <Label className="text-sm text-muted-foreground">Referenznummer (optional)</Label>
+                <Input
+                  value={newBill.reference}
+                  onChange={(e) => setNewBill({ ...newBill, reference: e.target.value })}
+                  placeholder="Referenz"
+                  className="mobile-input mt-1"
+                />
+              </div>
+
+              <Button
+                onClick={handleAddBill}
+                className="w-full mobile-btn mt-4"
+              >
+                <Plus className="w-5 h-5 mr-2" />
+                Rechnung hinzufügen
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Camera View */}
+      {showCamera && (
+        <div className="fixed inset-0 z-50 bg-black flex flex-col">
+          {/* Camera Header */}
+          <div className="flex items-center justify-between p-4 bg-black/50">
+            <h2 className="text-white font-medium">QR-Code scannen</h2>
+            <button
+              onClick={stopCamera}
+              className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center"
+            >
+              <X className="w-5 h-5 text-white" />
+            </button>
+          </div>
+
+          {/* Video Feed */}
+          <div className="flex-1 relative">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              className="w-full h-full object-cover"
+            />
+            
+            {/* Scan Frame */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-64 h-64 border-2 border-white rounded-2xl relative">
+                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-primary rounded-tl-xl" />
+                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-primary rounded-tr-xl" />
+                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-primary rounded-bl-xl" />
+                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-primary rounded-br-xl" />
+                
+                {isScanning && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                    <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Scan Line Animation */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-64 h-64 overflow-hidden">
+                <div className="w-full h-1 bg-primary/50 animate-pulse" 
+                  style={{ 
+                    animation: 'scan 2s ease-in-out infinite',
+                  }} 
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Capture Button */}
+          <div className="p-6 bg-black/50 flex justify-center safe-bottom">
+            <button
+              onClick={capturePhoto}
+              disabled={isScanning}
+              className="w-16 h-16 rounded-full bg-white flex items-center justify-center active:scale-95 transition-transform"
+            >
+              <ScanLine className="w-8 h-8 text-black" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* FAB - only show when dialogs are closed */}
+      {!showAddDialog && !showCamera && (
+        <button 
+          onClick={() => setShowAddDialog(true)}
+          className="fixed right-4 bottom-20 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center active:scale-95 transition-transform safe-bottom"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
+      )}
+
+      <style>{`
+        @keyframes scan {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(256px); }
+        }
+      `}</style>
     </MobileLayout>
   );
 }
-

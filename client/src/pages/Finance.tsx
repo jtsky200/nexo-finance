@@ -269,12 +269,14 @@ export default function Finance() {
               const isIncome = entry.type === 'einnahme';
               // Status nur für Ausgaben anzeigen, nicht für Einnahmen
               const statusText = isIncome ? '-' : ((entry as any).status === 'paid' ? '✓ Bezahlt' : '○ Offen');
+              // Konsistente Klasse basierend auf isIncome
+              const typeClass = isIncome ? 'type-einnahme' : 'type-ausgabe';
               return `
                 <tr>
                   <td>${dateStr}</td>
-                  <td class="type-${entry.type}">${isIncome ? '↑ Einnahme' : '↓ Ausgabe'}</td>
+                  <td class="${typeClass}">${isIncome ? '↑ Einnahme' : '↓ Ausgabe'}</td>
                   <td>${entry.category || '-'}</td>
-                  <td class="type-${entry.type}">${formatAmount(entry.amount, entry.currency)}</td>
+                  <td class="${typeClass}">${formatAmount(entry.amount, entry.currency)}</td>
                   <td>${statusText}</td>
                 </tr>
               `;

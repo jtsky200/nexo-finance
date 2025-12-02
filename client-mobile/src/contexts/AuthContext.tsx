@@ -6,7 +6,9 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
   GoogleAuthProvider,
-  signInWithPopup
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
@@ -14,12 +16,10 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   error: string | null;
-  // Original names
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
-  // Aliases for compatibility
   loginWithEmail: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
@@ -33,7 +33,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Check for redirect result on mount
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          console.log('Redirect sign-in successful:', result.user.email);
+          setUser(result.user);
+        }
+      })
+      .catch((err) => {
+        console.error('Redirect result error:', err);
+      });
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      console.log('Auth state changed:', user?.email || 'No user');
       setUser(user);
       setLoading(false);
     });
@@ -44,7 +57,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       setError(null);
-      await signInWithEmailAndPassword(auth, email, password);
+      console.log('Attempting email sign-in...');
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      console.log('Email sign-in successful:', result.user.email);
     } catch (err: any) {
       console.error('Email Sign-In Error:', err);
       let errorMessage = 'Anmeldung fehlgeschlagen';
@@ -77,7 +92,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (email: string, password: string) => {
     try {
       setError(null);
-      await createUserWithEmailAndPassword(auth, email, password);
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      console.log('Sign-up successful:', result.user.email);
     } catch (err: any) {
       console.error('Sign-Up Error:', err);
       let errorMessage = 'Registrierung fehlgeschlagen';
@@ -104,14 +120,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = async () => {
     try {
       setError(null);
+      console.log('Attempting Google sign-in...');
+      
       const provider = new GoogleAuthProvider();
       provider.addScope('email');
       provider.addScope('profile');
       provider.setCustomParameters({
         prompt: 'select_account'
       });
-      const result = await signInWithPopup(auth, provider);
-      console.log('Google Sign-In successful:', result.user.email);
+      
+      // Try popup first, fall back to redirect on mobile
+      try {
+        const result = await signInWithPopup(auth, provider);
+        console.log('Google Sign-In (popup) successful:', result.user.email);
+      } catch (popupError: any) {
+        console.log('Popup failed, trying redirect...', popupError.code);
+        // If popup fails (common on mobile), use redirect
+        if (popupError.code === 'auth/popup-blocked' || 
+            popupError.code === 'auth/popup-closed-by-user' ||
+            popupError.code === 'auth/cancelled-popup-request') {
+          await signInWithRedirect(auth, provider);
+        } else {
+          throw popupError;
+        }
+      }
     } catch (err: any) {
       console.error('Google Sign-In Error:', err);
       console.error('Error code:', err.code);
@@ -121,19 +153,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       switch (err.code) {
         case 'auth/popup-blocked':
-          errorMessage = 'Popup wurde blockiert. Bitte erlauben Sie Popups für diese Seite.';
+          errorMessage = 'Popup wurde blockiert. Versuche Redirect...';
           break;
         case 'auth/popup-closed-by-user':
           errorMessage = 'Anmeldung abgebrochen.';
           break;
         case 'auth/unauthorized-domain':
-          errorMessage = 'Diese Domain ist nicht für Google Sign-In autorisiert. Bitte fügen Sie die Domain in der Firebase Console hinzu.';
+          errorMessage = 'Diese Domain ist nicht autorisiert. Bitte kontaktieren Sie den Administrator.';
           break;
         case 'auth/cancelled-popup-request':
           errorMessage = 'Nur ein Popup kann gleichzeitig geöffnet sein.';
           break;
         case 'auth/operation-not-allowed':
-          errorMessage = 'Google Sign-In ist nicht aktiviert. Bitte aktivieren Sie es in der Firebase Console.';
+          errorMessage = 'Google Sign-In ist nicht aktiviert.';
           break;
         case 'auth/network-request-failed':
           errorMessage = 'Netzwerkfehler. Bitte überprüfen Sie Ihre Internetverbindung.';
@@ -149,14 +181,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     try {
+      console.log('Signing out...');
       await firebaseSignOut(auth);
+      console.log('Sign-out successful');
     } catch (err: any) {
       console.error('Sign-Out Error:', err);
       throw new Error('Abmeldung fehlgeschlagen');
     }
   };
 
-  // Create aliases for compatibility
+  // Aliases
   const loginWithEmail = signIn;
   const loginWithGoogle = signInWithGoogle;
   const logout = signOut;
@@ -170,7 +204,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUp, 
       signInWithGoogle, 
       signOut,
-      // Aliases
       loginWithEmail,
       loginWithGoogle,
       logout

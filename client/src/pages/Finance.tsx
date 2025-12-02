@@ -85,8 +85,19 @@ export default function Finance() {
     [incomeEntries]
   );
 
+  // Only count PAID expenses in total (status === 'paid')
   const totalExpenses = useMemo(
-    () => expenseEntries.reduce((sum, e) => sum + e.amount, 0) / 100,
+    () => expenseEntries
+      .filter(e => (e as any).status === 'paid')
+      .reduce((sum, e) => sum + e.amount, 0) / 100,
+    [expenseEntries]
+  );
+
+  // Calculate open/pending expenses separately
+  const openExpenses = useMemo(
+    () => expenseEntries
+      .filter(e => (e as any).status !== 'paid')
+      .reduce((sum, e) => sum + e.amount, 0) / 100,
     [expenseEntries]
   );
 
@@ -109,7 +120,7 @@ export default function Finance() {
       };
     }
 
-    // Aggregate data
+    // Aggregate data - only count PAID expenses
     allEntries.forEach(entry => {
       try {
         const entryDate = entry.date?.toDate ? entry.date.toDate() : new Date(entry.date);
@@ -119,7 +130,8 @@ export default function Finance() {
         if (months[key]) {
           if (entry.type === 'einnahme') {
             months[key].income += entry.amount / 100;
-          } else {
+          } else if ((entry as any).status === 'paid') {
+            // Only count paid expenses
             months[key].expenses += entry.amount / 100;
           }
         }
@@ -131,14 +143,17 @@ export default function Finance() {
     return Object.values(months);
   }, [allEntries]);
 
-  // Category breakdown for pie chart
+  // Category breakdown for pie chart - only PAID expenses
   const categoryData = useMemo(() => {
     const categories: { [key: string]: number } = {};
     
-    expenseEntries.forEach(entry => {
-      const cat = entry.category || 'Sonstiges';
-      categories[cat] = (categories[cat] || 0) + entry.amount / 100;
-    });
+    // Only count paid expenses in the chart
+    expenseEntries
+      .filter(e => (e as any).status === 'paid')
+      .forEach(entry => {
+        const cat = entry.category || 'Sonstiges';
+        categories[cat] = (categories[cat] || 0) + entry.amount / 100;
+      });
 
     return Object.entries(categories)
       .map(([name, value]) => ({ name, value }))
@@ -479,13 +494,18 @@ export default function Finance() {
           <Card>
             <CardHeader className="pb-2 sm:pb-3">
               <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground">
-                {t('finance.totalExpenses')}
+                {t('finance.totalExpenses')} ({t('finance.paid')})
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-xl sm:text-2xl font-bold text-red-600">
                 {formatAmount(totalExpenses * 100)}
               </p>
+              {openExpenses > 0 && (
+                <p className="text-xs text-orange-600 mt-1">
+                  + CHF {openExpenses.toFixed(2)} {t('finance.open')}
+                </p>
+              )}
             </CardContent>
           </Card>
 

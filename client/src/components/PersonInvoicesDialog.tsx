@@ -10,8 +10,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
   Plus, Trash2, Edit2, Camera, QrCode, Copy, 
-  FileText, X, Calendar
+  FileText, X, Calendar, Bell, Clock, ArrowDownLeft, ArrowUpRight
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import { 
   usePersonInvoices, 
   createInvoice, 
@@ -39,8 +41,12 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     amount: '',
     description: '',
     date: new Date().toISOString().split('T')[0],
+    dueDate: '',
+    reminderEnabled: false,
+    reminderDate: '',
     status: 'open',
     direction: 'incoming' as 'incoming' | 'outgoing', // incoming = Person schuldet mir, outgoing = Ich schulde Person
+    notes: '',
     iban: '',
     reference: '',
     creditorName: '',
@@ -92,6 +98,10 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         date: new Date(newInvoice.date),
         status: newInvoice.status,
         direction: newInvoice.direction,
+        dueDate: newInvoice.dueDate ? new Date(newInvoice.dueDate) : undefined,
+        reminderEnabled: newInvoice.reminderEnabled,
+        reminderDate: newInvoice.reminderDate ? new Date(newInvoice.reminderDate) : undefined,
+        notes: newInvoice.notes || undefined,
       });
       
       toast.success('Rechnung hinzugefügt');
@@ -99,8 +109,12 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         amount: '',
         description: '',
         date: new Date().toISOString().split('T')[0],
+        dueDate: '',
+        reminderEnabled: false,
+        reminderDate: '',
         status: 'open',
         direction: person?.type === 'external' ? 'incoming' : 'outgoing',
+        notes: '',
         iban: '',
         reference: '',
         creditorName: '',
@@ -419,6 +433,35 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               </div>
             </div>
 
+            {/* Richtung für externe Personen */}
+            {person?.type === 'external' && (
+              <div>
+                <Label>Richtung</Label>
+                <Select
+                  value={newInvoice.direction}
+                  onValueChange={(value: 'incoming' | 'outgoing') => setNewInvoice({ ...newInvoice, direction: value })}
+                >
+                  <SelectTrigger className="mt-2 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="incoming">
+                      <span className="flex items-center gap-2">
+                        <ArrowDownLeft className="w-4 h-4 text-green-600" />
+                        Person schuldet mir
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="outgoing">
+                      <span className="flex items-center gap-2">
+                        <ArrowUpRight className="w-4 h-4 text-red-600" />
+                        Ich schulde Person
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div>
               <Label>Status</Label>
               <Select
@@ -449,6 +492,66 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   </SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Fälligkeitsdatum */}
+            <div>
+              <Label className="flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                Fälligkeitsdatum
+              </Label>
+              <Input
+                type="date"
+                value={newInvoice.dueDate}
+                onChange={(e) => setNewInvoice({ ...newInvoice, dueDate: e.target.value })}
+                className="mt-2 h-10"
+              />
+            </div>
+
+            {/* Erinnerung */}
+            <div className="space-y-3 p-4 border rounded-lg">
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  id="reminderEnabled"
+                  checked={newInvoice.reminderEnabled}
+                  onCheckedChange={(checked) => setNewInvoice({ 
+                    ...newInvoice, 
+                    reminderEnabled: checked as boolean,
+                    reminderDate: checked ? newInvoice.dueDate : ''
+                  })}
+                />
+                <Label htmlFor="reminderEnabled" className="flex items-center gap-2 cursor-pointer">
+                  <Bell className="w-4 h-4" />
+                  Erinnerung aktivieren
+                </Label>
+              </div>
+              
+              {newInvoice.reminderEnabled && (
+                <div>
+                  <Label>Erinnerungsdatum</Label>
+                  <Input
+                    type="date"
+                    value={newInvoice.reminderDate}
+                    onChange={(e) => setNewInvoice({ ...newInvoice, reminderDate: e.target.value })}
+                    className="mt-2 h-10"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Die Erinnerung erscheint im Kalender
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Notizen */}
+            <div>
+              <Label>Notizen</Label>
+              <Textarea
+                value={newInvoice.notes}
+                onChange={(e) => setNewInvoice({ ...newInvoice, notes: e.target.value })}
+                placeholder="Optionale Notizen..."
+                className="mt-2"
+                rows={2}
+              />
             </div>
 
             {(newInvoice.iban || newInvoice.creditorName) && (

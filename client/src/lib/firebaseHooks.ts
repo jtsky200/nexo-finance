@@ -440,8 +440,12 @@ export interface Invoice {
   amount: number;
   description: string;
   date: Date;
+  dueDate?: Date; // Fälligkeitsdatum
+  reminderDate?: Date; // Erinnerungsdatum
+  reminderEnabled?: boolean;
   status: 'open' | 'paid' | 'postponed';
   direction: 'incoming' | 'outgoing'; // incoming = Person schuldet mir, outgoing = Ich schulde Person
+  notes?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -491,13 +495,31 @@ export function usePersonInvoices(personId: string | undefined) {
   return { data: invoices, isLoading, error, refetch };
 }
 
-export async function createInvoice(personId: string, data: { amount: number; description: string; date: Date; status?: string; direction?: 'incoming' | 'outgoing' }) {
+export async function createInvoice(personId: string, data: { 
+  amount: number; 
+  description: string; 
+  date: Date; 
+  status?: string; 
+  direction?: 'incoming' | 'outgoing';
+  dueDate?: Date;
+  reminderDate?: Date;
+  reminderEnabled?: boolean;
+  notes?: string;
+}) {
   const createInvoiceFunc = httpsCallable(functions, 'createInvoice');
   const result = await createInvoiceFunc({ personId, ...data });
   return result.data;
 }
 
-export async function updateInvoice(personId: string, invoiceId: string, data: { amount?: number; description?: string; date?: Date }) {
+export async function updateInvoice(personId: string, invoiceId: string, data: { 
+  amount?: number; 
+  description?: string; 
+  date?: Date;
+  dueDate?: Date;
+  reminderDate?: Date;
+  reminderEnabled?: boolean;
+  notes?: string;
+}) {
   const updateInvoiceFunc = httpsCallable(functions, 'updateInvoice');
   await updateInvoiceFunc({ personId, invoiceId, ...data });
 }

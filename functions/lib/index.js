@@ -44,7 +44,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
+exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
@@ -530,7 +530,7 @@ exports.createInvoice = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
     const userId = request.auth.uid;
-    const { personId, amount, description, date, status, direction } = request.data;
+    const { personId, amount, description, date, status, direction, dueDate, reminderDate, reminderEnabled, notes } = request.data;
     // Verify person belongs to user
     const personRef = db.collection('people').doc(personId);
     const personDoc = await personRef.get();
@@ -538,7 +538,6 @@ exports.createInvoice = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('permission-denied', 'Not authorized to access this person');
     }
     // direction: "incoming" (Person schuldet mir) | "outgoing" (Ich schulde Person)
-    // Default to "outgoing" for household members (they owe household expenses)
     const personData = personDoc.data();
     const invoiceDirection = direction || ((personData === null || personData === void 0 ? void 0 : personData.type) === 'external' ? 'incoming' : 'outgoing');
     const invoiceData = {
@@ -547,9 +546,19 @@ exports.createInvoice = (0, https_1.onCall)(async (request) => {
         date: admin.firestore.Timestamp.fromDate(new Date(date)),
         status: status || 'open',
         direction: invoiceDirection,
+        notes: notes || null,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
+    // Add due date if provided
+    if (dueDate) {
+        invoiceData.dueDate = admin.firestore.Timestamp.fromDate(new Date(dueDate));
+    }
+    // Add reminder if enabled
+    if (reminderEnabled && reminderDate) {
+        invoiceData.reminderEnabled = true;
+        invoiceData.reminderDate = admin.firestore.Timestamp.fromDate(new Date(reminderDate));
+    }
     const docRef = await personRef.collection('invoices').add(invoiceData);
     // Update person's totalOwed if status is open or postponed
     if (status === 'open' || status === 'postponed') {
@@ -566,7 +575,7 @@ exports.updateInvoice = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
     const userId = request.auth.uid;
-    const { personId, invoiceId, amount, description, date } = request.data;
+    const { personId, invoiceId, amount, description, date, dueDate, reminderDate, reminderEnabled, notes } = request.data;
     // Verify person belongs to user
     const personRef = db.collection('people').doc(personId);
     const personDoc = await personRef.get();
@@ -588,6 +597,22 @@ exports.updateInvoice = (0, https_1.onCall)(async (request) => {
         updateData.description = description;
     if (date !== undefined)
         updateData.date = admin.firestore.Timestamp.fromDate(new Date(date));
+    if (notes !== undefined)
+        updateData.notes = notes;
+    // Handle due date
+    if (dueDate !== undefined) {
+        updateData.dueDate = dueDate ? admin.firestore.Timestamp.fromDate(new Date(dueDate)) : null;
+    }
+    // Handle reminder
+    if (reminderEnabled !== undefined) {
+        updateData.reminderEnabled = reminderEnabled;
+        if (reminderEnabled && reminderDate) {
+            updateData.reminderDate = admin.firestore.Timestamp.fromDate(new Date(reminderDate));
+        }
+        else if (!reminderEnabled) {
+            updateData.reminderDate = null;
+        }
+    }
     // Handle amount change
     if (amount !== undefined && amount !== oldAmount) {
         updateData.amount = amount;
@@ -721,6 +746,99 @@ exports.deleteInvoice = (0, https_1.onCall)(async (request) => {
     // Delete the invoice
     await invoiceRef.delete();
     return { success: true };
+});
+// ========== Calendar Functions ==========
+exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { startDate, endDate } = request.data;
+    const events = [];
+    // Get all people with their invoices
+    const peopleSnapshot = await db.collection('people').where('userId', '==', userId).get();
+    for (const personDoc of peopleSnapshot.docs) {
+        const personData = personDoc.data();
+        const invoicesSnapshot = await personDoc.ref.collection('invoices').get();
+        for (const invoiceDoc of invoicesSnapshot.docs) {
+            const invoiceData = invoiceDoc.data();
+            // Add due date events
+            if (invoiceData.dueDate && invoiceData.status !== 'paid') {
+                const dueDate = invoiceData.dueDate.toDate();
+                // Filter by date range if provided
+                if (startDate && endDate) {
+                    const start = new Date(startDate);
+                    const end = new Date(endDate);
+                    if (dueDate < start || dueDate > end)
+                        continue;
+                }
+                events.push({
+                    id: `due-${invoiceDoc.id}`,
+                    type: 'due',
+                    title: `Fällig: ${invoiceData.description}`,
+                    date: dueDate.toISOString(),
+                    amount: invoiceData.amount,
+                    status: invoiceData.status,
+                    direction: invoiceData.direction || 'outgoing',
+                    personId: personDoc.id,
+                    personName: personData.name,
+                    invoiceId: invoiceDoc.id,
+                    isOverdue: dueDate < new Date() && invoiceData.status !== 'paid',
+                });
+            }
+            // Add reminder events
+            if (invoiceData.reminderEnabled && invoiceData.reminderDate && invoiceData.status !== 'paid') {
+                const reminderDate = invoiceData.reminderDate.toDate();
+                // Filter by date range if provided
+                if (startDate && endDate) {
+                    const start = new Date(startDate);
+                    const end = new Date(endDate);
+                    if (reminderDate < start || reminderDate > end)
+                        continue;
+                }
+                events.push({
+                    id: `reminder-${invoiceDoc.id}`,
+                    type: 'reminder',
+                    title: `Erinnerung: ${invoiceData.description}`,
+                    date: reminderDate.toISOString(),
+                    amount: invoiceData.amount,
+                    status: invoiceData.status,
+                    direction: invoiceData.direction || 'outgoing',
+                    personId: personDoc.id,
+                    personName: personData.name,
+                    invoiceId: invoiceDoc.id,
+                    dueDate: invoiceData.dueDate ? invoiceData.dueDate.toDate().toISOString() : null,
+                });
+            }
+        }
+    }
+    // Get regular reminders
+    const remindersSnapshot = await db.collection('reminders').where('userId', '==', userId).get();
+    for (const reminderDoc of remindersSnapshot.docs) {
+        const reminderData = reminderDoc.data();
+        const reminderDate = ((_a = reminderData.date) === null || _a === void 0 ? void 0 : _a.toDate) ? reminderData.date.toDate() : new Date(reminderData.date);
+        // Filter by date range if provided
+        if (startDate && endDate) {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            if (reminderDate < start || reminderDate > end)
+                continue;
+        }
+        events.push({
+            id: `appointment-${reminderDoc.id}`,
+            type: 'appointment',
+            title: reminderData.title,
+            date: reminderDate.toISOString(),
+            description: reminderData.description,
+            category: reminderData.category,
+            priority: reminderData.priority,
+            completed: reminderData.completed,
+        });
+    }
+    // Sort by date
+    events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return { events };
 });
 // ========== Shopping List Functions ==========
 exports.getShoppingList = (0, https_1.onCall)(async (request) => {

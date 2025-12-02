@@ -9,6 +9,7 @@ import {
   Settings,
   ClipboardList,
   Users,
+  Calendar,
   X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -24,6 +25,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
 
   const navItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: t('nav.dashboard') },
+    { path: '/calendar', icon: Calendar, label: 'Kalender' },
     { path: '/reminders', icon: Bell, label: t('nav.reminders') },
     { path: '/finance', icon: Wallet, label: t('nav.finance') },
     { path: '/people', icon: Users, label: t('nav.people', 'Personen') },

@@ -605,7 +605,7 @@ export const createInvoice = onCall(async (request) => {
   }
 
   const userId = request.auth.uid;
-  const { personId, amount, description, date, status, direction } = request.data;
+  const { personId, amount, description, date, status, direction, dueDate, reminderDate, reminderEnabled, notes } = request.data;
 
   // Verify person belongs to user
   const personRef = db.collection('people').doc(personId);
@@ -616,19 +616,30 @@ export const createInvoice = onCall(async (request) => {
   }
 
   // direction: "incoming" (Person schuldet mir) | "outgoing" (Ich schulde Person)
-  // Default to "outgoing" for household members (they owe household expenses)
   const personData = personDoc.data();
   const invoiceDirection = direction || (personData?.type === 'external' ? 'incoming' : 'outgoing');
 
-  const invoiceData = {
+  const invoiceData: any = {
     amount,
     description,
     date: admin.firestore.Timestamp.fromDate(new Date(date)),
     status: status || 'open',
     direction: invoiceDirection,
+    notes: notes || null,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
+
+  // Add due date if provided
+  if (dueDate) {
+    invoiceData.dueDate = admin.firestore.Timestamp.fromDate(new Date(dueDate));
+  }
+
+  // Add reminder if enabled
+  if (reminderEnabled && reminderDate) {
+    invoiceData.reminderEnabled = true;
+    invoiceData.reminderDate = admin.firestore.Timestamp.fromDate(new Date(reminderDate));
+  }
 
   const docRef = await personRef.collection('invoices').add(invoiceData);
 
@@ -649,7 +660,7 @@ export const updateInvoice = onCall(async (request) => {
   }
 
   const userId = request.auth.uid;
-  const { personId, invoiceId, amount, description, date } = request.data;
+  const { personId, invoiceId, amount, description, date, dueDate, reminderDate, reminderEnabled, notes } = request.data;
 
   // Verify person belongs to user
   const personRef = db.collection('people').doc(personId);
@@ -676,6 +687,22 @@ export const updateInvoice = onCall(async (request) => {
 
   if (description !== undefined) updateData.description = description;
   if (date !== undefined) updateData.date = admin.firestore.Timestamp.fromDate(new Date(date));
+  if (notes !== undefined) updateData.notes = notes;
+  
+  // Handle due date
+  if (dueDate !== undefined) {
+    updateData.dueDate = dueDate ? admin.firestore.Timestamp.fromDate(new Date(dueDate)) : null;
+  }
+  
+  // Handle reminder
+  if (reminderEnabled !== undefined) {
+    updateData.reminderEnabled = reminderEnabled;
+    if (reminderEnabled && reminderDate) {
+      updateData.reminderDate = admin.firestore.Timestamp.fromDate(new Date(reminderDate));
+    } else if (!reminderEnabled) {
+      updateData.reminderDate = null;
+    }
+  }
   
   // Handle amount change
   if (amount !== undefined && amount !== oldAmount) {
@@ -837,6 +864,114 @@ export const deleteInvoice = onCall(async (request) => {
   // Delete the invoice
   await invoiceRef.delete();
   return { success: true };
+});
+
+// ========== Calendar Functions ==========
+
+export const getCalendarEvents = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { startDate, endDate } = request.data;
+
+  const events: any[] = [];
+
+  // Get all people with their invoices
+  const peopleSnapshot = await db.collection('people').where('userId', '==', userId).get();
+  
+  for (const personDoc of peopleSnapshot.docs) {
+    const personData = personDoc.data();
+    const invoicesSnapshot = await personDoc.ref.collection('invoices').get();
+    
+    for (const invoiceDoc of invoicesSnapshot.docs) {
+      const invoiceData = invoiceDoc.data();
+      
+      // Add due date events
+      if (invoiceData.dueDate && invoiceData.status !== 'paid') {
+        const dueDate = invoiceData.dueDate.toDate();
+        
+        // Filter by date range if provided
+        if (startDate && endDate) {
+          const start = new Date(startDate);
+          const end = new Date(endDate);
+          if (dueDate < start || dueDate > end) continue;
+        }
+        
+        events.push({
+          id: `due-${invoiceDoc.id}`,
+          type: 'due',
+          title: `Fällig: ${invoiceData.description}`,
+          date: dueDate.toISOString(),
+          amount: invoiceData.amount,
+          status: invoiceData.status,
+          direction: invoiceData.direction || 'outgoing',
+          personId: personDoc.id,
+          personName: personData.name,
+          invoiceId: invoiceDoc.id,
+          isOverdue: dueDate < new Date() && invoiceData.status !== 'paid',
+        });
+      }
+      
+      // Add reminder events
+      if (invoiceData.reminderEnabled && invoiceData.reminderDate && invoiceData.status !== 'paid') {
+        const reminderDate = invoiceData.reminderDate.toDate();
+        
+        // Filter by date range if provided
+        if (startDate && endDate) {
+          const start = new Date(startDate);
+          const end = new Date(endDate);
+          if (reminderDate < start || reminderDate > end) continue;
+        }
+        
+        events.push({
+          id: `reminder-${invoiceDoc.id}`,
+          type: 'reminder',
+          title: `Erinnerung: ${invoiceData.description}`,
+          date: reminderDate.toISOString(),
+          amount: invoiceData.amount,
+          status: invoiceData.status,
+          direction: invoiceData.direction || 'outgoing',
+          personId: personDoc.id,
+          personName: personData.name,
+          invoiceId: invoiceDoc.id,
+          dueDate: invoiceData.dueDate ? invoiceData.dueDate.toDate().toISOString() : null,
+        });
+      }
+    }
+  }
+
+  // Get regular reminders
+  const remindersSnapshot = await db.collection('reminders').where('userId', '==', userId).get();
+  
+  for (const reminderDoc of remindersSnapshot.docs) {
+    const reminderData = reminderDoc.data();
+    const reminderDate = reminderData.date?.toDate ? reminderData.date.toDate() : new Date(reminderData.date);
+    
+    // Filter by date range if provided
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      if (reminderDate < start || reminderDate > end) continue;
+    }
+    
+    events.push({
+      id: `appointment-${reminderDoc.id}`,
+      type: 'appointment',
+      title: reminderData.title,
+      date: reminderDate.toISOString(),
+      description: reminderData.description,
+      category: reminderData.category,
+      priority: reminderData.priority,
+      completed: reminderData.completed,
+    });
+  }
+
+  // Sort by date
+  events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  return { events };
 });
 
 // ========== Shopping List Functions ==========

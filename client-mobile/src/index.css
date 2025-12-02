@@ -193,3 +193,19 @@
 .dark .bg-status-info {
   background-color: rgba(37, 99, 235, 0.1);
 }
+
+/* Hide scrollbar globally but allow scrolling */
+html,
+body,
+*,
+.hide-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;     /* Firefox */
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+*::-webkit-scrollbar,
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;             /* Chrome, Safari, Opera */
+}

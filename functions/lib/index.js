@@ -407,12 +407,17 @@ exports.createPerson = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
     const userId = request.auth.uid;
-    const { name, email, phone, currency } = request.data;
+    const { name, email, phone, currency, type, relationship, notes } = request.data;
+    // type: "household" (Haushaltsmitglied) | "external" (Externe Person)
+    // relationship (nur für external): "creditor" (Ich schulde) | "debtor" (Schuldet mir) | "both"
     const personData = {
         userId,
         name,
         email: email || null,
         phone: phone || null,
+        type: type || 'household', // Default: Haushaltsmitglied
+        relationship: type === 'external' ? (relationship || 'both') : null,
+        notes: notes || null,
         totalOwed: 0,
         currency: currency || 'CHF',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -427,18 +432,27 @@ exports.updatePerson = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
     const userId = request.auth.uid;
-    const { personId, name, email, phone } = request.data;
+    const { personId, name, email, phone, type, relationship, notes } = request.data;
     const personRef = db.collection('people').doc(personId);
     const personDoc = await personRef.get();
     if (!personDoc.exists || ((_a = personDoc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
         throw new https_1.HttpsError('permission-denied', 'Not authorized to update this person');
     }
-    await personRef.update({
+    const updateData = {
         name,
         email: email || null,
         phone: phone || null,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+    };
+    // Only update type/relationship/notes if provided
+    if (type !== undefined) {
+        updateData.type = type;
+        updateData.relationship = type === 'external' ? (relationship || 'both') : null;
+    }
+    if (notes !== undefined) {
+        updateData.notes = notes;
+    }
+    await personRef.update(updateData);
     return { success: true };
 });
 exports.deletePerson = (0, https_1.onCall)(async (request) => {
@@ -516,18 +530,23 @@ exports.createInvoice = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
     const userId = request.auth.uid;
-    const { personId, amount, description, date, status } = request.data;
+    const { personId, amount, description, date, status, direction } = request.data;
     // Verify person belongs to user
     const personRef = db.collection('people').doc(personId);
     const personDoc = await personRef.get();
     if (!personDoc.exists || ((_a = personDoc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
         throw new https_1.HttpsError('permission-denied', 'Not authorized to access this person');
     }
+    // direction: "incoming" (Person schuldet mir) | "outgoing" (Ich schulde Person)
+    // Default to "outgoing" for household members (they owe household expenses)
+    const personData = personDoc.data();
+    const invoiceDirection = direction || ((personData === null || personData === void 0 ? void 0 : personData.type) === 'external' ? 'incoming' : 'outgoing');
     const invoiceData = {
         amount,
         description,
         date: admin.firestore.Timestamp.fromDate(new Date(date)),
         status: status || 'open',
+        direction: invoiceDirection,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };

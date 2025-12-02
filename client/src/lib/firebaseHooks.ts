@@ -252,10 +252,14 @@ export interface Person {
   name: string;
   email?: string | null;
   phone?: string | null;
+  type: 'household' | 'external'; // Haushalt oder Externe Person
+  relationship?: 'creditor' | 'debtor' | 'both' | null; // Nur für external
+  notes?: string | null;
   totalOwed: number;
   currency: string;
   createdAt: Date;
   updatedAt: Date;
+  invoices?: Invoice[];
 }
 
 export function usePeople() {
@@ -297,7 +301,7 @@ export function usePeople() {
   return { data: people, isLoading, error, refetch };
 }
 
-export async function createPerson(data: Omit<Person, 'id' | 'userId' | 'totalOwed' | 'createdAt' | 'updatedAt'>) {
+export async function createPerson(data: Omit<Person, 'id' | 'userId' | 'totalOwed' | 'createdAt' | 'updatedAt' | 'invoices'>) {
   const createPersonFunc = httpsCallable(functions, 'createPerson');
   const result = await createPersonFunc(data);
   return result.data;
@@ -437,6 +441,7 @@ export interface Invoice {
   description: string;
   date: Date;
   status: 'open' | 'paid' | 'postponed';
+  direction: 'incoming' | 'outgoing'; // incoming = Person schuldet mir, outgoing = Ich schulde Person
   createdAt: Date;
   updatedAt: Date;
 }
@@ -486,7 +491,7 @@ export function usePersonInvoices(personId: string | undefined) {
   return { data: invoices, isLoading, error, refetch };
 }
 
-export async function createInvoice(personId: string, data: { amount: number; description: string; date: Date; status?: string }) {
+export async function createInvoice(personId: string, data: { amount: number; description: string; date: Date; status?: string; direction?: 'incoming' | 'outgoing' }) {
   const createInvoiceFunc = httpsCallable(functions, 'createInvoice');
   const result = await createInvoiceFunc({ personId, ...data });
   return result.data;

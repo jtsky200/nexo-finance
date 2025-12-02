@@ -40,6 +40,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     description: '',
     date: new Date().toISOString().split('T')[0],
     status: 'open',
+    direction: 'incoming' as 'incoming' | 'outgoing', // incoming = Person schuldet mir, outgoing = Ich schulde Person
     iban: '',
     reference: '',
     creditorName: '',
@@ -90,6 +91,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         description: newInvoice.description,
         date: new Date(newInvoice.date),
         status: newInvoice.status,
+        direction: newInvoice.direction,
       });
       
       toast.success('Rechnung hinzugefügt');
@@ -98,6 +100,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         description: '',
         date: new Date().toISOString().split('T')[0],
         status: 'open',
+        direction: person?.type === 'external' ? 'incoming' : 'outgoing',
         iban: '',
         reference: '',
         creditorName: '',

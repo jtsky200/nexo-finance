@@ -1,11 +1,9 @@
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 export default function MobileLogin() {
-  const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const { loginWithGoogle, loginWithEmail } = useAuth();
   const [email, setEmail] = useState('');
@@ -60,7 +58,7 @@ export default function MobileLogin() {
       
       <h1 className="text-2xl font-bold mb-2">Nexo</h1>
       <p className="text-muted-foreground mb-8 text-center">
-        {t('auth.loginSubtitle', 'Melden Sie sich an, um fortzufahren')}
+        Melden Sie sich an, um fortzufahren
       </p>
 
       {/* Google Login - Native button */}
@@ -88,12 +86,12 @@ export default function MobileLogin() {
             d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
           />
         </svg>
-        {isLoading ? 'Laden...' : t('auth.googleLogin', 'Mit Google anmelden')}
+        {isLoading ? 'Laden...' : 'Mit Google anmelden'}
       </button>
 
       <div className="flex items-center gap-4 w-full mb-4">
         <div className="flex-1 h-px bg-border" />
-        <span className="text-xs text-muted-foreground">{t('common.or', 'oder')}</span>
+        <span className="text-xs text-muted-foreground">oder</span>
         <div className="flex-1 h-px bg-border" />
       </div>
 
@@ -101,14 +99,14 @@ export default function MobileLogin() {
       <form onSubmit={handleEmailLogin} className="w-full space-y-3">
         <input
           type="email"
-          placeholder={t('auth.email', 'E-Mail')}
+          placeholder="E-Mail"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="w-full h-12 px-4 rounded-lg text-base bg-background border border-border outline-none focus:border-primary"
         />
         <input
           type="password"
-          placeholder={t('auth.password', 'Passwort')}
+          placeholder="Passwort"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="w-full h-12 px-4 rounded-lg text-base bg-background border border-border outline-none focus:border-primary"
@@ -118,14 +116,14 @@ export default function MobileLogin() {
           disabled={isLoading}
           className="w-full h-12 px-6 rounded-lg font-medium text-base bg-primary text-primary-foreground active:opacity-80 disabled:opacity-50"
         >
-          {isLoading ? 'Laden...' : t('auth.login', 'Anmelden')}
+          {isLoading ? 'Laden...' : 'Anmelden'}
         </button>
       </form>
 
       {/* Switch to Desktop */}
       <p className="text-xs text-muted-foreground mt-8 text-center">
         <a href="https://nexo-jtsky100.web.app" className="text-primary underline">
-          {t('auth.desktopVersion', 'Desktop-Version öffnen')}
+          Desktop-Version öffnen
         </a>
       </p>
     </div>

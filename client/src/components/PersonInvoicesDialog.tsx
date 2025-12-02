@@ -194,72 +194,72 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'paid':
-        return <Badge className="bg-green-500 hover:bg-green-600 text-white px-4 py-1">Bezahlt</Badge>;
+        return <Badge className="bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-0.5">Bezahlt</Badge>;
       case 'postponed':
-        return <Badge className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-1">Verschoben</Badge>;
+        return <Badge className="bg-orange-500 hover:bg-orange-600 text-white text-xs px-2 py-0.5">Verschoben</Badge>;
       default:
-        return <Badge className="bg-red-500 hover:bg-red-600 text-white px-4 py-1">Offen</Badge>;
+        return <Badge className="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-0.5">Offen</Badge>;
     }
   };
 
   return (
     <>
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="max-w-[900px] w-[95vw] max-h-[90vh] p-0 gap-0 overflow-hidden">
+        <DialogContent className="max-w-[700px] w-[95vw] max-h-[90vh] p-0 gap-0 overflow-hidden">
           {/* Header */}
-          <div className="bg-slate-50 dark:bg-slate-900 px-10 py-8 border-b">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-6">
-                <div className="w-20 h-20 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-3xl font-bold">
+          <div className="bg-slate-50 dark:bg-slate-900 px-6 py-6 border-b">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl font-bold shrink-0">
                   {person?.name?.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h2 className="text-3xl font-bold mb-2">{person?.name}</h2>
-                  <p className="text-lg text-muted-foreground">{invoices.length} Rechnungen</p>
+                  <h2 className="text-xl font-bold">{person?.name}</h2>
+                  <p className="text-sm text-muted-foreground">{invoices.length} Rechnungen</p>
                 </div>
               </div>
-              <div className="flex gap-4">
-                <Button variant="outline" size="lg" onClick={() => setShowScanner(true)} className="h-14 px-6 text-base">
-                  <Camera className="w-5 h-5 mr-3" />
+              <div className="flex gap-2 w-full sm:w-auto">
+                <Button variant="outline" onClick={() => setShowScanner(true)} className="flex-1 sm:flex-none h-10">
+                  <Camera className="w-4 h-4 mr-2" />
                   Scannen
                 </Button>
-                <Button size="lg" onClick={() => setShowAddDialog(true)} className="h-14 px-6 text-base">
-                  <Plus className="w-5 h-5 mr-3" />
-                  Hinzufügen
+                <Button onClick={() => setShowAddDialog(true)} className="flex-1 sm:flex-none h-10">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Neu
                 </Button>
               </div>
             </div>
           </div>
 
           {/* Content */}
-          <div className="px-10 py-8 overflow-y-auto flex-1">
+          <div className="px-6 py-6 overflow-y-auto flex-1">
             {/* Statistics */}
-            <div className="grid grid-cols-3 gap-6 mb-10">
-              <div className="bg-slate-100 dark:bg-slate-800 rounded-2xl p-8">
-                <p className="text-base text-muted-foreground mb-3">Gesamt</p>
-                <p className="text-4xl font-bold">{formatAmount(totalAmount)}</p>
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              <div className="bg-slate-100 dark:bg-slate-800 rounded-xl p-4">
+                <p className="text-xs text-muted-foreground mb-1">Gesamt</p>
+                <p className="text-lg font-bold truncate">{formatAmount(totalAmount)}</p>
               </div>
-              <div className="bg-red-50 dark:bg-red-950/50 border-2 border-red-200 dark:border-red-900 rounded-2xl p-8">
-                <p className="text-base text-red-600 dark:text-red-400 mb-3">Offen</p>
-                <p className="text-4xl font-bold text-red-600">{formatAmount(openAmount)}</p>
+              <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-xl p-4">
+                <p className="text-xs text-red-600 dark:text-red-400 mb-1">Offen</p>
+                <p className="text-lg font-bold text-red-600 truncate">{formatAmount(openAmount)}</p>
               </div>
-              <div className="bg-green-50 dark:bg-green-950/50 border-2 border-green-200 dark:border-green-900 rounded-2xl p-8">
-                <p className="text-base text-green-600 dark:text-green-400 mb-3">Bezahlt</p>
-                <p className="text-4xl font-bold text-green-600">{formatAmount(paidAmount)}</p>
+              <div className="bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-900 rounded-xl p-4">
+                <p className="text-xs text-green-600 dark:text-green-400 mb-1">Bezahlt</p>
+                <p className="text-lg font-bold text-green-600 truncate">{formatAmount(paidAmount)}</p>
               </div>
             </div>
 
             {/* Invoice List */}
-            <h3 className="text-xl font-bold mb-6">Rechnungen</h3>
+            <h3 className="font-semibold mb-4">Rechnungen</h3>
             
             {isLoading ? (
-              <div className="text-center py-16 text-lg text-muted-foreground">Laden...</div>
+              <div className="text-center py-10 text-muted-foreground">Laden...</div>
             ) : invoices.length > 0 ? (
-              <div className="space-y-5">
+              <div className="space-y-3">
                 {invoices.map((invoice: any) => (
                   <div 
                     key={invoice.id}
-                    className={`rounded-2xl p-8 border-2 ${
+                    className={`rounded-xl p-4 border ${
                       invoice.status === 'paid' 
                         ? 'bg-green-50/50 border-green-200 dark:bg-green-950/20 dark:border-green-800' 
                         : invoice.status === 'postponed'
@@ -267,91 +267,93 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                         : 'bg-red-50/50 border-red-200 dark:bg-red-950/20 dark:border-red-800'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      {/* Left side */}
-                      <div className="flex-1">
-                        <div className="flex items-center gap-4 mb-4">
-                          <h4 className="text-2xl font-semibold">{invoice.description}</h4>
-                          {getStatusBadge(invoice.status)}
-                        </div>
-                        <div className="flex items-center gap-8 text-lg">
-                          <span className="text-muted-foreground flex items-center gap-2">
-                            <Calendar className="w-5 h-5" />
-                            {formatDate(invoice.date)}
-                          </span>
-                          <span className="text-2xl font-bold">{formatAmount(invoice.amount)}</span>
-                        </div>
+                    {/* Top row - Description and Badge */}
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h4 className="font-semibold truncate">{invoice.description}</h4>
+                        {getStatusBadge(invoice.status)}
                       </div>
+                    </div>
+                    
+                    {/* Middle row - Date and Amount */}
+                    <div className="flex items-center gap-4 mb-3">
+                      <span className="text-sm text-muted-foreground flex items-center gap-1">
+                        <Calendar className="w-4 h-4" />
+                        {formatDate(invoice.date)}
+                      </span>
+                      <span className="text-lg font-bold">{formatAmount(invoice.amount)}</span>
+                    </div>
+                    
+                    {/* Bottom row - Actions */}
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={invoice.status}
+                        onValueChange={(value) => handleStatusChange(invoice.id, value)}
+                      >
+                        <SelectTrigger className="w-[130px] h-9 text-sm">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="open">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-red-500" />
+                              Offen
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="paid">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-green-500" />
+                              Bezahlt
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="postponed">
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-orange-500" />
+                              Verschoben
+                            </span>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                       
-                      {/* Right side - Actions */}
-                      <div className="flex items-center gap-4">
-                        <Select
-                          value={invoice.status}
-                          onValueChange={(value) => handleStatusChange(invoice.id, value)}
-                        >
-                          <SelectTrigger className="w-[180px] h-14 text-base">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="open" className="py-3">
-                              <span className="flex items-center gap-3">
-                                <span className="w-3 h-3 rounded-full bg-red-500" />
-                                Offen
-                              </span>
-                            </SelectItem>
-                            <SelectItem value="paid" className="py-3">
-                              <span className="flex items-center gap-3">
-                                <span className="w-3 h-3 rounded-full bg-green-500" />
-                                Bezahlt
-                              </span>
-                            </SelectItem>
-                            <SelectItem value="postponed" className="py-3">
-                              <span className="flex items-center gap-3">
-                                <span className="w-3 h-3 rounded-full bg-orange-500" />
-                                Verschoben
-                              </span>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                        
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          className="h-14 w-14"
-                          onClick={() => setEditingInvoice({
-                            ...invoice,
-                            amount: (invoice.amount / 100).toFixed(2),
-                            date: new Date(invoice.date).toISOString().split('T')[0],
-                          })}
-                        >
-                          <Edit2 className="h-6 w-6" />
-                        </Button>
-                        
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          className="h-14 w-14 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
-                          onClick={() => setDeleteInvoiceId(invoice.id)}
-                        >
-                          <Trash2 className="h-6 w-6" />
-                        </Button>
-                      </div>
+                      <div className="flex-1" />
+                      
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-9 w-9"
+                        onClick={() => setEditingInvoice({
+                          ...invoice,
+                          amount: (invoice.amount / 100).toFixed(2),
+                          date: new Date(invoice.date).toISOString().split('T')[0],
+                        })}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-9 w-9 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                        onClick={() => setDeleteInvoiceId(invoice.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="border-2 border-dashed rounded-2xl py-20 text-center">
-                <FileText className="w-20 h-20 mx-auto text-muted-foreground/30 mb-6" />
-                <p className="text-xl text-muted-foreground mb-8">Noch keine Rechnungen</p>
-                <div className="flex gap-4 justify-center">
-                  <Button variant="outline" size="lg" onClick={() => setShowScanner(true)} className="h-14 px-8 text-base">
-                    <Camera className="w-5 h-5 mr-3" />
+              <div className="border border-dashed rounded-xl py-12 text-center">
+                <FileText className="w-12 h-12 mx-auto text-muted-foreground/30 mb-4" />
+                <p className="text-muted-foreground mb-4">Noch keine Rechnungen</p>
+                <div className="flex gap-2 justify-center">
+                  <Button variant="outline" onClick={() => setShowScanner(true)} className="h-9">
+                    <Camera className="w-4 h-4 mr-2" />
                     Scannen
                   </Button>
-                  <Button size="lg" onClick={() => setShowAddDialog(true)} className="h-14 px-8 text-base">
-                    <Plus className="w-5 h-5 mr-3" />
-                    Hinzufügen
+                  <Button onClick={() => setShowAddDialog(true)} className="h-9">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Neu
                   </Button>
                 </div>
               </div>
@@ -362,83 +364,83 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
 
       {/* Add Invoice Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="sm:max-w-[550px]">
-          <DialogHeader className="pb-6">
-            <DialogTitle className="text-2xl">Neue Rechnung</DialogTitle>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="text-xl">Neue Rechnung</DialogTitle>
           </DialogHeader>
-          <div className="space-y-6">
+          <div className="space-y-4">
             {newInvoice.imageUrl && (
               <div className="relative">
-                <img src={newInvoice.imageUrl} alt="" className="w-full h-40 object-cover rounded-xl border-2" />
+                <img src={newInvoice.imageUrl} alt="" className="w-full h-32 object-cover rounded-lg border" />
                 <Button 
                   variant="secondary" 
                   size="icon"
-                  className="absolute top-3 right-3 h-10 w-10"
+                  className="absolute top-2 right-2 h-8 w-8"
                   onClick={() => setNewInvoice({ ...newInvoice, imageUrl: '' })}
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </Button>
               </div>
             )}
 
             <div>
-              <Label className="text-base font-medium">Beschreibung *</Label>
+              <Label>Beschreibung *</Label>
               <Input
                 value={newInvoice.description}
                 onChange={(e) => setNewInvoice({ ...newInvoice, description: e.target.value })}
                 placeholder="z.B. Miete, Strom..."
-                className="mt-3 h-14 text-base px-4"
+                className="mt-2 h-10"
               />
             </div>
             
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="text-base font-medium">Betrag (CHF) *</Label>
+                <Label>Betrag (CHF) *</Label>
                 <Input
                   type="number"
                   step="0.01"
                   value={newInvoice.amount}
                   onChange={(e) => setNewInvoice({ ...newInvoice, amount: e.target.value })}
                   placeholder="0.00"
-                  className="mt-3 h-14 text-base px-4"
+                  className="mt-2 h-10"
                 />
               </div>
               <div>
-                <Label className="text-base font-medium">Datum</Label>
+                <Label>Datum</Label>
                 <Input
                   type="date"
                   value={newInvoice.date}
                   onChange={(e) => setNewInvoice({ ...newInvoice, date: e.target.value })}
-                  className="mt-3 h-14 text-base px-4"
+                  className="mt-2 h-10"
                 />
               </div>
             </div>
 
             <div>
-              <Label className="text-base font-medium">Status</Label>
+              <Label>Status</Label>
               <Select
                 value={newInvoice.status}
                 onValueChange={(value) => setNewInvoice({ ...newInvoice, status: value })}
               >
-                <SelectTrigger className="mt-3 h-14 text-base">
+                <SelectTrigger className="mt-2 h-10">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="open" className="py-3">
-                    <span className="flex items-center gap-3">
-                      <span className="w-3 h-3 rounded-full bg-red-500" />
+                  <SelectItem value="open">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-red-500" />
                       Offen
                     </span>
                   </SelectItem>
-                  <SelectItem value="paid" className="py-3">
-                    <span className="flex items-center gap-3">
-                      <span className="w-3 h-3 rounded-full bg-green-500" />
+                  <SelectItem value="paid">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-green-500" />
                       Bezahlt
                     </span>
                   </SelectItem>
-                  <SelectItem value="postponed" className="py-3">
-                    <span className="flex items-center gap-3">
-                      <span className="w-3 h-3 rounded-full bg-orange-500" />
+                  <SelectItem value="postponed">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-orange-500" />
                       Verschoben
                     </span>
                   </SelectItem>
@@ -447,32 +449,32 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
             </div>
 
             {(newInvoice.iban || newInvoice.creditorName) && (
-              <div className="p-6 bg-muted rounded-xl space-y-4">
-                <p className="font-semibold flex items-center gap-3 text-base">
-                  <QrCode className="w-5 h-5" /> Zahlungsdetails
+              <div className="p-4 bg-muted rounded-lg space-y-2 text-sm">
+                <p className="font-medium flex items-center gap-2">
+                  <QrCode className="w-4 h-4" /> Zahlungsdetails
                 </p>
                 {newInvoice.creditorName && <p className="text-muted-foreground">{newInvoice.creditorName}</p>}
                 {newInvoice.iban && (
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground font-mono">{newInvoice.iban}</span>
-                    <Button variant="ghost" size="icon" className="h-10 w-10" onClick={() => copyToClipboard(newInvoice.iban, 'IBAN')}>
-                      <Copy className="w-5 h-5" />
+                    <span className="text-muted-foreground font-mono text-xs">{newInvoice.iban}</span>
+                    <Button variant="ghost" size="sm" className="h-8" onClick={() => copyToClipboard(newInvoice.iban, 'IBAN')}>
+                      <Copy className="w-4 h-4" />
                     </Button>
                   </div>
                 )}
               </div>
             )}
 
-            <Button variant="outline" className="w-full h-14 text-base" onClick={() => { setShowAddDialog(false); setShowScanner(true); }}>
-              <Camera className="w-5 h-5 mr-3" />
+            <Button variant="outline" className="w-full h-10" onClick={() => { setShowAddDialog(false); setShowScanner(true); }}>
+              <Camera className="w-4 h-4 mr-2" />
               Rechnung scannen
             </Button>
           </div>
-          <DialogFooter className="mt-8 gap-4">
-            <Button variant="outline" onClick={() => setShowAddDialog(false)} className="h-14 px-8 text-base">
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setShowAddDialog(false)} className="h-10">
               Abbrechen
             </Button>
-            <Button onClick={handleAddInvoice} className="h-14 px-8 text-base">
+            <Button onClick={handleAddInvoice} className="h-10">
               Hinzufügen
             </Button>
           </DialogFooter>
@@ -483,46 +485,46 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
 
       {editingInvoice && (
         <Dialog open={!!editingInvoice} onOpenChange={() => setEditingInvoice(null)}>
-          <DialogContent className="sm:max-w-[550px]">
-            <DialogHeader className="pb-6">
-              <DialogTitle className="text-2xl">Rechnung bearbeiten</DialogTitle>
+          <DialogContent className="sm:max-w-[450px]">
+            <DialogHeader className="pb-4">
+              <DialogTitle className="text-xl">Rechnung bearbeiten</DialogTitle>
             </DialogHeader>
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
-                <Label className="text-base font-medium">Beschreibung *</Label>
+                <Label>Beschreibung *</Label>
                 <Input
                   value={editingInvoice.description}
                   onChange={(e) => setEditingInvoice({ ...editingInvoice, description: e.target.value })}
-                  className="mt-3 h-14 text-base px-4"
+                  className="mt-2 h-10"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-base font-medium">Betrag (CHF) *</Label>
+                  <Label>Betrag (CHF) *</Label>
                   <Input
                     type="number"
                     step="0.01"
                     value={editingInvoice.amount}
                     onChange={(e) => setEditingInvoice({ ...editingInvoice, amount: e.target.value })}
-                    className="mt-3 h-14 text-base px-4"
+                    className="mt-2 h-10"
                   />
                 </div>
                 <div>
-                  <Label className="text-base font-medium">Datum</Label>
+                  <Label>Datum</Label>
                   <Input
                     type="date"
                     value={editingInvoice.date}
                     onChange={(e) => setEditingInvoice({ ...editingInvoice, date: e.target.value })}
-                    className="mt-3 h-14 text-base px-4"
+                    className="mt-2 h-10"
                   />
                 </div>
               </div>
             </div>
-            <DialogFooter className="mt-8 gap-4">
-              <Button variant="outline" onClick={() => setEditingInvoice(null)} className="h-14 px-8 text-base">
+            <DialogFooter className="mt-4 gap-2">
+              <Button variant="outline" onClick={() => setEditingInvoice(null)} className="h-10">
                 Abbrechen
               </Button>
-              <Button onClick={handleUpdateInvoice} className="h-14 px-8 text-base">
+              <Button onClick={handleUpdateInvoice} className="h-10">
                 Speichern
               </Button>
             </DialogFooter>
@@ -531,16 +533,16 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       )}
 
       <AlertDialog open={!!deleteInvoiceId} onOpenChange={(open) => !open && setDeleteInvoiceId(null)}>
-        <AlertDialogContent className="max-w-[450px]">
+        <AlertDialogContent className="max-w-[400px]">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-xl">Rechnung löschen?</AlertDialogTitle>
-            <AlertDialogDescription className="text-base mt-3">
+            <AlertDialogTitle>Rechnung löschen?</AlertDialogTitle>
+            <AlertDialogDescription className="mt-2">
               Diese Aktion kann nicht rückgängig gemacht werden.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="mt-6 gap-4">
-            <AlertDialogCancel className="h-12 px-6">Abbrechen</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteInvoice} className="h-12 px-6 bg-red-600 hover:bg-red-700">
+          <AlertDialogFooter className="mt-4 gap-2">
+            <AlertDialogCancel className="h-10">Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteInvoice} className="h-10 bg-red-600 hover:bg-red-700">
               Löschen
             </AlertDialogAction>
           </AlertDialogFooter>

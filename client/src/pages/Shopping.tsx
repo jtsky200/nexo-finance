@@ -536,6 +536,9 @@ export default function Shopping() {
 
           {/* Sidebar - Bought Items */}
           <div className="space-y-4">
+            {/* Spacer to align with filters on the left */}
+            <div className="h-9" />
+            
             <Card className="h-fit">
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">

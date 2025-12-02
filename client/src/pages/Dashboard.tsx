@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
   Bell, Plus, TrendingUp, TrendingDown, FileText, Calendar, 
-  Banknote, Clock, AlertTriangle, CheckCircle2, Receipt,
+  Banknote, Clock, AlertTriangle, CheckCircle2, ClipboardList,
   CalendarClock, CheckSquare
 } from 'lucide-react';
 import { useReminders, useFinanceEntries, getTaxProfileByYear } from '@/lib/firebaseHooks';
@@ -136,7 +136,7 @@ export default function Dashboard() {
       case 'aufgabe':
         return <CheckSquare className="w-4 h-4" />;
       case 'zahlung':
-        return <Receipt className="w-4 h-4" />;
+        return <ClipboardList className="w-4 h-4" />;
       default:
         return <Bell className="w-4 h-4" />;
     }
@@ -212,7 +212,7 @@ export default function Dashboard() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-green-500" />
+                <ClipboardList className="w-5 h-5 text-green-500" />
                 <CardTitle className="text-base">{t('dashboard.pendingBills', 'Offene Rechnungen')}</CardTitle>
               </div>
               {overdueCount > 0 && (
@@ -249,7 +249,7 @@ export default function Dashboard() {
                       onClick={() => setLocation('/bills')}
                     >
                       <div className="p-1.5 rounded bg-green-100 text-green-600">
-                        <Receipt className="w-4 h-4" />
+                        <ClipboardList className="w-4 h-4" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">{bill.title}</p>

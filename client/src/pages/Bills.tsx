@@ -15,7 +15,7 @@ import {
   Plus, Search, Filter, Calendar, Clock, AlertTriangle, 
   CheckCircle2, FileText, Trash2, Edit2, 
   MoreVertical, Camera, Copy, Building2, Banknote,
-  Receipt, CalendarClock
+  ClipboardList, CalendarClock
 } from 'lucide-react';
 import { useReminders, createReminder, updateReminder, deleteReminder, useFinanceEntries, createFinanceEntry, Reminder } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
@@ -352,7 +352,7 @@ export default function Bills() {
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 flex-1 min-w-0">
               <div className="p-2 rounded-lg bg-green-100 text-green-600">
-                <Receipt className="w-5 h-5" />
+                <ClipboardList className="w-5 h-5" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -462,7 +462,7 @@ export default function Bills() {
           <Card>
             <CardContent className="pt-4">
               <div className="flex items-center gap-2">
-                <Receipt className="w-4 h-4 text-muted-foreground" />
+                <ClipboardList className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">{t('bills.total', 'Gesamt')}</span>
               </div>
               <p className="text-2xl font-bold mt-1">{stats.total}</p>
@@ -565,7 +565,7 @@ export default function Bills() {
             ) : pendingBills.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center">
-                  <Receipt className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+                  <ClipboardList className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
                   <p className="text-muted-foreground">
                     {t('bills.noPending', 'Keine ausstehenden Rechnungen')}
                   </p>

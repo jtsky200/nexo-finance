@@ -19,7 +19,9 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   if (!isUnauthorized) return;
 
-  window.location.href = getLoginUrl();
+  // Use Firebase Auth login page instead of OAuth portal
+  const loginUrl = getLoginUrl();
+  window.location.href = loginUrl || '/login';
 };
 
 queryClient.getQueryCache().subscribe(event => {

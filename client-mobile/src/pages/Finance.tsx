@@ -28,7 +28,6 @@ export default function MobileFinance() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [entryType, setEntryType] = useState<'einnahme' | 'ausgabe'>('ausgabe');
   
-  // Form state
   const [newEntry, setNewEntry] = useState({
     category: '',
     amount: '',
@@ -86,7 +85,7 @@ export default function MobileFinance() {
   const handleStatusChange = async (entryId: string, newStatus: string) => {
     try {
       await updateFinanceEntry(entryId, { status: newStatus } as any);
-      toast.success(newStatus === 'paid' ? 'Als bezahlt markiert ✓' : 'Status geändert');
+      toast.success(newStatus === 'paid' ? 'Als bezahlt markiert' : 'Status geändert');
       await refetch();
     } catch (error: any) {
       toast.error('Fehler: ' + error.message);
@@ -111,7 +110,7 @@ export default function MobileFinance() {
         status: entryType === 'ausgabe' ? 'open' : undefined,
       } as any);
 
-      toast.success(entryType === 'einnahme' ? 'Einnahme hinzugefügt ✓' : 'Ausgabe hinzugefügt ✓');
+      toast.success(entryType === 'einnahme' ? 'Einnahme hinzugefügt' : 'Ausgabe hinzugefügt');
       setShowAddDialog(false);
       setNewEntry({
         category: '',
@@ -140,47 +139,47 @@ export default function MobileFinance() {
 
   return (
     <MobileLayout title={t('nav.finance', 'Finanzen')}>
-      {/* Summary Cards */}
+      {/* Summary Cards - Clean design */}
       <div className="grid grid-cols-3 gap-2 mb-4">
         <div className="mobile-card text-center py-3">
           <p className="text-xs text-muted-foreground">{t('finance.income', 'Einnahmen')}</p>
-          <p className="text-lg font-bold text-green-600">
+          <p className="text-lg font-semibold status-success mt-0.5">
             {totalIncome.toFixed(0)}
           </p>
         </div>
         <div className="mobile-card text-center py-3">
           <p className="text-xs text-muted-foreground">{t('finance.expenses', 'Ausgaben')}</p>
-          <p className="text-lg font-bold text-red-600">
+          <p className="text-lg font-semibold status-error mt-0.5">
             {totalExpenses.toFixed(0)}
           </p>
         </div>
         <div className="mobile-card text-center py-3">
           <p className="text-xs text-muted-foreground">{t('finance.balance', 'Saldo')}</p>
-          <p className={`text-lg font-bold ${balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+          <p className={`text-lg font-semibold mt-0.5 ${balance >= 0 ? 'status-success' : 'status-error'}`}>
             {balance.toFixed(0)}
           </p>
         </div>
       </div>
 
-      {/* Quick Add Buttons */}
+      {/* Quick Add Buttons - Clean style */}
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => openAddDialog('einnahme')}
-          className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 active:scale-98 transition-transform"
+          className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 border-l-2 border-l-green-600 active:opacity-80 transition-opacity"
         >
-          <TrendingUp className="w-5 h-5 text-green-600" />
-          <span className="font-medium text-green-700 dark:text-green-400">Einnahme</span>
+          <TrendingUp className="w-5 h-5 status-success" />
+          <span className="font-medium text-sm">Einnahme</span>
         </button>
         <button
           onClick={() => openAddDialog('ausgabe')}
-          className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 active:scale-98 transition-transform"
+          className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 border-l-2 border-l-red-600 active:opacity-80 transition-opacity"
         >
-          <TrendingDown className="w-5 h-5 text-red-600" />
-          <span className="font-medium text-red-700 dark:text-red-400">Ausgabe</span>
+          <TrendingDown className="w-5 h-5 status-error" />
+          <span className="font-medium text-sm">Ausgabe</span>
         </button>
       </div>
 
-      {/* Tab Buttons */}
+      {/* Tab Buttons - Clean pills */}
       <div className="flex gap-2 mb-4 overflow-x-auto hide-scrollbar">
         {[
           { key: 'all', label: t('finance.all', 'Alle') },
@@ -190,7 +189,7 @@ export default function MobileFinance() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key as TabType)}
-            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
               activeTab === tab.key
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground'
@@ -219,18 +218,18 @@ export default function MobileFinance() {
             return (
               <div
                 key={entry.id}
-                className="mobile-card flex items-center justify-between"
+                className={`mobile-card flex items-center justify-between ${
+                  isIncome ? 'border-l-2 border-l-green-600' : 'border-l-2 border-l-red-600'
+                }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    isIncome 
-                      ? 'bg-green-100 dark:bg-green-900/30' 
-                      : 'bg-red-100 dark:bg-red-900/30'
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    isIncome ? 'bg-status-success' : 'bg-status-error'
                   }`}>
                     {isIncome ? (
-                      <TrendingUp className="w-5 h-5 text-green-600" />
+                      <TrendingUp className="w-5 h-5 status-success" />
                     ) : (
-                      <TrendingDown className="w-5 h-5 text-red-600" />
+                      <TrendingDown className="w-5 h-5 status-error" />
                     )}
                   </div>
                   <div>
@@ -239,16 +238,16 @@ export default function MobileFinance() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className={`font-semibold ${isIncome ? 'text-green-600' : 'text-red-600'}`}>
+                  <p className={`font-semibold ${isIncome ? 'status-success' : 'status-error'}`}>
                     {isIncome ? '+' : '-'}{formatAmount(entry.amount)}
                   </p>
                   {!isIncome && (
                     <button
                       onClick={() => handleStatusChange(entry.id, isPaid ? 'open' : 'paid')}
-                      className={`text-xs px-2 py-0.5 rounded-full mt-1 ${
+                      className={`text-xs px-2 py-0.5 rounded mt-1 ${
                         isPaid
-                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                          : 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                          ? 'bg-status-success status-success'
+                          : 'bg-status-warning status-warning'
                       }`}
                     >
                       {isPaid ? t('finance.paid', 'Bezahlt') : t('finance.open', 'Offen')}
@@ -264,14 +263,14 @@ export default function MobileFinance() {
       {/* Add Entry Dialog */}
       {showAddDialog && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-end">
-          <div className="bg-background w-full rounded-t-3xl p-6 safe-bottom animate-in slide-in-from-bottom">
+          <div className="bg-background w-full rounded-t-2xl p-6 safe-bottom animate-in slide-in-from-bottom">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold">
+              <h2 className="text-lg font-semibold">
                 {entryType === 'einnahme' ? 'Neue Einnahme' : 'Neue Ausgabe'}
               </h2>
               <button
                 onClick={() => setShowAddDialog(false)}
-                className="w-10 h-10 rounded-full bg-muted flex items-center justify-center"
+                className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -349,11 +348,10 @@ export default function MobileFinance() {
                 onClick={handleAddEntry}
                 className={`w-full mobile-btn mt-4 ${
                   entryType === 'einnahme' 
-                    ? 'bg-green-600 hover:bg-green-700' 
-                    : 'bg-red-600 hover:bg-red-700'
+                    ? 'bg-green-600 hover:bg-green-700 text-white' 
+                    : 'bg-red-600 hover:bg-red-700 text-white'
                 }`}
               >
-                <Plus className="w-5 h-5 mr-2" />
                 {entryType === 'einnahme' ? 'Einnahme hinzufügen' : 'Ausgabe hinzufügen'}
               </Button>
             </div>
@@ -361,11 +359,11 @@ export default function MobileFinance() {
         </div>
       )}
 
-      {/* FAB - only show when dialog is closed */}
+      {/* FAB */}
       {!showAddDialog && (
         <button 
           onClick={() => openAddDialog('ausgabe')}
-          className="fixed right-4 bottom-20 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center active:scale-95 transition-transform safe-bottom"
+          className="fixed right-4 bottom-20 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center active:opacity-80 transition-opacity safe-bottom"
         >
           <Plus className="w-6 h-6" />
         </button>

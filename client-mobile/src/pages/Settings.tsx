@@ -63,11 +63,11 @@ export default function MobileSettings() {
     <MobileLayout title={t('nav.settings', 'Einstellungen')}>
       {/* Profile Section */}
       <div className="mobile-card mb-4 flex items-center gap-4">
-        <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+        <div className="w-14 h-14 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
           {user?.photoURL ? (
-            <img src={user.photoURL} alt="" className="w-14 h-14 rounded-full object-cover" />
+            <img src={user.photoURL} alt="" className="w-14 h-14 object-cover" />
           ) : (
-            <User className="w-7 h-7 text-primary" />
+            <User className="w-7 h-7 text-muted-foreground" />
           )}
         </div>
         <div className="flex-1 min-w-0">
@@ -81,11 +81,11 @@ export default function MobileSettings() {
         {/* Language */}
         <button
           onClick={() => setShowLanguageDialog(true)}
-          className="mobile-card w-full flex items-center justify-between active:bg-muted/50 transition-colors"
+          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity"
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-              <Globe className="w-5 h-5 text-blue-600" />
+            <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+              <Globe className="w-5 h-5 text-foreground" />
             </div>
             <div className="text-left">
               <p className="font-medium">{t('settings.language', 'Sprache')}</p>
@@ -100,14 +100,14 @@ export default function MobileSettings() {
         {/* Theme */}
         <button
           onClick={() => setShowThemeDialog(true)}
-          className="mobile-card w-full flex items-center justify-between active:bg-muted/50 transition-colors"
+          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity"
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
               {theme === 'dark' ? (
-                <Moon className="w-5 h-5 text-purple-600" />
+                <Moon className="w-5 h-5 text-foreground" />
               ) : (
-                <Sun className="w-5 h-5 text-purple-600" />
+                <Sun className="w-5 h-5 text-foreground" />
               )}
             </div>
             <div className="text-left">
@@ -123,15 +123,15 @@ export default function MobileSettings() {
         {/* Desktop Version */}
         <button
           onClick={handleDesktopSwitch}
-          className="mobile-card w-full flex items-center justify-between active:bg-muted/50 transition-colors"
+          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity"
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center">
-              <Monitor className="w-5 h-5 text-cyan-600" />
+            <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+              <Monitor className="w-5 h-5 text-foreground" />
             </div>
             <div className="text-left">
               <p className="font-medium">Desktop Version</p>
-              <p className="text-xs text-muted-foreground">Zur vollständigen Ansicht wechseln</p>
+              <p className="text-xs text-muted-foreground">Zur vollständigen Ansicht</p>
             </div>
           </div>
           <ChevronRight className="w-5 h-5 text-muted-foreground" />
@@ -139,12 +139,12 @@ export default function MobileSettings() {
 
         {/* Notifications */}
         <button
-          onClick={() => toast.info('Benachrichtigungen werden in einer zukünftigen Version verfügbar sein')}
-          className="mobile-card w-full flex items-center justify-between active:bg-muted/50 transition-colors"
+          onClick={() => toast.info('Kommt in einer zukünftigen Version')}
+          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity"
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
-              <Bell className="w-5 h-5 text-orange-600" />
+            <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+              <Bell className="w-5 h-5 text-foreground" />
             </div>
             <div className="text-left">
               <p className="font-medium">{t('settings.notifications', 'Benachrichtigungen')}</p>
@@ -156,12 +156,12 @@ export default function MobileSettings() {
 
         {/* Privacy */}
         <button
-          onClick={() => toast.info('Datenschutzeinstellungen werden in einer zukünftigen Version verfügbar sein')}
-          className="mobile-card w-full flex items-center justify-between active:bg-muted/50 transition-colors"
+          onClick={() => toast.info('Kommt in einer zukünftigen Version')}
+          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity"
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-green-600" />
+            <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+              <Shield className="w-5 h-5 text-foreground" />
             </div>
             <div className="text-left">
               <p className="font-medium">{t('settings.privacy', 'Datenschutz')}</p>
@@ -172,12 +172,12 @@ export default function MobileSettings() {
 
         {/* Help */}
         <button
-          onClick={() => toast.info('Hilfe wird in einer zukünftigen Version verfügbar sein')}
-          className="mobile-card w-full flex items-center justify-between active:bg-muted/50 transition-colors"
+          onClick={() => toast.info('Kommt in einer zukünftigen Version')}
+          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity"
         >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-teal-100 dark:bg-teal-900/30 flex items-center justify-center">
-              <HelpCircle className="w-5 h-5 text-teal-600" />
+            <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+              <HelpCircle className="w-5 h-5 text-foreground" />
             </div>
             <div className="text-left">
               <p className="font-medium">{t('settings.help', 'Hilfe')}</p>
@@ -190,12 +190,12 @@ export default function MobileSettings() {
       {/* Logout */}
       <button
         onClick={handleLogout}
-        className="mobile-card w-full flex items-center gap-3 mt-6 text-red-600 active:bg-red-50 dark:active:bg-red-900/20 transition-colors"
+        className="mobile-card w-full flex items-center gap-3 mt-6 active:opacity-80 transition-opacity"
       >
-        <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-          <LogOut className="w-5 h-5" />
+        <div className="w-10 h-10 rounded-lg bg-status-error flex items-center justify-center">
+          <LogOut className="w-5 h-5 status-error" />
         </div>
-        <p className="font-medium">{t('auth.logout', 'Abmelden')}</p>
+        <p className="font-medium status-error">{t('auth.logout', 'Abmelden')}</p>
       </button>
 
       {/* Version */}
@@ -207,30 +207,30 @@ export default function MobileSettings() {
       {showLanguageDialog && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-end" onClick={() => setShowLanguageDialog(false)}>
           <div 
-            className="bg-background w-full rounded-t-3xl p-6 safe-bottom animate-in slide-in-from-bottom"
+            className="bg-background w-full rounded-t-2xl p-6 safe-bottom animate-in slide-in-from-bottom"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-xl font-bold mb-4">{t('settings.language', 'Sprache')}</h2>
+            <h2 className="text-lg font-semibold mb-4">{t('settings.language', 'Sprache')}</h2>
             
             <div className="space-y-2">
               <button
                 onClick={() => handleLanguageChange('de')}
                 className={`w-full mobile-card flex items-center justify-between ${
-                  i18n.language === 'de' ? 'border-primary bg-primary/5' : ''
+                  i18n.language === 'de' ? 'border-primary' : ''
                 }`}
               >
-                <span className="font-medium">🇨🇭 Deutsch</span>
-                {i18n.language === 'de' && <Check className="w-5 h-5 text-primary" />}
+                <span className="font-medium">Deutsch</span>
+                {i18n.language === 'de' && <Check className="w-5 h-5" />}
               </button>
               
               <button
                 onClick={() => handleLanguageChange('en')}
                 className={`w-full mobile-card flex items-center justify-between ${
-                  i18n.language === 'en' ? 'border-primary bg-primary/5' : ''
+                  i18n.language === 'en' ? 'border-primary' : ''
                 }`}
               >
-                <span className="font-medium">🇬🇧 English</span>
-                {i18n.language === 'en' && <Check className="w-5 h-5 text-primary" />}
+                <span className="font-medium">English</span>
+                {i18n.language === 'en' && <Check className="w-5 h-5" />}
               </button>
             </div>
 
@@ -248,36 +248,36 @@ export default function MobileSettings() {
       {showThemeDialog && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-end" onClick={() => setShowThemeDialog(false)}>
           <div 
-            className="bg-background w-full rounded-t-3xl p-6 safe-bottom animate-in slide-in-from-bottom"
+            className="bg-background w-full rounded-t-2xl p-6 safe-bottom animate-in slide-in-from-bottom"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-xl font-bold mb-4">{t('settings.theme', 'Design')}</h2>
+            <h2 className="text-lg font-semibold mb-4">{t('settings.theme', 'Design')}</h2>
             
             <div className="space-y-2">
               <button
                 onClick={() => { if (theme === 'dark') handleThemeChange(); else setShowThemeDialog(false); }}
                 className={`w-full mobile-card flex items-center justify-between ${
-                  theme === 'light' ? 'border-primary bg-primary/5' : ''
+                  theme === 'light' ? 'border-primary' : ''
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <Sun className="w-5 h-5 text-orange-500" />
+                  <Sun className="w-5 h-5" />
                   <span className="font-medium">{t('settings.light', 'Hell')}</span>
                 </div>
-                {theme === 'light' && <Check className="w-5 h-5 text-primary" />}
+                {theme === 'light' && <Check className="w-5 h-5" />}
               </button>
               
               <button
                 onClick={() => { if (theme === 'light') handleThemeChange(); else setShowThemeDialog(false); }}
                 className={`w-full mobile-card flex items-center justify-between ${
-                  theme === 'dark' ? 'border-primary bg-primary/5' : ''
+                  theme === 'dark' ? 'border-primary' : ''
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <Moon className="w-5 h-5 text-purple-500" />
+                  <Moon className="w-5 h-5" />
                   <span className="font-medium">{t('settings.dark', 'Dunkel')}</span>
                 </div>
-                {theme === 'dark' && <Check className="w-5 h-5 text-primary" />}
+                {theme === 'dark' && <Check className="w-5 h-5" />}
               </button>
             </div>
 

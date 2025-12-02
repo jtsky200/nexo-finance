@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
-  Receipt,
+  FileText,
   Plus,
   Check,
   Clock,
@@ -9,8 +9,7 @@ import {
   Camera,
   X,
   Upload,
-  ScanLine,
-  Calendar
+  ScanLine
 } from 'lucide-react';
 import MobileLayout from '@/components/MobileLayout';
 import { useReminders, createReminder, updateReminder } from '@/lib/firebaseHooks';
@@ -68,7 +67,7 @@ export default function MobileBills() {
   const handleMarkAsPaid = async (billId: string) => {
     try {
       await updateReminder(billId, { status: 'erledigt' as any });
-      toast.success('Als bezahlt markiert ✓');
+      toast.success('Als bezahlt markiert');
       await refetch();
     } catch (error: any) {
       toast.error('Fehler: ' + error.message);
@@ -101,7 +100,7 @@ export default function MobileBills() {
         description: newBill.iban ? `IBAN: ${newBill.iban}` : '',
       });
       
-      toast.success('Rechnung hinzugefügt ✓');
+      toast.success('Rechnung hinzugefügt');
       setShowAddDialog(false);
       setNewBill({ title: '', amount: '', dueDate: '', iban: '', reference: '' });
       await refetch();
@@ -144,7 +143,6 @@ export default function MobileBills() {
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(video, 0, 0);
-        // Process the image for QR code
         processImage(canvas);
       }
     }
@@ -177,7 +175,6 @@ export default function MobileBills() {
   const processImage = async (canvas: HTMLCanvasElement) => {
     setIsScanning(true);
     try {
-      // Try to detect QR code using BarcodeDetector API
       if ('BarcodeDetector' in window) {
         const barcodeDetector = new (window as any).BarcodeDetector({
           formats: ['qr_code']
@@ -187,7 +184,7 @@ export default function MobileBills() {
         if (barcodes.length > 0) {
           const qrData = barcodes[0].rawValue;
           parseSwissQRCode(qrData);
-          toast.success('QR-Code erkannt! ✓');
+          toast.success('QR-Code erkannt');
           stopCamera();
         } else {
           toast.error('Kein QR-Code gefunden');
@@ -206,7 +203,6 @@ export default function MobileBills() {
   const parseSwissQRCode = (data: string) => {
     try {
       const lines = data.split('\n');
-      // Swiss QR-Bill format parsing
       if (lines.length > 10) {
         const iban = lines[3] || '';
         const amount = lines[18] || '';
@@ -228,40 +224,40 @@ export default function MobileBills() {
 
   return (
     <MobileLayout title={t('nav.bills', 'Rechnungen')}>
-      {/* Summary */}
-      <div className="mobile-card mb-4 bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+      {/* Summary - Clean design */}
+      <div className="mobile-card mb-4 bg-primary text-primary-foreground">
         <div className="flex items-center gap-3 mb-2">
-          <Receipt className="w-6 h-6" />
-          <p className="text-sm opacity-90">{t('bills.openAmount', 'Offene Rechnungen')}</p>
+          <FileText className="w-5 h-5 opacity-70" />
+          <p className="text-sm opacity-70">{t('bills.openAmount', 'Offene Rechnungen')}</p>
         </div>
-        <p className="text-3xl font-bold">CHF {totalOpen.toFixed(2)}</p>
-        <p className="text-sm opacity-75 mt-1">
+        <p className="text-3xl font-semibold">CHF {totalOpen.toFixed(2)}</p>
+        <p className="text-sm opacity-60 mt-1">
           {openBills.length} {t('bills.bills', 'Rechnungen')}
         </p>
       </div>
 
-      {/* Quick Actions */}
+      {/* Quick Actions - Clean buttons */}
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => setShowAddDialog(true)}
-          className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 active:scale-98 transition-transform"
+          className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 active:opacity-80 transition-opacity"
         >
-          <Plus className="w-5 h-5 text-primary" />
-          <span className="font-medium">Manuell</span>
+          <Plus className="w-5 h-5" />
+          <span className="font-medium text-sm">Manuell</span>
         </button>
         <button
           onClick={startCamera}
-          className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 active:scale-98 transition-transform"
+          className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 active:opacity-80 transition-opacity"
         >
-          <Camera className="w-5 h-5 text-primary" />
-          <span className="font-medium">Scannen</span>
+          <Camera className="w-5 h-5" />
+          <span className="font-medium text-sm">Scannen</span>
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 active:scale-98 transition-transform"
+          className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 active:opacity-80 transition-opacity"
         >
-          <Upload className="w-5 h-5 text-primary" />
-          <span className="font-medium">Bild</span>
+          <Upload className="w-5 h-5" />
+          <span className="font-medium text-sm">Bild</span>
         </button>
         <input
           ref={fileInputRef}
@@ -279,8 +275,8 @@ export default function MobileBills() {
         </div>
       ) : openBills.length === 0 ? (
         <div className="mobile-card text-center py-8">
-          <Check className="w-12 h-12 mx-auto text-green-500 mb-2" />
-          <p className="text-muted-foreground">{t('bills.allPaid', 'Alle Rechnungen bezahlt!')}</p>
+          <Check className="w-10 h-10 mx-auto status-success mb-2" />
+          <p className="text-muted-foreground">{t('bills.allPaid', 'Alle Rechnungen bezahlt')}</p>
         </div>
       ) : (
         <div className="space-y-2 mb-4">
@@ -291,35 +287,33 @@ export default function MobileBills() {
               <div
                 key={bill.id}
                 className={`mobile-card flex items-center justify-between ${
-                  overdue ? 'border-red-300 dark:border-red-800' : ''
+                  overdue ? 'border-l-2 border-l-red-500' : ''
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    overdue 
-                      ? 'bg-red-100 dark:bg-red-900/30' 
-                      : 'bg-orange-100 dark:bg-orange-900/30'
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    overdue ? 'bg-status-error' : 'bg-status-warning'
                   }`}>
                     {overdue ? (
-                      <AlertCircle className="w-5 h-5 text-red-600" />
+                      <AlertCircle className="w-5 h-5 status-error" />
                     ) : (
-                      <Clock className="w-5 h-5 text-orange-600" />
+                      <Clock className="w-5 h-5 status-warning" />
                     )}
                   </div>
                   <div>
                     <p className="font-medium">{bill.title}</p>
-                    <p className={`text-xs ${overdue ? 'text-red-600' : 'text-muted-foreground'}`}>
+                    <p className={`text-xs ${overdue ? 'status-error' : 'text-muted-foreground'}`}>
                       {overdue ? 'Überfällig • ' : ''}{formatDate(bill.dueDate)}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <p className="font-semibold text-red-600">
+                  <p className="font-semibold">
                     {formatAmount(bill.amount || 0)}
                   </p>
                   <button
                     onClick={() => handleMarkAsPaid(bill.id)}
-                    className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 active:scale-95 transition-transform"
+                    className="w-10 h-10 rounded-lg bg-status-success flex items-center justify-center status-success active:opacity-80 transition-opacity"
                   >
                     <Check className="w-5 h-5" />
                   </button>
@@ -333,9 +327,9 @@ export default function MobileBills() {
       {/* Paid Bills */}
       {paidBills.length > 0 && (
         <>
-          <h3 className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+          <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
             {t('bills.paid', 'Bezahlt')} ({paidBills.length})
-          </h3>
+          </p>
           <div className="space-y-2 opacity-60">
             {paidBills.slice(0, 5).map((bill) => (
               <div
@@ -343,8 +337,8 @@ export default function MobileBills() {
                 className="mobile-card flex items-center justify-between"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                    <Check className="w-5 h-5 text-green-600" />
+                  <div className="w-10 h-10 rounded-lg bg-status-success flex items-center justify-center">
+                    <Check className="w-5 h-5 status-success" />
                   </div>
                   <p className="font-medium line-through">{bill.title}</p>
                 </div>
@@ -363,12 +357,12 @@ export default function MobileBills() {
       {/* Add Bill Dialog */}
       {showAddDialog && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-end">
-          <div className="bg-background w-full rounded-t-3xl p-6 safe-bottom animate-in slide-in-from-bottom">
+          <div className="bg-background w-full rounded-t-2xl p-6 safe-bottom animate-in slide-in-from-bottom">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold">Neue Rechnung</h2>
+              <h2 className="text-lg font-semibold">Neue Rechnung</h2>
               <button
                 onClick={() => setShowAddDialog(false)}
-                className="w-10 h-10 rounded-full bg-muted flex items-center justify-center"
+                className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -376,7 +370,7 @@ export default function MobileBills() {
 
             <div className="space-y-4">
               <div>
-                <Label className="text-sm text-muted-foreground">Titel / Beschreibung</Label>
+                <Label className="text-sm text-muted-foreground">Titel</Label>
                 <Input
                   value={newBill.title}
                   onChange={(e) => setNewBill({ ...newBill, title: e.target.value })}
@@ -417,21 +411,10 @@ export default function MobileBills() {
                 />
               </div>
 
-              <div>
-                <Label className="text-sm text-muted-foreground">Referenznummer (optional)</Label>
-                <Input
-                  value={newBill.reference}
-                  onChange={(e) => setNewBill({ ...newBill, reference: e.target.value })}
-                  placeholder="Referenz"
-                  className="mobile-input mt-1"
-                />
-              </div>
-
               <Button
                 onClick={handleAddBill}
-                className="w-full mobile-btn mt-4"
+                className="w-full mobile-btn bg-primary text-primary-foreground mt-4"
               >
-                <Plus className="w-5 h-5 mr-2" />
                 Rechnung hinzufügen
               </Button>
             </div>
@@ -442,18 +425,16 @@ export default function MobileBills() {
       {/* Camera View */}
       {showCamera && (
         <div className="fixed inset-0 z-50 bg-black flex flex-col">
-          {/* Camera Header */}
-          <div className="flex items-center justify-between p-4 bg-black/50">
+          <div className="flex items-center justify-between p-4">
             <h2 className="text-white font-medium">QR-Code scannen</h2>
             <button
               onClick={stopCamera}
-              className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center"
+              className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center"
             >
               <X className="w-5 h-5 text-white" />
             </button>
           </div>
 
-          {/* Video Feed */}
           <div className="flex-1 relative">
             <video
               ref={videoRef}
@@ -462,40 +443,22 @@ export default function MobileBills() {
               className="w-full h-full object-cover"
             />
             
-            {/* Scan Frame */}
             <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-64 h-64 border-2 border-white rounded-2xl relative">
-                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-primary rounded-tl-xl" />
-                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-primary rounded-tr-xl" />
-                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-primary rounded-bl-xl" />
-                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-primary rounded-br-xl" />
-                
+              <div className="w-64 h-64 border-2 border-white/50 rounded-lg relative">
                 {isScanning && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                    <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-lg">
+                    <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   </div>
                 )}
               </div>
             </div>
-
-            {/* Scan Line Animation */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-64 h-64 overflow-hidden">
-                <div className="w-full h-1 bg-primary/50 animate-pulse" 
-                  style={{ 
-                    animation: 'scan 2s ease-in-out infinite',
-                  }} 
-                />
-              </div>
-            </div>
           </div>
 
-          {/* Capture Button */}
-          <div className="p-6 bg-black/50 flex justify-center safe-bottom">
+          <div className="p-6 flex justify-center safe-bottom">
             <button
               onClick={capturePhoto}
               disabled={isScanning}
-              className="w-16 h-16 rounded-full bg-white flex items-center justify-center active:scale-95 transition-transform"
+              className="w-16 h-16 rounded-full bg-white flex items-center justify-center active:opacity-80 transition-opacity"
             >
               <ScanLine className="w-8 h-8 text-black" />
             </button>
@@ -503,22 +466,15 @@ export default function MobileBills() {
         </div>
       )}
 
-      {/* FAB - only show when dialogs are closed */}
+      {/* FAB */}
       {!showAddDialog && !showCamera && (
         <button 
           onClick={() => setShowAddDialog(true)}
-          className="fixed right-4 bottom-20 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center active:scale-95 transition-transform safe-bottom"
+          className="fixed right-4 bottom-20 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center active:opacity-80 transition-opacity safe-bottom"
         >
           <Plus className="w-6 h-6" />
         </button>
       )}
-
-      <style>{`
-        @keyframes scan {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(256px); }
-        }
-      `}</style>
     </MobileLayout>
   );
 }

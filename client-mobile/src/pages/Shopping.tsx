@@ -1,60 +1,98 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
-  Plus,
+  ShoppingCart, 
+  Plus, 
   Check,
-  Trash2,
-  ShoppingCart
+  X,
+  Trash2
 } from 'lucide-react';
 import MobileLayout from '@/components/MobileLayout';
 import { useShoppingList, createShoppingItem, markShoppingItemAsBought, deleteShoppingItem } from '@/lib/firebaseHooks';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
+
+const categories = [
+  'Lebensmittel',
+  'Getränke',
+  'Haushalt',
+  'Hygiene',
+  'Tierbedarf',
+  'Sonstiges'
+];
 
 export default function MobileShopping() {
   const { t } = useTranslation();
   const { data: items = [], isLoading, refetch } = useShoppingList();
-  const [newItemName, setNewItemName] = useState('');
-  const [showInput, setShowInput] = useState(false);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [newItem, setNewItem] = useState({
+    name: '',
+    quantity: '1',
+    category: 'Lebensmittel',
+    store: ''
+  });
 
-  const openItems = items.filter(i => !i.bought);
-  const boughtItems = items.filter(i => i.bought);
+  const openItems = useMemo(
+    () => items.filter(i => !i.bought),
+    [items]
+  );
+
+  const boughtItems = useMemo(
+    () => items.filter(i => i.bought),
+    [items]
+  );
 
   const handleAddItem = async () => {
-    if (!newItemName.trim()) return;
-    
+    if (!newItem.name.trim()) {
+      toast.error('Bitte Artikelname eingeben');
+      return;
+    }
+
     try {
       await createShoppingItem({
-        item: newItemName.trim(),
-        quantity: 1,
-        category: 'Sonstiges',
-        bought: false,
+        name: newItem.name.trim(),
+        quantity: parseInt(newItem.quantity) || 1,
+        category: newItem.category,
+        store: newItem.store || undefined,
+        bought: false
       });
-      setNewItemName('');
-      setShowInput(false);
+      
       toast.success('Artikel hinzugefügt');
-      refetch();
+      setShowAddDialog(false);
+      setNewItem({ name: '', quantity: '1', category: 'Lebensmittel', store: '' });
+      await refetch();
     } catch (error: any) {
       toast.error('Fehler: ' + error.message);
     }
   };
 
-  const handleMarkAsBought = async (itemId: string) => {
+  const handleToggleBought = async (itemId: string, currentBought: boolean) => {
     try {
-      await markShoppingItemAsBought(itemId, 0, false);
-      toast.success('Erledigt ✓');
-      refetch();
+      await markShoppingItemAsBought(itemId, !currentBought);
+      await refetch();
     } catch (error: any) {
       toast.error('Fehler: ' + error.message);
     }
   };
 
-  const handleDelete = async (itemId: string) => {
+  const handleDeleteItem = async (itemId: string) => {
     try {
       await deleteShoppingItem(itemId);
-      toast.success('Gelöscht');
-      refetch();
+      await refetch();
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
+  const handleClearBought = async () => {
+    try {
+      for (const item of boughtItems) {
+        await deleteShoppingItem(item.id);
+      }
+      toast.success('Eingekaufte Artikel gelöscht');
+      await refetch();
     } catch (error: any) {
       toast.error('Fehler: ' + error.message);
     }
@@ -62,34 +100,17 @@ export default function MobileShopping() {
 
   return (
     <MobileLayout title={t('nav.shopping', 'Einkaufsliste')}>
-      {/* Stats */}
-      <div className="flex gap-3 mb-4">
-        <div className="mobile-card flex-1 text-center py-3">
-          <p className="text-2xl font-bold text-primary">{openItems.length}</p>
-          <p className="text-xs text-muted-foreground">{t('shopping.open', 'Offen')}</p>
+      {/* Summary - Clean design */}
+      <div className="mobile-card mb-4 bg-primary text-primary-foreground">
+        <div className="flex items-center gap-3 mb-2">
+          <ShoppingCart className="w-5 h-5 opacity-70" />
+          <p className="text-sm opacity-70">{t('shopping.list', 'Einkaufsliste')}</p>
         </div>
-        <div className="mobile-card flex-1 text-center py-3">
-          <p className="text-2xl font-bold text-green-600">{boughtItems.length}</p>
-          <p className="text-xs text-muted-foreground">{t('shopping.bought', 'Gekauft')}</p>
-        </div>
+        <p className="text-3xl font-semibold">{openItems.length}</p>
+        <p className="text-sm opacity-60 mt-1">
+          {t('shopping.itemsOpen', 'Artikel offen')}
+        </p>
       </div>
-
-      {/* Quick Add Input */}
-      {showInput && (
-        <div className="mobile-card mb-4 flex gap-2">
-          <Input
-            value={newItemName}
-            onChange={(e) => setNewItemName(e.target.value)}
-            placeholder="Artikel eingeben..."
-            className="mobile-input flex-1"
-            autoFocus
-            onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
-          />
-          <Button onClick={handleAddItem} className="mobile-btn">
-            <Plus className="w-5 h-5" />
-          </Button>
-        </div>
-      )}
 
       {/* Open Items */}
       {isLoading ? (
@@ -98,7 +119,7 @@ export default function MobileShopping() {
         </div>
       ) : openItems.length === 0 ? (
         <div className="mobile-card text-center py-8">
-          <ShoppingCart className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
+          <Check className="w-10 h-10 mx-auto status-success mb-2" />
           <p className="text-muted-foreground">{t('shopping.empty', 'Liste ist leer')}</p>
         </div>
       ) : (
@@ -106,27 +127,27 @@ export default function MobileShopping() {
           {openItems.map((item) => (
             <div
               key={item.id}
-              className="mobile-card flex items-center justify-between"
+              className="mobile-card flex items-center gap-3"
             >
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => handleMarkAsBought(item.id)}
-                  className="w-8 h-8 rounded-full border-2 border-primary flex items-center justify-center active:scale-95 transition-transform"
-                >
-                  <Check className="w-4 h-4 text-primary opacity-0 hover:opacity-50" />
-                </button>
-                <div>
-                  <p className="font-medium">{item.item}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {item.quantity}x • {item.category}
-                  </p>
-                </div>
+              <button
+                onClick={() => handleToggleBought(item.id, item.bought)}
+                className="w-6 h-6 rounded border-2 border-border flex items-center justify-center shrink-0"
+              >
+                {/* Empty checkbox */}
+              </button>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium truncate">{item.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {item.quantity > 1 && `${item.quantity}x • `}
+                  {item.category}
+                  {item.store && ` • ${item.store}`}
+                </p>
               </div>
               <button
-                onClick={() => handleDelete(item.id)}
-                className="w-10 h-10 rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive active:scale-95 transition-all"
+                onClick={() => handleDeleteItem(item.id)}
+                className="w-10 h-10 rounded-lg flex items-center justify-center text-muted-foreground active:opacity-80"
               >
-                <Trash2 className="w-5 h-5" />
+                <Trash2 className="w-4 h-4" />
               </button>
             </div>
           ))}
@@ -136,41 +157,128 @@ export default function MobileShopping() {
       {/* Bought Items */}
       {boughtItems.length > 0 && (
         <>
-          <h3 className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
-            {t('shopping.bought', 'Eingekauft')} ({boughtItems.length})
-          </h3>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              {t('shopping.bought', 'Eingekauft')} ({boughtItems.length})
+            </p>
+            <button
+              onClick={handleClearBought}
+              className="text-xs status-error active:opacity-80"
+            >
+              {t('shopping.clearBought', 'Löschen')}
+            </button>
+          </div>
           <div className="space-y-2 opacity-60">
             {boughtItems.map((item) => (
               <div
                 key={item.id}
-                className="mobile-card flex items-center justify-between"
+                className="mobile-card flex items-center gap-3"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                    <Check className="w-4 h-4 text-green-600" />
-                  </div>
-                  <p className="font-medium line-through">{item.item}</p>
-                </div>
                 <button
-                  onClick={() => handleDelete(item.id)}
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive"
+                  onClick={() => handleToggleBought(item.id, item.bought)}
+                  className="w-6 h-6 rounded bg-status-success flex items-center justify-center shrink-0"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Check className="w-4 h-4 status-success" />
                 </button>
+                <p className="font-medium line-through flex-1 truncate">{item.name}</p>
               </div>
             ))}
           </div>
         </>
       )}
 
+      {/* Add Item Dialog */}
+      {showAddDialog && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-end">
+          <div className="bg-background w-full rounded-t-2xl p-6 safe-bottom animate-in slide-in-from-bottom">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold">Artikel hinzufügen</h2>
+              <button
+                onClick={() => setShowAddDialog(false)}
+                className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <Input
+                  value={newItem.name}
+                  onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
+                  placeholder="Artikelname"
+                  className="mobile-input"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <div className="w-20">
+                  <Input
+                    type="number"
+                    value={newItem.quantity}
+                    onChange={(e) => setNewItem({ ...newItem, quantity: e.target.value })}
+                    placeholder="1"
+                    className="mobile-input text-center"
+                    min="1"
+                  />
+                </div>
+                <div className="flex-1">
+                  <Select
+                    value={newItem.category}
+                    onValueChange={(value) => setNewItem({ ...newItem, category: value })}
+                  >
+                    <SelectTrigger className="mobile-input">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((cat) => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <Select
+                  value={newItem.store || 'none'}
+                  onValueChange={(value) => setNewItem({ ...newItem, store: value === 'none' ? '' : value })}
+                >
+                  <SelectTrigger className="mobile-input">
+                    <SelectValue placeholder="Laden (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Kein Laden</SelectItem>
+                    <SelectItem value="Migros">Migros</SelectItem>
+                    <SelectItem value="Coop">Coop</SelectItem>
+                    <SelectItem value="Aldi">Aldi</SelectItem>
+                    <SelectItem value="Lidl">Lidl</SelectItem>
+                    <SelectItem value="Denner">Denner</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button
+                onClick={handleAddItem}
+                className="w-full mobile-btn bg-primary text-primary-foreground mt-4"
+              >
+                Hinzufügen
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* FAB */}
-      <button 
-        onClick={() => setShowInput(!showInput)}
-        className="fixed right-4 bottom-20 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center active:scale-95 transition-transform safe-bottom"
-      >
-        <Plus className={`w-6 h-6 transition-transform ${showInput ? 'rotate-45' : ''}`} />
-      </button>
+      {!showAddDialog && (
+        <button 
+          onClick={() => setShowAddDialog(true)}
+          className="fixed right-4 bottom-20 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center active:opacity-80 transition-opacity safe-bottom"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
+      )}
     </MobileLayout>
   );
 }
-

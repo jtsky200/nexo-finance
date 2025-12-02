@@ -137,6 +137,7 @@ export default function Shopping() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'category' | 'price' | 'store'>('category');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showAllQuickAdd, setShowAllQuickAdd] = useState(false);
 
   const categories = ['Lebensmittel', 'Haushalt', 'Hygiene', 'Elektronik', 'Kleidung', 'Sonstiges'];
 
@@ -576,29 +577,40 @@ export default function Shopping() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-medium">Schnell hinzufügen</CardTitle>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => setShowQuickAddManager(true)}
-              >
-                <Edit2 className="w-3 h-3 mr-1" />
-                Bearbeiten
-              </Button>
+              <div className="flex items-center gap-2">
+                {quickAddTemplates.length > 8 && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => setShowAllQuickAdd(!showAllQuickAdd)}
+                  >
+                    {showAllQuickAdd ? 'Weniger' : `Alle ${quickAddTemplates.length} anzeigen`}
+                  </Button>
+                )}
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setShowQuickAddManager(true)}
+                >
+                  <Edit2 className="w-3 h-3 mr-1" />
+                  Bearbeiten
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {quickAddTemplates.slice(0, 8).map((template) => {
+              {(showAllQuickAdd ? quickAddTemplates : quickAddTemplates.slice(0, 8)).map((template) => {
                 const config = categoryConfig[template.category] || categoryConfig['Sonstiges'];
                 return (
                   <Button
                     key={template.id}
                     variant="outline"
                     size="sm"
-                    className="h-auto py-2 px-3 gap-2"
+                    className="h-auto py-2 px-3 gap-2 hover:bg-primary/10 hover:border-primary/50 transition-colors"
                     onClick={() => handleQuickAdd(template)}
                   >
-                    <span className={`w-2 h-2 rounded-full ${config.bg}`} />
+                    <span className={`w-2 h-2 rounded-full ${config.color.replace('text-', 'bg-')}`} />
                     {template.name}
                     <span className="text-muted-foreground text-xs">
                       CHF {template.price.toFixed(2)}
@@ -606,18 +618,17 @@ export default function Shopping() {
                   </Button>
                 );
               })}
-              {quickAddTemplates.length > 8 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto py-2 px-3"
-                  onClick={() => setShowQuickAddManager(true)}
-                >
-                  <MoreHorizontal className="w-4 h-4" />
-                  +{quickAddTemplates.length - 8}
-                </Button>
-              )}
             </div>
+            {!showAllQuickAdd && quickAddTemplates.length > 8 && (
+              <Button
+                variant="link"
+                size="sm"
+                className="mt-2 p-0 h-auto text-xs"
+                onClick={() => setShowAllQuickAdd(true)}
+              >
+                + {quickAddTemplates.length - 8} weitere Artikel anzeigen
+              </Button>
+            )}
           </CardContent>
         </Card>
 

@@ -954,6 +954,7 @@ export default function Finance() {
           person={selectedPerson}
           open={showPersonInvoicesDialog}
           onOpenChange={setShowPersonInvoicesDialog}
+          onDataChanged={refetchPeople}
         />
       )}
 

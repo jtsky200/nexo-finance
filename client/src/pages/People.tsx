@@ -493,6 +493,7 @@ export default function People() {
           person={selectedPerson}
           open={showInvoicesDialog}
           onOpenChange={setShowInvoicesDialog}
+          onDataChanged={refetch}
         />
       )}
 

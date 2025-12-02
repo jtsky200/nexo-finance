@@ -739,9 +739,9 @@ export default function Finance() {
                         <p className="text-xs sm:text-sm text-muted-foreground truncate">{person.email}</p>
                       )}
                       <div>
-                        <p className="text-xs text-muted-foreground">{t('finance.openAmount')}</p>
+                        <p className="text-xs text-muted-foreground">{t('finance.openInvoices')}</p>
                         <p className="text-lg sm:text-xl font-bold text-red-600">
-                          CHF {person.totalOwed?.toFixed(2) || '0.00'}
+                          CHF {((person.totalOwed || 0) / 100).toFixed(2)}
                         </p>
                       </div>
                       <div className="flex gap-2">

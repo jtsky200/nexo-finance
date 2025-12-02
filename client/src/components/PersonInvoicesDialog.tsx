@@ -4,10 +4,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, Camera, QrCode, Copy, Building2, CreditCard } from 'lucide-react';
 import { 
   usePersonInvoices, 
   createInvoice, 
@@ -16,6 +17,7 @@ import {
   deleteInvoice 
 } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
+import InvoiceScanner, { ScannedInvoiceData } from './InvoiceScanner';
 
 interface PersonInvoicesDialogProps {
   person: any;
@@ -26,12 +28,18 @@ interface PersonInvoicesDialogProps {
 export default function PersonInvoicesDialog({ person, open, onOpenChange }: PersonInvoicesDialogProps) {
   const { t } = useTranslation();
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<any>(null);
   const [newInvoice, setNewInvoice] = useState({
     amount: '',
     description: '',
     date: new Date().toISOString().split('T')[0],
     status: 'open',
+    iban: '',
+    reference: '',
+    creditorName: '',
+    creditorAddress: '',
+    imageUrl: '',
   });
 
   const { data: invoices = [], isLoading, refetch } = usePersonInvoices(person?.id);
@@ -82,6 +90,11 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange }: Per
         description: '',
         date: new Date().toISOString().split('T')[0],
         status: 'open',
+        iban: '',
+        reference: '',
+        creditorName: '',
+        creditorAddress: '',
+        imageUrl: '',
       });
       setShowAddDialog(false);
       refetch();
@@ -161,17 +174,45 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange }: Per
     .filter(inv => inv.status === 'open' || inv.status === 'postponed')
     .reduce((sum, inv) => sum + inv.amount, 0);
 
+  // Handle scanned invoice data
+  const handleScannedData = (data: ScannedInvoiceData) => {
+    setNewInvoice(prev => ({
+      ...prev,
+      amount: data.amount?.toString() || prev.amount,
+      description: data.creditorName || data.message || prev.description,
+      iban: data.iban || prev.iban,
+      reference: data.reference || prev.reference,
+      creditorName: data.creditorName || prev.creditorName,
+      creditorAddress: data.creditorAddress || prev.creditorAddress,
+      imageUrl: data.imageUrl || prev.imageUrl,
+    }));
+    setShowAddDialog(true);
+    toast.success(t('invoice.dataImported', 'Daten wurden übernommen'));
+  };
+
+  // Copy to clipboard
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} kopiert!`);
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
+            <DialogTitle className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <span>{person?.name} - {t('finance.invoices')}</span>
-              <Button size="sm" onClick={() => setShowAddDialog(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                {t('finance.addInvoice')}
-              </Button>
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" onClick={() => setShowScanner(true)}>
+                  <Camera className="w-4 h-4 mr-2" />
+                  {t('invoice.scan', 'Scannen')}
+                </Button>
+                <Button size="sm" onClick={() => setShowAddDialog(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  {t('finance.addInvoice')}
+                </Button>
+              </div>
             </DialogTitle>
           </DialogHeader>
 
@@ -265,37 +306,114 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange }: Per
 
       {/* Add Invoice Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('finance.addInvoice')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label>{t('finance.invoiceDescription')} *</Label>
-              <Input
-                value={newInvoice.description}
-                onChange={(e) => setNewInvoice({ ...newInvoice, description: e.target.value })}
-                placeholder={t('finance.description')}
-              />
+            {/* Image Preview */}
+            {newInvoice.imageUrl && (
+              <div className="relative">
+                <img 
+                  src={newInvoice.imageUrl} 
+                  alt="Invoice" 
+                  className="w-full h-32 object-cover rounded-lg border"
+                />
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="absolute top-2 right-2 bg-background/80"
+                  onClick={() => setNewInvoice({ ...newInvoice, imageUrl: '' })}
+                >
+                  ×
+                </Button>
+              </div>
+            )}
+
+            {/* Main Fields */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <Label>{t('finance.invoiceDescription')} *</Label>
+                <Input
+                  value={newInvoice.description}
+                  onChange={(e) => setNewInvoice({ ...newInvoice, description: e.target.value })}
+                  placeholder={t('finance.description')}
+                />
+              </div>
+              <div>
+                <Label>{t('finance.invoiceAmount')} (CHF) *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={newInvoice.amount}
+                  onChange={(e) => setNewInvoice({ ...newInvoice, amount: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <Label>{t('finance.invoiceDate')}</Label>
+                <Input
+                  type="date"
+                  value={newInvoice.date}
+                  onChange={(e) => setNewInvoice({ ...newInvoice, date: e.target.value })}
+                />
+              </div>
             </div>
-            <div>
-              <Label>{t('finance.invoiceAmount')} (CHF) *</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={newInvoice.amount}
-                onChange={(e) => setNewInvoice({ ...newInvoice, amount: e.target.value })}
-                placeholder="0.00"
-              />
-            </div>
-            <div>
-              <Label>{t('finance.invoiceDate')}</Label>
-              <Input
-                type="date"
-                value={newInvoice.date}
-                onChange={(e) => setNewInvoice({ ...newInvoice, date: e.target.value })}
-              />
-            </div>
+
+            {/* Payment Details (from QR scan) */}
+            {(newInvoice.iban || newInvoice.reference || newInvoice.creditorName) && (
+              <div className="space-y-3 p-4 bg-muted/50 rounded-lg border">
+                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <QrCode className="w-4 h-4" />
+                  {t('invoice.paymentDetails', 'Zahlungsdetails')}
+                </div>
+                
+                {newInvoice.creditorName && (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground">{t('invoice.creditor', 'Empfänger')}</p>
+                      <p className="text-sm font-medium">{newInvoice.creditorName}</p>
+                      {newInvoice.creditorAddress && (
+                        <p className="text-xs text-muted-foreground">{newInvoice.creditorAddress}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {newInvoice.iban && (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground">IBAN</p>
+                      <p className="text-sm font-mono">{newInvoice.iban}</p>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => copyToClipboard(newInvoice.iban, 'IBAN')}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+
+                {newInvoice.reference && (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-muted-foreground">{t('invoice.reference', 'Referenz')}</p>
+                      <p className="text-sm font-mono">{newInvoice.reference}</p>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => copyToClipboard(newInvoice.reference, 'Referenz')}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <Label>{t('finance.invoiceStatus')}</Label>
               <Select
@@ -312,6 +430,19 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange }: Per
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Scan Button */}
+            <Button 
+              variant="outline" 
+              className="w-full" 
+              onClick={() => {
+                setShowAddDialog(false);
+                setShowScanner(true);
+              }}
+            >
+              <Camera className="w-4 h-4 mr-2" />
+              {t('invoice.scanInvoice', 'Rechnung scannen')}
+            </Button>
           </div>
           <DialogFooter>
             <Button onClick={handleAddInvoice} className="w-full">
@@ -320,6 +451,13 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange }: Per
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Invoice Scanner */}
+      <InvoiceScanner
+        open={showScanner}
+        onOpenChange={setShowScanner}
+        onInvoiceScanned={handleScannedData}
+      />
 
       {/* Edit Invoice Dialog */}
       {editingInvoice && (

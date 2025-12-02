@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   collection, 
   query, 
@@ -109,9 +109,8 @@ export function useFinanceEntries(filters?: { startDate?: Date; endDate?: Date; 
   const [entries, setEntries] = useState<FinanceEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
 
-  const fetchEntries = async () => {
+  const fetchEntries = useCallback(async () => {
     try {
       setIsLoading(true);
       const getEntriesFunc = httpsCallable(functions, 'getFinanceEntries');
@@ -132,13 +131,16 @@ export function useFinanceEntries(filters?: { startDate?: Date; endDate?: Date; 
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filters?.startDate, filters?.endDate, filters?.type]);
 
   useEffect(() => {
     fetchEntries();
-  }, [filters?.startDate, filters?.endDate, filters?.type, refreshKey]);
+  }, [fetchEntries]);
 
-  const refetch = () => setRefreshKey(k => k + 1);
+  // Direct refetch function that immediately fetches new data
+  const refetch = useCallback(async () => {
+    await fetchEntries();
+  }, [fetchEntries]);
 
   return { data: entries, isLoading, error, refetch };
 }

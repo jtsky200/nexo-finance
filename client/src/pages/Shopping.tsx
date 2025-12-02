@@ -555,9 +555,11 @@ export default function Shopping() {
               </CardHeader>
               <CardContent className="py-0 pb-3">
                 {boughtItems.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Noch nichts eingekauft
-                  </p>
+                  <div className="text-center py-8">
+                    <p className="text-sm text-muted-foreground">
+                      Noch nichts eingekauft
+                    </p>
+                  </div>
                 ) : (
                   <div className="space-y-1 max-h-[300px] overflow-y-auto">
                     {boughtItems.map((item) => (

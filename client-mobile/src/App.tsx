@@ -13,7 +13,7 @@ import Login from '@/pages/Login';
 
 function App() {
   return (
-    <ThemeProvider>
+    <ThemeProvider defaultTheme="light" switchable={true}>
       <AuthProvider>
         <Switch>
           <Route path="/login" component={Login} />

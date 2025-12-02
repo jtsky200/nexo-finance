@@ -6,7 +6,6 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
   GoogleAuthProvider,
-  signInWithPopup,
   signInWithRedirect,
   getRedirectResult
 } from 'firebase/auth';
@@ -120,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = async () => {
     try {
       setError(null);
-      console.log('Attempting Google sign-in...');
+      console.log('Attempting Google sign-in with redirect...');
       
       const provider = new GoogleAuthProvider();
       provider.addScope('email');
@@ -129,21 +128,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         prompt: 'select_account'
       });
       
-      // Try popup first, fall back to redirect on mobile
-      try {
-        const result = await signInWithPopup(auth, provider);
-        console.log('Google Sign-In (popup) successful:', result.user.email);
-      } catch (popupError: any) {
-        console.log('Popup failed, trying redirect...', popupError.code);
-        // If popup fails (common on mobile), use redirect
-        if (popupError.code === 'auth/popup-blocked' || 
-            popupError.code === 'auth/popup-closed-by-user' ||
-            popupError.code === 'auth/cancelled-popup-request') {
-          await signInWithRedirect(auth, provider);
-        } else {
-          throw popupError;
-        }
-      }
+      // Use redirect directly for mobile - more reliable
+      await signInWithRedirect(auth, provider);
     } catch (err: any) {
       console.error('Google Sign-In Error:', err);
       console.error('Error code:', err.code);
@@ -152,17 +138,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let errorMessage = 'Ein Fehler ist aufgetreten';
       
       switch (err.code) {
-        case 'auth/popup-blocked':
-          errorMessage = 'Popup wurde blockiert. Versuche Redirect...';
-          break;
-        case 'auth/popup-closed-by-user':
-          errorMessage = 'Anmeldung abgebrochen.';
-          break;
         case 'auth/unauthorized-domain':
           errorMessage = 'Diese Domain ist nicht autorisiert. Bitte kontaktieren Sie den Administrator.';
-          break;
-        case 'auth/cancelled-popup-request':
-          errorMessage = 'Nur ein Popup kann gleichzeitig geöffnet sein.';
           break;
         case 'auth/operation-not-allowed':
           errorMessage = 'Google Sign-In ist nicht aktiviert.';

@@ -101,7 +101,7 @@ export default function MobileDashboard() {
         {t('dashboard.quickActions', 'Schnellzugriff')}
       </p>
       
-      <div className="space-y-2">
+      <div className="space-y-3">
         <Link href="/finance">
           <div className="mobile-card flex items-center justify-between active:opacity-80 transition-opacity">
             <div className="flex items-center gap-3">

@@ -1,14 +1,18 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Bell, Plus, TrendingUp, TrendingDown, FileText } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { 
+  Bell, Plus, TrendingUp, TrendingDown, FileText, Calendar, 
+  DollarSign, Clock, AlertTriangle, CheckCircle2, Receipt,
+  CalendarClock, CheckSquare
+} from 'lucide-react';
 import { useReminders, useFinanceEntries, getTaxProfileByYear } from '@/lib/firebaseHooks';
 import AddReminderDialog from '@/components/AddReminderDialog';
 import AddFinanceEntryDialog from '@/components/AddFinanceEntryDialog';
 import { useLocation } from 'wouter';
-import { useEffect } from 'react';
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -17,18 +21,35 @@ export default function Dashboard() {
   const [financeDialogOpen, setFinanceDialogOpen] = useState(false);
   const [taxProfile, setTaxProfile] = useState<any>(null);
 
-  // Fetch upcoming reminders - fetch all open reminders and filter client-side
+  // Fetch all open reminders
   const now = useMemo(() => new Date(), []);
   const { data: allReminders = [], isLoading: remindersLoading, refetch: refetchReminders } = useReminders({
     status: 'offen',
   });
   
-  // Filter for upcoming reminders (due date >= now)
-  const reminders = useMemo(() => {
-    return allReminders.filter(r => {
+  // Separate appointments (termine/aufgaben) and bills (zahlungen)
+  const { appointments, bills, overdueCount } = useMemo(() => {
+    const upcoming = allReminders.filter(r => {
       const dueDate = new Date(r.dueDate);
-      return dueDate >= now;
+      return dueDate >= now || r.status === 'offen';
     });
+    
+    const appointments = upcoming
+      .filter(r => r.type === 'termin' || r.type === 'aufgabe')
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+      .slice(0, 3);
+    
+    const bills = upcoming
+      .filter(r => r.type === 'zahlung')
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+      .slice(0, 3);
+    
+    const overdueCount = allReminders.filter(r => {
+      const dueDate = new Date(r.dueDate);
+      return dueDate < now && r.status === 'offen';
+    }).length;
+    
+    return { appointments, bills, overdueCount };
   }, [allReminders, now]);
 
   // Fetch current month finance data
@@ -74,10 +95,8 @@ export default function Dashboard() {
 
   const balance = totalIncome - totalExpenses;
 
-  // Get next 3 upcoming reminders
-  const upcomingReminders = reminders
-    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-    .slice(0, 3);
+  // Calculate total pending bills
+  const totalPendingBills = bills.reduce((sum, b) => sum + (b.amount || 0), 0) / 100;
 
   const formatDate = (date: Date | any) => {
     if (!date) return 'N/A';
@@ -100,57 +119,167 @@ export default function Dashboard() {
     return `${currency} ${amount.toFixed(2)}`;
   };
 
+  const getDaysUntilDue = (dueDate: Date) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(dueDate);
+    due.setHours(0, 0, 0, 0);
+    const diffTime = due.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'termin':
+        return <Calendar className="w-4 h-4" />;
+      case 'aufgabe':
+        return <CheckSquare className="w-4 h-4" />;
+      case 'zahlung':
+        return <Receipt className="w-4 h-4" />;
+      default:
+        return <Bell className="w-4 h-4" />;
+    }
+  };
+
   return (
     <Layout title={t('dashboard.title')}>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Upcoming Reminders Widget */}
-        <Card className="col-span-1 md:col-span-2 lg:col-span-2">
-          <CardHeader>
+        
+        {/* Upcoming Appointments Widget */}
+        <Card className="col-span-1">
+          <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Bell className="w-5 h-5 text-primary" />
-                <CardTitle>{t('dashboard.upcomingReminders')}</CardTitle>
+                <Calendar className="w-5 h-5 text-blue-500" />
+                <CardTitle className="text-base">{t('dashboard.appointments', 'Termine & Aufgaben')}</CardTitle>
               </div>
-              <Button size="sm" variant="outline" onClick={() => setReminderDialogOpen(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                {t('dashboard.addReminder')}
-              </Button>
             </div>
           </CardHeader>
           <CardContent>
             {remindersLoading ? (
-              <div className="text-sm text-muted-foreground text-center py-8">
+              <div className="text-sm text-muted-foreground text-center py-6">
                 {t('common.loading')}
               </div>
-            ) : upcomingReminders.length === 0 ? (
-              <div className="text-sm text-muted-foreground text-center py-8">
-                {t('dashboard.noReminders')}
+            ) : appointments.length === 0 ? (
+              <div className="text-sm text-muted-foreground text-center py-6">
+                {t('dashboard.noAppointments', 'Keine anstehenden Termine')}
               </div>
             ) : (
-              <div className="space-y-3">
-                {upcomingReminders.map((reminder) => (
-                  <div
-                    key={reminder.id}
-                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors cursor-pointer"
-                    onClick={() => setLocation('/reminders')}
-                  >
-                    <div className="flex-1">
-                      <p className="font-medium text-foreground">{reminder.title}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatDate(reminder.dueDate)}
-                      </p>
-                    </div>
-                    {reminder.amount && (
-                      <div className="text-right">
-                        <p className="font-semibold text-foreground">
-                          {formatAmount(reminder.amount / 100, reminder.currency || 'CHF')}
+              <div className="space-y-2">
+                {appointments.map((item) => {
+                  const daysUntil = getDaysUntilDue(item.dueDate);
+                  const isOverdue = daysUntil < 0;
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer ${isOverdue ? 'bg-red-50' : ''}`}
+                      onClick={() => setLocation('/reminders')}
+                    >
+                      <div className={`p-1.5 rounded ${item.type === 'termin' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
+                        {getTypeIcon(item.type)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{item.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(item.dueDate)}
                         </p>
                       </div>
-                    )}
-                  </div>
-                ))}
+                      {isOverdue && (
+                        <Badge variant="destructive" className="text-xs">
+                          <AlertTriangle className="w-3 h-3 mr-1" />
+                          {Math.abs(daysUntil)}d
+                        </Badge>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="w-full mt-3 text-muted-foreground"
+              onClick={() => setLocation('/reminders')}
+            >
+              {t('dashboard.viewAll', 'Alle anzeigen')}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Pending Bills Widget */}
+        <Card className="col-span-1">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Receipt className="w-5 h-5 text-green-500" />
+                <CardTitle className="text-base">{t('dashboard.pendingBills', 'Offene Rechnungen')}</CardTitle>
+              </div>
+              {overdueCount > 0 && (
+                <Badge variant="destructive" className="text-xs">
+                  {overdueCount} überfällig
+                </Badge>
+              )}
+            </div>
+            {totalPendingBills > 0 && (
+              <p className="text-lg font-bold text-green-600 mt-1">
+                {formatAmount(totalPendingBills)}
+              </p>
+            )}
+          </CardHeader>
+          <CardContent>
+            {remindersLoading ? (
+              <div className="text-sm text-muted-foreground text-center py-6">
+                {t('common.loading')}
+              </div>
+            ) : bills.length === 0 ? (
+              <div className="text-sm text-muted-foreground text-center py-6">
+                {t('dashboard.noBills', 'Keine offenen Rechnungen')}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {bills.map((bill) => {
+                  const daysUntil = getDaysUntilDue(bill.dueDate);
+                  const isOverdue = daysUntil < 0;
+                  const isDueSoon = daysUntil >= 0 && daysUntil <= 7;
+                  return (
+                    <div
+                      key={bill.id}
+                      className={`flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer ${isOverdue ? 'bg-red-50' : isDueSoon ? 'bg-orange-50' : ''}`}
+                      onClick={() => setLocation('/bills')}
+                    >
+                      <div className="p-1.5 rounded bg-green-100 text-green-600">
+                        <Receipt className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{bill.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {isOverdue 
+                            ? `${Math.abs(daysUntil)} Tage überfällig` 
+                            : daysUntil === 0 
+                              ? 'Heute fällig'
+                              : `Fällig in ${daysUntil} Tagen`
+                          }
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-sm">
+                          {formatAmount((bill.amount || 0) / 100, bill.currency || 'CHF')}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="w-full mt-3 text-muted-foreground"
+              onClick={() => setLocation('/bills')}
+            >
+              {t('dashboard.viewAll', 'Alle anzeigen')}
+            </Button>
           </CardContent>
         </Card>
 

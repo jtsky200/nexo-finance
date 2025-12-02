@@ -641,8 +641,9 @@ export default function Shopping() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex-1 min-w-0">
+            {/* Row 1: Artikel + Menge */}
+            <div className="flex gap-3 mb-3">
+              <div className="flex-1">
                 <Label className="text-xs text-muted-foreground">Artikel</Label>
                 <Input
                   value={newItem.item}
@@ -651,7 +652,7 @@ export default function Shopping() {
                   onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
                 />
               </div>
-              <div className="w-20 shrink-0">
+              <div className="w-20">
                 <Label className="text-xs text-muted-foreground">Menge</Label>
                 <Input
                   type="number"
@@ -660,7 +661,11 @@ export default function Shopping() {
                   min={1}
                 />
               </div>
-              <div className="w-32 shrink-0">
+            </div>
+            
+            {/* Row 2: Kategorie + Laden + Preis + Button */}
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="w-[140px]">
                 <Label className="text-xs text-muted-foreground">Kategorie</Label>
                 <Select value={newItem.category} onValueChange={(value) => setNewItem({ ...newItem, category: value })}>
                   <SelectTrigger>
@@ -682,7 +687,7 @@ export default function Shopping() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="w-32 shrink-0">
+              <div className="w-[120px]">
                 <Label className="text-xs text-muted-foreground">Laden</Label>
                 <Select value={newItem.store} onValueChange={(value) => setNewItem({ ...newItem, store: value })}>
                   <SelectTrigger>
@@ -701,8 +706,8 @@ export default function Shopping() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="w-24 shrink-0">
-                <Label className="text-xs text-muted-foreground">Preis</Label>
+              <div className="w-[100px]">
+                <Label className="text-xs text-muted-foreground">Preis (CHF)</Label>
                 <Input
                   type="number"
                   value={newItem.estimatedPrice || ''}
@@ -712,11 +717,10 @@ export default function Shopping() {
                   placeholder="0.00"
                 />
               </div>
-              <div className="shrink-0 self-end">
-                <Button onClick={handleAddItem} size="icon">
-                  <Plus className="w-4 h-4" />
-                </Button>
-              </div>
+              <Button onClick={handleAddItem} className="h-10">
+                <Plus className="w-4 h-4 mr-1" />
+                Hinzufügen
+              </Button>
             </div>
           </CardContent>
         </Card>

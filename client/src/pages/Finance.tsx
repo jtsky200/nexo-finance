@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, TrendingUp, TrendingDown, Users, ShoppingCart, Trash2, Eye, Filter, X, Download, BarChart3 } from 'lucide-react';
+import { Plus, ArrowUp, ArrowDown, Users, ShoppingCart, Trash2, Eye, Filter, X, Download, BarChart3 } from 'lucide-react';
 import { useFinanceEntries, usePeople, usePersonDebts, createPerson, deletePerson, updateFinanceEntry } from '@/lib/firebaseHooks';
 import AddFinanceEntryDialog from '@/components/AddFinanceEntryDialog';
 import ShoppingListModal from '@/components/ShoppingListModal';
@@ -382,9 +382,9 @@ export default function Finance() {
               <div className="flex items-start gap-3 flex-1">
                 <div className={`mt-1 ${isIncome ? 'text-green-500' : 'text-red-500'}`}>
                   {isIncome ? (
-                    <TrendingUp className="w-4 h-4" />
+                    <ArrowUp className="w-4 h-4" />
                   ) : (
-                    <TrendingDown className="w-4 h-4" />
+                    <ArrowDown className="w-4 h-4" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">

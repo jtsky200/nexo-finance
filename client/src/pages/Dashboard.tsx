@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Bell, Plus, TrendingUp, TrendingDown, FileText, Calendar, 
+  Bell, Plus, ArrowUp, ArrowDown, FileText, Calendar, 
   Banknote, Clock, AlertTriangle, CheckCircle2, ClipboardList,
   CalendarClock, CheckSquare
 } from 'lucide-react';
@@ -332,7 +332,7 @@ export default function Dashboard() {
                   {/* Total Income */}
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <TrendingUp className="w-4 h-4 text-green-500" />
+                      <ArrowUp className="w-4 h-4 text-green-500" />
                       <span>{t('finance.totalIncome')}</span>
                     </div>
                     <p className="text-2xl font-bold text-foreground">
@@ -343,7 +343,7 @@ export default function Dashboard() {
                   {/* Total Expenses */}
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <TrendingDown className="w-4 h-4 text-red-500" />
+                      <ArrowDown className="w-4 h-4 text-red-500" />
                       <span>{t('finance.totalExpenses')}</span>
                     </div>
                     <p className="text-2xl font-bold text-foreground">

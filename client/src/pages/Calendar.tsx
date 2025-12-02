@@ -72,9 +72,11 @@ export default function Calendar() {
       setIsLoading(true);
       const getEventsFunc = httpsCallable(functions, 'getCalendarEvents');
       
-      // Get events for a wider range
-      const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 2, 1);
-      const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 3, 0);
+      // Get events for a much wider range (6 months before and after)
+      const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 6, 1);
+      const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 6, 0);
+      
+      console.log('Fetching events from', startDate.toISOString(), 'to', endDate.toISOString());
       
       const result = await getEventsFunc({ 
         startDate: startDate.toISOString(),
@@ -82,9 +84,11 @@ export default function Calendar() {
       });
       
       const data = result.data as { events: CalendarEvent[] };
+      console.log('Received events:', data.events?.length || 0);
       setEvents(data.events || []);
     } catch (error) {
       console.error('Error fetching calendar events:', error);
+      toast.error('Fehler beim Laden der Events');
     } finally {
       setIsLoading(false);
     }

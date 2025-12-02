@@ -982,31 +982,60 @@ export const getCalendarEvents = onCall(async (request) => {
     }
   }
 
-  // Get regular reminders
+  // Get regular reminders (Termine & Aufgaben)
   const remindersSnapshot = await db.collection('reminders').where('userId', '==', userId).get();
+  
+  console.log(`Found ${remindersSnapshot.docs.length} reminders for user ${userId}`);
   
   for (const reminderDoc of remindersSnapshot.docs) {
     const reminderData = reminderDoc.data();
-    const reminderDate = reminderData.date?.toDate ? reminderData.date.toDate() : new Date(reminderData.date);
+    let reminderDate: Date;
     
-    // Filter by date range if provided
+    // Handle different date formats
+    if (reminderData.date?.toDate) {
+      reminderDate = reminderData.date.toDate();
+    } else if (reminderData.date) {
+      reminderDate = new Date(reminderData.date);
+    } else {
+      console.log(`Reminder ${reminderDoc.id} has no date, skipping`);
+      continue;
+    }
+    
+    // Filter by date range if provided - but be more lenient
     if (startDate && endDate) {
       const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
       const end = new Date(endDate);
-      if (reminderDate < start || reminderDate > end) continue;
+      end.setHours(23, 59, 59, 999);
+      
+      const reminderDateOnly = new Date(reminderDate);
+      reminderDateOnly.setHours(12, 0, 0, 0);
+      
+      if (reminderDateOnly < start || reminderDateOnly > end) {
+        continue;
+      }
     }
+    
+    // Extract time if available
+    const hours = reminderDate.getHours();
+    const minutes = reminderDate.getMinutes();
+    const timeStr = hours > 0 || minutes > 0 ? 
+      `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}` : undefined;
     
     events.push({
       id: `appointment-${reminderDoc.id}`,
       type: 'appointment',
       title: reminderData.title,
       date: reminderDate.toISOString(),
+      time: timeStr,
       description: reminderData.description,
       category: reminderData.category,
       priority: reminderData.priority,
-      completed: reminderData.completed,
+      completed: reminderData.completed || false,
     });
   }
+  
+  console.log(`Total events: ${events.length}`);
 
   // Sort by date
   events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());

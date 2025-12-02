@@ -331,33 +331,33 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileText className="w-5 h-5" />
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-8">
+        <DialogHeader className="mb-6">
+          <DialogTitle className="flex items-center gap-3 text-xl">
+            <FileText className="w-6 h-6" />
             {t('invoice.scanTitle', 'Rechnung scannen')}
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="mt-2">
             {t('invoice.scanDescription', 'Laden Sie ein Bild der Rechnung hoch oder scannen Sie den QR-Code mit der Kamera.')}
           </DialogDescription>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="upload" className="flex items-center gap-2">
+          <TabsList className="grid w-full grid-cols-2 h-12 mb-6">
+            <TabsTrigger value="upload" className="flex items-center gap-2 h-10">
               <Upload className="w-4 h-4" />
               {t('invoice.upload', 'Hochladen')}
             </TabsTrigger>
-            <TabsTrigger value="camera" className="flex items-center gap-2">
+            <TabsTrigger value="camera" className="flex items-center gap-2 h-10">
               <Camera className="w-4 h-4" />
               {t('invoice.camera', 'Kamera')}
             </TabsTrigger>
           </TabsList>
 
           {/* Upload Tab */}
-          <TabsContent value="upload" className="space-y-4">
+          <TabsContent value="upload" className="space-y-6">
             <div 
-              className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+              className="border-2 border-dashed border-muted-foreground/25 rounded-xl p-12 text-center cursor-pointer hover:border-primary/50 transition-colors"
               onClick={() => fileInputRef.current?.click()}
             >
               <input
@@ -369,7 +369,7 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
               />
               
               {imagePreview ? (
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <img 
                     src={imagePreview} 
                     alt="Preview" 
@@ -380,10 +380,10 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <Upload className="w-12 h-12 mx-auto text-muted-foreground" />
-                  <p className="font-medium">{t('invoice.dropOrClick', 'Bild hier ablegen oder klicken')}</p>
-                  <p className="text-sm text-muted-foreground">
+                <div className="space-y-4">
+                  <Upload className="w-16 h-16 mx-auto text-muted-foreground" />
+                  <p className="font-medium text-lg">{t('invoice.dropOrClick', 'Bild hier ablegen oder klicken')}</p>
+                  <p className="text-muted-foreground">
                     {t('invoice.supportedFormats', 'JPG, PNG oder PDF')}
                   </p>
                 </div>
@@ -399,8 +399,8 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
           </TabsContent>
 
           {/* Camera Tab */}
-          <TabsContent value="camera" className="space-y-4">
-            <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
+          <TabsContent value="camera" className="space-y-6">
+            <div className="relative aspect-video bg-black rounded-xl overflow-hidden">
               {cameraActive ? (
                 <>
                   <video
@@ -436,26 +436,26 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
               )}
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               {!cameraActive ? (
-                <Button onClick={startCamera} className="flex-1">
-                  <Camera className="w-4 h-4 mr-2" />
+                <Button onClick={startCamera} className="flex-1 h-12">
+                  <Camera className="w-5 h-5 mr-2" />
                   {t('invoice.startCamera', 'Kamera starten')}
                 </Button>
               ) : (
                 <>
-                  <Button onClick={captureFromCamera} className="flex-1">
-                    <Check className="w-4 h-4 mr-2" />
+                  <Button onClick={captureFromCamera} className="flex-1 h-12">
+                    <Check className="w-5 h-5 mr-2" />
                     {t('invoice.capture', 'Manuell aufnehmen')}
                   </Button>
-                  <Button onClick={stopCamera} variant="outline">
+                  <Button onClick={stopCamera} variant="outline" className="h-12">
                     {t('common.cancel', 'Abbrechen')}
                   </Button>
                 </>
               )}
             </div>
             
-            <p className="text-xs text-muted-foreground text-center">
+            <p className="text-sm text-muted-foreground text-center">
               {t('invoice.autoScanHint', 'Der QR-Code wird automatisch erkannt, sobald er im Kamerabild erscheint.')}
             </p>
           </TabsContent>
@@ -463,75 +463,77 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
 
         {/* Scanned Data Display */}
         {scannedData && (
-          <Card className="mt-4 border-green-200 bg-green-50/50">
-            <CardContent className="pt-4 space-y-4">
-              <div className="flex items-center gap-2 text-green-700">
-                <Check className="w-5 h-5" />
-                <span className="font-medium">{t('invoice.dataExtracted', 'Daten extrahiert')}</span>
+          <Card className="mt-6 border-green-200 bg-green-50/50">
+            <CardContent className="p-6 space-y-5">
+              <div className="flex items-center gap-3 text-green-700">
+                <Check className="w-6 h-6" />
+                <span className="font-semibold text-lg">{t('invoice.dataExtracted', 'Daten extrahiert')}</span>
               </div>
 
-              <div className="grid gap-3">
+              <div className="grid gap-4">
                 {scannedData.amount !== undefined && (
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
-                    <div className="flex items-center gap-2">
-                      <CreditCard className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">{t('invoice.amount', 'Betrag')}</span>
+                  <div className="flex items-center justify-between p-4 bg-white rounded-xl border">
+                    <div className="flex items-center gap-3">
+                      <CreditCard className="w-5 h-5 text-muted-foreground" />
+                      <span className="text-muted-foreground">{t('invoice.amount', 'Betrag')}</span>
                     </div>
-                    <span className="font-bold text-lg">
+                    <span className="font-bold text-xl">
                       {scannedData.currency || 'CHF'} {scannedData.amount.toFixed(2)}
                     </span>
                   </div>
                 )}
 
                 {scannedData.iban && (
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
-                    <div className="flex items-center gap-2">
-                      <Building2 className="w-4 h-4 text-muted-foreground" />
+                  <div className="flex items-center justify-between p-4 bg-white rounded-xl border">
+                    <div className="flex items-center gap-3">
+                      <Building2 className="w-5 h-5 text-muted-foreground" />
                       <div>
-                        <span className="text-sm text-muted-foreground block">IBAN</span>
-                        <span className="font-mono text-sm">{scannedData.iban}</span>
+                        <span className="text-muted-foreground block">IBAN</span>
+                        <span className="font-mono">{scannedData.iban}</span>
                       </div>
                     </div>
                     <Button 
                       variant="ghost" 
-                      size="sm"
+                      size="icon"
+                      className="h-10 w-10"
                       onClick={() => copyToClipboard(scannedData.iban!, 'IBAN')}
                     >
-                      <Copy className="w-4 h-4" />
+                      <Copy className="w-5 h-5" />
                     </Button>
                   </div>
                 )}
 
                 {scannedData.creditorName && (
-                  <div className="p-3 bg-white rounded-lg border">
-                    <span className="text-sm text-muted-foreground block mb-1">{t('invoice.creditor', 'Empfänger')}</span>
-                    <span className="font-medium">{scannedData.creditorName}</span>
+                  <div className="p-4 bg-white rounded-xl border">
+                    <span className="text-muted-foreground block mb-2">{t('invoice.creditor', 'Empfänger')}</span>
+                    <span className="font-medium text-lg">{scannedData.creditorName}</span>
                     {scannedData.creditorAddress && (
-                      <span className="text-sm text-muted-foreground block">{scannedData.creditorAddress}</span>
+                      <span className="text-muted-foreground block mt-1">{scannedData.creditorAddress}</span>
                     )}
                   </div>
                 )}
 
                 {scannedData.reference && (
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border">
+                  <div className="flex items-center justify-between p-4 bg-white rounded-xl border">
                     <div>
-                      <span className="text-sm text-muted-foreground block">{t('invoice.reference', 'Referenz')}</span>
-                      <span className="font-mono text-sm">{scannedData.reference}</span>
+                      <span className="text-muted-foreground block">{t('invoice.reference', 'Referenz')}</span>
+                      <span className="font-mono">{scannedData.reference}</span>
                     </div>
                     <Button 
                       variant="ghost" 
-                      size="sm"
+                      size="icon"
+                      className="h-10 w-10"
                       onClick={() => copyToClipboard(scannedData.reference!, 'Referenz')}
                     >
-                      <Copy className="w-4 h-4" />
+                      <Copy className="w-5 h-5" />
                     </Button>
                   </div>
                 )}
 
                 {scannedData.message && (
-                  <div className="p-3 bg-white rounded-lg border">
-                    <span className="text-sm text-muted-foreground block mb-1">{t('invoice.message', 'Mitteilung')}</span>
-                    <span className="text-sm">{scannedData.message}</span>
+                  <div className="p-4 bg-white rounded-xl border">
+                    <span className="text-muted-foreground block mb-2">{t('invoice.message', 'Mitteilung')}</span>
+                    <span>{scannedData.message}</span>
                   </div>
                 )}
               </div>
@@ -542,15 +544,16 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
         {/* Hidden canvas for image processing */}
         <canvas ref={canvasRef} className="hidden" />
 
-        <DialogFooter className="flex gap-2">
-          <Button variant="outline" onClick={handleClose}>
+        <DialogFooter className="flex gap-3 mt-6 pt-6 border-t">
+          <Button variant="outline" onClick={handleClose} className="h-12 px-6">
             {t('common.cancel', 'Abbrechen')}
           </Button>
           <Button 
             onClick={handleConfirm} 
             disabled={!scannedData}
+            className="h-12 px-6"
           >
-            <Check className="w-4 h-4 mr-2" />
+            <Check className="w-5 h-5 mr-2" />
             {t('invoice.useData', 'Daten übernehmen')}
           </Button>
         </DialogFooter>

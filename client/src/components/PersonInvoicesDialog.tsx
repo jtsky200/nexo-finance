@@ -267,7 +267,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange }: Per
                           value={invoice.status}
                           onValueChange={(value) => handleStatusChange(invoice.id, value)}
                         >
-                          <SelectTrigger className="w-[120px] h-9">
+                          <SelectTrigger className="w-[140px] h-9">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>

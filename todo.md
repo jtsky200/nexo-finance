@@ -228,3 +228,13 @@
 - [x] Add comprehensive README.md
 - [x] Push clean code to GitHub
 - [x] Repository URL: https://github.com/jtsky200/nexo-finance
+
+## Date Serialization Fix & Feature Improvements (2025-12-02)
+- [ ] Investigate why dates show "N/A" in all entries
+- [ ] Fix date serialization in createFinanceEntry Cloud Function
+- [ ] Test creating new entry with date on live site
+- [ ] Verify date is saved correctly in Firestore
+- [ ] Add category filter dropdown to Finance page
+- [ ] Test category filtering functionality
+- [ ] Deploy all fixes to Firebase
+- [ ] Verify all features work on live site

@@ -151,7 +151,21 @@ exports.getFinanceEntries = (0, https_1.onCall)(async (request) => {
         query = query.where('type', '==', type);
     }
     const snapshot = await query.orderBy('date', 'desc').get();
-    const entries = snapshot.docs.map(doc => (Object.assign({ id: doc.id }, doc.data())));
+    const entries = snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Convert Firestore Timestamps to ISO strings for proper serialization
+        const entry = Object.assign({ id: doc.id }, data);
+        if (data.date && typeof data.date.toDate === 'function') {
+            entry.date = data.date.toDate().toISOString();
+        }
+        if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+            entry.createdAt = data.createdAt.toDate().toISOString();
+        }
+        if (data.updatedAt && typeof data.updatedAt.toDate === 'function') {
+            entry.updatedAt = data.updatedAt.toDate().toISOString();
+        }
+        return entry;
+    });
     return { entries };
 });
 exports.createFinanceEntry = (0, https_1.onCall)(async (request) => {

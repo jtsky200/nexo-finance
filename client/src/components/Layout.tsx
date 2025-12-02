@@ -52,8 +52,10 @@ export default function Layout({ children, title }: LayoutProps) {
         />
 
         {/* Page content */}
-        <main className="p-6">
-          {children}
+        <main className="p-4 md:p-6 lg:p-8">
+          <div className="max-w-7xl mx-auto">
+            {children}
+          </div>
         </main>
       </div>
     </div>

@@ -196,13 +196,6 @@ export default function Finance() {
   };
 
   const exportToPDF = () => {
-    // Create a printable HTML document
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) {
-      toast.error(t('finance.exportError', 'Export fehlgeschlagen'));
-      return;
-    }
-
     const totalIncomeFormatted = formatAmount(totalIncome * 100);
     const totalExpensesFormatted = formatAmount(totalExpenses * 100);
     const balanceFormatted = formatAmount(balance * 100);
@@ -211,10 +204,10 @@ export default function Finance() {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Finanzübersicht - ${new Date().toLocaleDateString('de-CH')}</title>
+        <title>Finanzübersicht - Nexo Finance</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 40px; color: #333; }
-          h1 { color: #1a1a1a; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }
+          h1 { color: #1a1a1a; border-bottom: 2px solid #1a1a1a; padding-bottom: 10px; font-size: 28px; }
           .summary { display: flex; gap: 20px; margin: 20px 0; }
           .summary-card { background: #f8fafc; padding: 15px 25px; border-radius: 8px; flex: 1; }
           .summary-card h3 { margin: 0 0 5px 0; font-size: 12px; color: #64748b; text-transform: uppercase; }
@@ -233,7 +226,7 @@ export default function Finance() {
         </style>
       </head>
       <body>
-        <h1>📊 Finanzübersicht</h1>
+        <h1>Finanzübersicht</h1>
         <p style="color: #64748b;">Exportiert am ${new Date().toLocaleDateString('de-CH', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
         
         <div class="summary">
@@ -288,13 +281,28 @@ export default function Finance() {
           <p>Nexo Finance • ${new Date().getFullYear()}</p>
         </div>
         
-        <script>window.onload = () => window.print();</script>
       </body>
       </html>
     `;
 
-    printWindow.document.write(html);
-    printWindow.document.close();
+    // Create blob and open in new window with proper URL
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const printWindow = window.open(url, '_blank');
+    
+    if (!printWindow) {
+      toast.error(t('finance.exportError', 'Export fehlgeschlagen'));
+      URL.revokeObjectURL(url);
+      return;
+    }
+    
+    // Print and cleanup
+    printWindow.onload = () => {
+      printWindow.print();
+      // Revoke URL after a delay to allow printing
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+    
     toast.success(t('finance.exportSuccess', 'Export erfolgreich'));
   };
 

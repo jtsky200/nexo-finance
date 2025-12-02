@@ -360,6 +360,7 @@ export function useShoppingList(status?: string) {
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const fetchItems = async () => {
@@ -386,9 +387,11 @@ export function useShoppingList(status?: string) {
     };
 
     fetchItems();
-  }, [status]);
+  }, [status, refreshKey]);
 
-  return { data: items, isLoading, error };
+  const refetch = () => setRefreshKey(prev => prev + 1);
+
+  return { data: items, isLoading, error, refetch };
 }
 
 export async function createShoppingItem(data: Omit<ShoppingItem, 'id' | 'userId' | 'status' | 'boughtAt' | 'linkedExpenseId' | 'createdAt' | 'updatedAt'>) {

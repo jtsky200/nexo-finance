@@ -4,6 +4,7 @@ import {
   LayoutDashboard, 
   Bell, 
   Wallet, 
+  ShoppingCart,
   FileText, 
   Settings,
   X
@@ -23,6 +24,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     { path: '/dashboard', icon: LayoutDashboard, label: t('nav.dashboard') },
     { path: '/reminders', icon: Bell, label: t('nav.reminders') },
     { path: '/finance', icon: Wallet, label: t('nav.finance') },
+    { path: '/shopping', icon: ShoppingCart, label: t('nav.shopping') },
     { path: '/taxes', icon: FileText, label: t('nav.taxes') },
     { path: '/settings', icon: Settings, label: t('nav.settings') },
   ];

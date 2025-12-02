@@ -37,6 +37,7 @@ export function useReminders(filters?: { startDate?: Date; endDate?: Date; statu
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const fetchReminders = async () => {
@@ -63,9 +64,11 @@ export function useReminders(filters?: { startDate?: Date; endDate?: Date; statu
     };
 
     fetchReminders();
-  }, [filters?.startDate, filters?.endDate, filters?.status]);
+  }, [filters?.startDate, filters?.endDate, filters?.status, refreshKey]);
 
-  return { data: reminders, isLoading, error };
+  const refetch = () => setRefreshKey(prev => prev + 1);
+
+  return { data: reminders, isLoading, error, refetch };
 }
 
 export async function createReminder(data: Omit<Reminder, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'status'>) {

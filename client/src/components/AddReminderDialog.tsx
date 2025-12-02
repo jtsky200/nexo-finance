@@ -41,9 +41,10 @@ type ReminderFormData = z.infer<typeof reminderSchema>;
 interface AddReminderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
 }
 
-export default function AddReminderDialog({ open, onOpenChange }: AddReminderDialogProps) {
+export default function AddReminderDialog({ open, onOpenChange, onSuccess }: AddReminderDialogProps) {
   const { t } = useTranslation();
   const [isPayment, setIsPayment] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -87,8 +88,10 @@ export default function AddReminderDialog({ open, onOpenChange }: AddReminderDia
       toast.success('Erinnerung erfolgreich erstellt');
       reset();
       onOpenChange(false);
-      // Reload page to refresh data
-      window.location.reload();
+      // Call onSuccess callback to refresh data
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (error: any) {
       toast.error('Fehler beim Erstellen der Erinnerung: ' + error.message);
     } finally {

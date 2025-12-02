@@ -168,6 +168,10 @@ const resources = {
         processingError: 'Fehler bei der Bildverarbeitung.',
         cameraError: 'Kamera konnte nicht gestartet werden.',
         enterQrData: 'Bitte geben Sie die QR-Code-Daten ein.',
+        browserNotSupported: 'QR-Code-Erkennung wird in diesem Browser nicht unterstützt. Bitte verwenden Sie Chrome oder Edge.',
+        autoScanning: 'Automatische Erkennung aktiv...',
+        cameraInactive: 'Kamera nicht aktiv',
+        autoScanHint: 'Der QR-Code wird automatisch erkannt, sobald er im Kamerabild erscheint.',
       },
       
       // Shopping List
@@ -195,8 +199,13 @@ const resources = {
       reminders: {
         title: 'Erinnerungen',
         add: 'Erinnerung hinzufügen',
+        edit: 'Erinnerung bearbeiten',
+        description: 'Verwalten Sie Ihre Termine, Zahlungen und Aufgaben',
         pageDescription: 'Verwalten Sie Ihre Termine und Aufgaben',
+        dialogDescription: 'Erstellen Sie eine neue Erinnerung für Termine, Zahlungen oder Aufgaben',
         reminderTitle: 'Titel',
+        titleField: 'Titel',
+        titlePlaceholder: 'z.B. Zahnarzttermin',
         addReminder: 'Erinnerung hinzufügen',
         type: 'Typ',
         types: {
@@ -208,16 +217,51 @@ const resources = {
         payment: 'Zahlung',
         task: 'Aufgabe',
         dueDate: 'Fälligkeitsdatum',
+        allDay: 'Ganztägig',
         status: {
           label: 'Status',
           offen: 'Offen',
           erledigt: 'Erledigt',
           überfällig: 'Überfällig',
+          open: 'Offen',
+          done: 'Erledigt',
+          overdue: 'Überfällig',
         },
         open: 'Offen',
         completed: 'Erledigt',
         overdue: 'Überfällig',
+        amount: 'Betrag',
+        currency: 'Währung',
+        notes: 'Notizen',
+        notesPlaceholder: 'Optionale Notizen...',
+        recurrence: 'Wiederholung',
+        noRecurrence: 'Keine Wiederholung',
         noReminders: 'Keine Erinnerungen vorhanden',
+        // Statistics
+        total: 'Gesamt',
+        pendingPayments: 'Offene Zahlungen',
+        // Filters
+        search: 'Suchen...',
+        filterType: 'Typ',
+        filterStatus: 'Status',
+        // Tabs
+        upcoming: 'Anstehend',
+        past: 'Vergangen',
+        noUpcoming: 'Keine anstehenden Erinnerungen',
+        noPast: 'Keine vergangenen Erinnerungen',
+        addFirst: 'Erste Erinnerung erstellen',
+        // Actions
+        markDone: 'Als erledigt markieren',
+        markOpen: 'Wieder öffnen',
+        confirmDelete: 'Möchten Sie diese Erinnerung wirklich löschen?',
+        // Toast messages
+        created: 'Erinnerung erstellt',
+        updated: 'Erinnerung aktualisiert',
+        deleted: 'Erinnerung gelöscht',
+        statusUpdated: 'Status aktualisiert',
+        errors: {
+          required: 'Bitte füllen Sie alle Pflichtfelder aus.',
+        },
       },
       
       // Taxes
@@ -487,6 +531,10 @@ const resources = {
         processingError: 'Error processing image.',
         cameraError: 'Could not start camera.',
         enterQrData: 'Please enter the QR code data.',
+        browserNotSupported: 'QR code detection is not supported in this browser. Please use Chrome or Edge.',
+        autoScanning: 'Auto-detection active...',
+        cameraInactive: 'Camera not active',
+        autoScanHint: 'The QR code will be automatically detected once it appears in the camera view.',
       },
       
       // Shopping List
@@ -511,9 +559,16 @@ const resources = {
       
       // Reminders
       reminders: {
+        title: 'Reminders',
+        add: 'Add Reminder',
+        edit: 'Edit Reminder',
+        description: 'Manage your appointments, payments and tasks',
         pageTitle: 'Reminders',
         pageDescription: 'Manage your appointments and tasks',
-        title: 'Title',
+        dialogDescription: 'Create a new reminder for appointments, payments or tasks',
+        reminderTitle: 'Title',
+        titleField: 'Title',
+        titlePlaceholder: 'e.g. Dentist appointment',
         addReminder: 'Add Reminder',
         type: 'Type',
         types: {
@@ -525,16 +580,51 @@ const resources = {
         payment: 'Payment',
         task: 'Task',
         dueDate: 'Due Date',
+        allDay: 'All Day',
         status: {
           label: 'Status',
           offen: 'Open',
           erledigt: 'Completed',
           überfällig: 'Overdue',
+          open: 'Open',
+          done: 'Completed',
+          overdue: 'Overdue',
         },
         open: 'Open',
         completed: 'Completed',
         overdue: 'Overdue',
+        amount: 'Amount',
+        currency: 'Currency',
+        notes: 'Notes',
+        notesPlaceholder: 'Optional notes...',
+        recurrence: 'Recurrence',
+        noRecurrence: 'No recurrence',
         noReminders: 'No reminders',
+        // Statistics
+        total: 'Total',
+        pendingPayments: 'Pending Payments',
+        // Filters
+        search: 'Search...',
+        filterType: 'Type',
+        filterStatus: 'Status',
+        // Tabs
+        upcoming: 'Upcoming',
+        past: 'Past',
+        noUpcoming: 'No upcoming reminders',
+        noPast: 'No past reminders',
+        addFirst: 'Create first reminder',
+        // Actions
+        markDone: 'Mark as completed',
+        markOpen: 'Reopen',
+        confirmDelete: 'Are you sure you want to delete this reminder?',
+        // Toast messages
+        created: 'Reminder created',
+        updated: 'Reminder updated',
+        deleted: 'Reminder deleted',
+        statusUpdated: 'Status updated',
+        errors: {
+          required: 'Please fill in all required fields.',
+        },
       },
       
       // Taxes

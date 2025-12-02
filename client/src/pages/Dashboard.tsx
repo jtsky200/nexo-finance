@@ -17,12 +17,19 @@ export default function Dashboard() {
   const [financeDialogOpen, setFinanceDialogOpen] = useState(false);
   const [taxProfile, setTaxProfile] = useState<any>(null);
 
-  // Fetch upcoming reminders
+  // Fetch upcoming reminders - fetch all open reminders and filter client-side
   const now = useMemo(() => new Date(), []);
-  const { data: reminders = [], isLoading: remindersLoading } = useReminders({
-    startDate: now,
+  const { data: allReminders = [], isLoading: remindersLoading, refetch: refetchReminders } = useReminders({
     status: 'offen',
   });
+  
+  // Filter for upcoming reminders (due date >= now)
+  const reminders = useMemo(() => {
+    return allReminders.filter(r => {
+      const dueDate = new Date(r.dueDate);
+      return dueDate >= now;
+    });
+  }, [allReminders, now]);
 
   // Fetch current month finance data
   const startOfMonth = useMemo(() => {
@@ -40,7 +47,7 @@ export default function Dashboard() {
     return date;
   }, []);
 
-  const { data: financeEntries = [], isLoading: financeLoading } = useFinanceEntries({
+  const { data: financeEntries = [], isLoading: financeLoading, refetch: refetchFinance } = useFinanceEntries({
     startDate: startOfMonth,
     endDate: endOfMonth,
   });
@@ -280,8 +287,16 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <AddReminderDialog open={reminderDialogOpen} onOpenChange={setReminderDialogOpen} />
-      <AddFinanceEntryDialog open={financeDialogOpen} onOpenChange={setFinanceDialogOpen} />
+      <AddReminderDialog 
+        open={reminderDialogOpen} 
+        onOpenChange={setReminderDialogOpen} 
+        onSuccess={refetchReminders}
+      />
+      <AddFinanceEntryDialog 
+        open={financeDialogOpen} 
+        onOpenChange={setFinanceDialogOpen}
+        onSuccess={refetchFinance}
+      />
     </Layout>
   );
 }

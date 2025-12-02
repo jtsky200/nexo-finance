@@ -1,12 +1,10 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Camera, Upload, FileText, QrCode, Check, AlertCircle, Copy, CreditCard, Building2 } from 'lucide-react';
+import { Camera, Upload, FileText, QrCode, Check, Copy, CreditCard, Building2, Loader2, ScanLine } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface InvoiceScannerProps {
@@ -33,11 +31,8 @@ function parseSwissQRCode(qrData: string): ScannedInvoiceData | null {
     const lines = qrData.split('\n').map(l => l.trim());
     
     // Swiss QR Bill format validation
-    if (lines[0] !== 'SPC' || lines[1] !== '0200') {
-      // Try alternative format
-      if (!lines[0]?.startsWith('SPC')) {
-        return null;
-      }
+    if (lines[0] !== 'SPC' && !lines[0]?.startsWith('SPC')) {
+      return null;
     }
 
     const data: ScannedInvoiceData = {
@@ -92,12 +87,23 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [scannedData, setScannedData] = useState<ScannedInvoiceData | null>(null);
-  const [manualQrInput, setManualQrInput] = useState('');
+  const [isScanning, setIsScanning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const streamRef = useRef<MediaStream | null>(null);
+  const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopCamera();
+      if (scanIntervalRef.current) {
+        clearInterval(scanIntervalRef.current);
+      }
+    };
+  }, []);
 
   // Handle file upload
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -165,7 +171,7 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
               setScannedData({ qrCodeData: qrData, imageUrl: imageData });
             }
           } else {
-            toast.info(t('invoice.noQrFound', 'Kein QR-Code gefunden. Sie können die Daten manuell eingeben.'));
+            toast.info(t('invoice.noQrFound', 'Kein QR-Code gefunden. Bitte versuchen Sie es erneut.'));
             setScannedData({ imageUrl: imageData });
           }
         } catch (err) {
@@ -174,7 +180,7 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
         }
       } else {
         // Fallback: No BarcodeDetector support
-        toast.info(t('invoice.manualEntry', 'QR-Code-Erkennung nicht verfügbar. Bitte geben Sie die Daten manuell ein.'));
+        toast.info(t('invoice.browserNotSupported', 'QR-Code-Erkennung wird in diesem Browser nicht unterstützt. Bitte verwenden Sie Chrome oder Edge.'));
         setScannedData({ imageUrl: imageData });
       }
     } catch (error) {
@@ -185,17 +191,26 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
     }
   };
 
-  // Start camera
+  // Start camera with auto-scanning
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
       });
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
         setCameraActive(true);
+        
+        // Start auto-scanning after video is ready
+        videoRef.current.onloadedmetadata = () => {
+          startAutoScan();
+        };
       }
     } catch (error) {
       console.error('Camera error:', error);
@@ -203,8 +218,67 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
     }
   };
 
+  // Auto-scan for QR codes
+  const startAutoScan = () => {
+    if (!('BarcodeDetector' in window)) {
+      toast.info(t('invoice.browserNotSupported', 'Automatische QR-Erkennung nicht verfügbar.'));
+      return;
+    }
+
+    setIsScanning(true);
+    
+    // @ts-ignore
+    const barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+    
+    scanIntervalRef.current = setInterval(async () => {
+      if (!videoRef.current || !canvasRef.current || !cameraActive) return;
+      
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (!ctx || video.readyState !== 4) return;
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+
+      try {
+        const barcodes = await barcodeDetector.detect(canvas);
+        
+        if (barcodes.length > 0) {
+          const qrData = barcodes[0].rawValue;
+          const parsed = parseSwissQRCode(qrData);
+          
+          if (parsed) {
+            // Stop scanning and show results
+            stopAutoScan();
+            const imageData = canvas.toDataURL('image/jpeg');
+            parsed.imageUrl = imageData;
+            setImagePreview(imageData);
+            setScannedData(parsed);
+            stopCamera();
+            setActiveTab('upload');
+            toast.success(t('invoice.qrDetected', 'QR-Code automatisch erkannt!'));
+          }
+        }
+      } catch (err) {
+        // Silently ignore scan errors
+      }
+    }, 500); // Scan every 500ms
+  };
+
+  // Stop auto-scanning
+  const stopAutoScan = () => {
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+    }
+    setIsScanning(false);
+  };
+
   // Stop camera
   const stopCamera = () => {
+    stopAutoScan();
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -212,7 +286,7 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
     setCameraActive(false);
   };
 
-  // Capture from camera
+  // Manual capture from camera
   const captureFromCamera = () => {
     if (!videoRef.current || !canvasRef.current) return;
 
@@ -230,22 +304,6 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
     processImage(imageData);
     stopCamera();
     setActiveTab('upload');
-  };
-
-  // Parse manual QR input
-  const handleManualQrParse = () => {
-    if (!manualQrInput.trim()) {
-      toast.error(t('invoice.enterQrData', 'Bitte geben Sie die QR-Code-Daten ein.'));
-      return;
-    }
-
-    const parsed = parseSwissQRCode(manualQrInput);
-    if (parsed) {
-      setScannedData(parsed);
-      toast.success(t('invoice.qrParsed', 'QR-Code-Daten erfolgreich geparst!'));
-    } else {
-      toast.error(t('invoice.invalidQr', 'Ungültige QR-Code-Daten.'));
-    }
   };
 
   // Copy to clipboard
@@ -267,7 +325,6 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
     stopCamera();
     setImagePreview(null);
     setScannedData(null);
-    setManualQrInput('');
     setActiveTab('upload');
     onOpenChange(false);
   };
@@ -281,23 +338,19 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
             {t('invoice.scanTitle', 'Rechnung scannen')}
           </DialogTitle>
           <DialogDescription>
-            {t('invoice.scanDescription', 'Laden Sie ein Bild der Rechnung hoch oder scannen Sie den QR-Code.')}
+            {t('invoice.scanDescription', 'Laden Sie ein Bild der Rechnung hoch oder scannen Sie den QR-Code mit der Kamera.')}
           </DialogDescription>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="upload" className="flex items-center gap-2">
               <Upload className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('invoice.upload', 'Hochladen')}</span>
+              {t('invoice.upload', 'Hochladen')}
             </TabsTrigger>
             <TabsTrigger value="camera" className="flex items-center gap-2">
               <Camera className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('invoice.camera', 'Kamera')}</span>
-            </TabsTrigger>
-            <TabsTrigger value="manual" className="flex items-center gap-2">
-              <QrCode className="w-4 h-4" />
-              <span className="hidden sm:inline">{t('invoice.manual', 'Manuell')}</span>
+              {t('invoice.camera', 'Kamera')}
             </TabsTrigger>
           </TabsList>
 
@@ -339,7 +392,7 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
 
             {isProcessing && (
               <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full" />
+                <Loader2 className="w-4 h-4 animate-spin" />
                 {t('invoice.processing', 'Verarbeite...')}
               </div>
             )}
@@ -356,13 +409,29 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
                     playsInline
                     className="w-full h-full object-cover"
                   />
+                  {/* Scanning overlay */}
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="w-48 h-48 border-2 border-white/50 rounded-lg" />
+                    <div className="w-56 h-56 border-2 border-white/70 rounded-lg relative">
+                      {isScanning && (
+                        <>
+                          <div className="absolute inset-0 bg-primary/10 animate-pulse" />
+                          <ScanLine className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 text-white animate-bounce" />
+                        </>
+                      )}
+                    </div>
                   </div>
+                  {/* Scanning status */}
+                  {isScanning && (
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-full text-sm flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {t('invoice.autoScanning', 'Automatische Erkennung aktiv...')}
+                    </div>
+                  )}
                 </>
               ) : (
-                <div className="flex items-center justify-center h-full text-white">
+                <div className="flex flex-col items-center justify-center h-full text-white gap-4">
                   <Camera className="w-16 h-16 opacity-50" />
+                  <p className="text-sm opacity-70">{t('invoice.cameraInactive', 'Kamera nicht aktiv')}</p>
                 </div>
               )}
             </div>
@@ -377,7 +446,7 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
                 <>
                   <Button onClick={captureFromCamera} className="flex-1">
                     <Check className="w-4 h-4 mr-2" />
-                    {t('invoice.capture', 'Aufnehmen')}
+                    {t('invoice.capture', 'Manuell aufnehmen')}
                   </Button>
                   <Button onClick={stopCamera} variant="outline">
                     {t('common.cancel', 'Abbrechen')}
@@ -385,23 +454,10 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
                 </>
               )}
             </div>
-          </TabsContent>
-
-          {/* Manual Tab */}
-          <TabsContent value="manual" className="space-y-4">
-            <div className="space-y-2">
-              <Label>{t('invoice.qrCodeData', 'QR-Code Daten')}</Label>
-              <textarea
-                value={manualQrInput}
-                onChange={(e) => setManualQrInput(e.target.value)}
-                placeholder={t('invoice.pasteQrData', 'QR-Code Daten hier einfügen...')}
-                className="w-full h-32 p-3 border rounded-lg resize-none font-mono text-sm"
-              />
-              <Button onClick={handleManualQrParse} className="w-full">
-                <QrCode className="w-4 h-4 mr-2" />
-                {t('invoice.parseQr', 'QR-Code parsen')}
-              </Button>
-            </div>
+            
+            <p className="text-xs text-muted-foreground text-center">
+              {t('invoice.autoScanHint', 'Der QR-Code wird automatisch erkannt, sobald er im Kamerabild erscheint.')}
+            </p>
           </TabsContent>
         </Tabs>
 
@@ -502,4 +558,3 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
     </Dialog>
   );
 }
-

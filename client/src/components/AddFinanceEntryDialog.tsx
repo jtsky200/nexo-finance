@@ -45,12 +45,14 @@ interface AddFinanceEntryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultType?: 'einnahme' | 'ausgabe';
+  onSuccess?: () => void;
 }
 
 export default function AddFinanceEntryDialog({ 
   open, 
   onOpenChange,
-  defaultType = 'ausgabe'
+  defaultType = 'ausgabe',
+  onSuccess
 }: AddFinanceEntryDialogProps) {
   const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -101,8 +103,10 @@ export default function AddFinanceEntryDialog({
       toast.success('Eintrag erfolgreich erstellt');
       reset();
       onOpenChange(false);
-      // Reload page to refresh data
-      window.location.reload();
+      // Call onSuccess callback to refresh data
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (error: any) {
       toast.error('Fehler beim Erstellen des Eintrags: ' + error.message);
     } finally {

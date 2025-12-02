@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
   Bell, Plus, TrendingUp, TrendingDown, FileText, Calendar, 
-  DollarSign, Clock, AlertTriangle, CheckCircle2, Receipt,
+  Banknote, Clock, AlertTriangle, CheckCircle2, Receipt,
   CalendarClock, CheckSquare
 } from 'lucide-react';
 import { useReminders, useFinanceEntries, getTaxProfileByYear } from '@/lib/firebaseHooks';

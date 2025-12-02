@@ -13,8 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { 
   Plus, Trash2, Check, ShoppingCart, ShoppingBag, Package, 
-  Sparkles, Clock, TrendingUp, Copy, Share2, Download,
-  Lightbulb, Star, RotateCcw, ListChecks, Tag, Wallet,
+  Clock, Copy, Share2, Download,
+  Lightbulb, RotateCcw, ListChecks, Tag, Banknote,
   Apple, Home as HomeIcon, Shirt, Zap, Heart, MoreHorizontal
 } from 'lucide-react';
 import { useShoppingList, createShoppingItem, deleteShoppingItem, markShoppingItemAsBought } from '@/lib/firebaseHooks';
@@ -235,25 +235,25 @@ export default function Shopping() {
         {/* Header with stats */}
         <div className="flex flex-col lg:flex-row gap-4">
           {/* Budget Overview Card */}
-          <Card className="flex-1 bg-gradient-to-br from-primary/10 via-primary/5 to-background border-primary/20">
+          <Card className="flex-1">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-3 bg-primary/20 rounded-xl">
-                    <Wallet className="w-6 h-6 text-primary" />
+                  <div className="p-2.5 bg-primary/10 rounded-lg">
+                    <Banknote className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Budget</p>
-                    <p className="text-2xl font-bold">{formatPrice(totalBudget * 100)}</p>
+                    <p className="text-xs text-muted-foreground">Budget</p>
+                    <p className="text-xl font-bold">{formatPrice(totalBudget * 100)}</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-muted-foreground">Ausgegeben</p>
-                  <p className="text-2xl font-bold text-orange-600">{formatPrice(totalSpent * 100)}</p>
+                  <p className="text-xs text-muted-foreground">Ausgegeben</p>
+                  <p className="text-xl font-bold text-orange-600">{formatPrice(totalSpent * 100)}</p>
                 </div>
               </div>
               <Progress value={budgetProgress} className="h-2" />
-              <div className="flex justify-between mt-2 text-sm text-muted-foreground">
+              <div className="flex justify-between mt-2 text-xs text-muted-foreground">
                 <span>{notBoughtItems.length} Artikel offen</span>
                 <span>{boughtItems.length} eingekauft</span>
               </div>
@@ -309,12 +309,7 @@ export default function Shopping() {
         {/* Quick Add Section */}
         <Card>
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-yellow-500" />
-                <CardTitle className="text-base">Schnell hinzufügen</CardTitle>
-              </div>
-            </div>
+            <CardTitle className="text-sm font-medium">Schnell hinzufügen</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
@@ -351,14 +346,14 @@ export default function Shopping() {
         {/* Add New Item Form */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Plus className="w-5 h-5" />
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Plus className="w-4 h-4" />
               Neuer Artikel
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              <div className="lg:col-span-2">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 min-w-0">
                 <Label className="text-xs text-muted-foreground">Artikel</Label>
                 <Input
                   value={newItem.item}
@@ -367,7 +362,7 @@ export default function Shopping() {
                   onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
                 />
               </div>
-              <div>
+              <div className="w-20 shrink-0">
                 <Label className="text-xs text-muted-foreground">Menge</Label>
                 <Input
                   type="number"
@@ -376,7 +371,7 @@ export default function Shopping() {
                   min={1}
                 />
               </div>
-              <div>
+              <div className="w-36 shrink-0">
                 <Label className="text-xs text-muted-foreground">Kategorie</Label>
                 <Select value={newItem.category} onValueChange={(value) => setNewItem({ ...newItem, category: value })}>
                   <SelectTrigger>
@@ -398,21 +393,21 @@ export default function Shopping() {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
+              <div className="w-28 shrink-0">
                 <Label className="text-xs text-muted-foreground">Preis (CHF)</Label>
-                <div className="flex gap-2">
-                  <Input
-                    type="number"
-                    value={newItem.estimatedPrice || ''}
-                    onChange={(e) => setNewItem({ ...newItem, estimatedPrice: parseFloat(e.target.value) || 0 })}
-                    min={0}
-                    step={0.1}
-                    placeholder="0.00"
-                  />
-                  <Button onClick={handleAddItem} className="shrink-0">
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
+                <Input
+                  type="number"
+                  value={newItem.estimatedPrice || ''}
+                  onChange={(e) => setNewItem({ ...newItem, estimatedPrice: parseFloat(e.target.value) || 0 })}
+                  min={0}
+                  step={0.1}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="shrink-0 self-end">
+                <Button onClick={handleAddItem} size="icon">
+                  <Plus className="w-4 h-4" />
+                </Button>
               </div>
             </div>
           </CardContent>

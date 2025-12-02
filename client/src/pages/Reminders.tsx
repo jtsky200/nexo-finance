@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
-  Plus, Calendar, DollarSign, CheckSquare, Trash2, Edit2, 
+  Plus, Calendar, Banknote, CheckSquare, Trash2, Edit2, 
   Clock, AlertTriangle, CheckCircle2, Filter, Search,
   Bell, BellOff, RefreshCw, MoreVertical
 } from 'lucide-react';
@@ -70,7 +70,7 @@ export default function Reminders() {
       case 'termin':
         return <Calendar className="w-4 h-4" />;
       case 'zahlung':
-        return <DollarSign className="w-4 h-4" />;
+        return <Banknote className="w-4 h-4" />;
       case 'aufgabe':
         return <CheckSquare className="w-4 h-4" />;
       default:
@@ -409,7 +409,7 @@ export default function Reminders() {
           <Card>
             <CardContent className="pt-4">
               <div className="flex items-center gap-2">
-                <DollarSign className="w-4 h-4 text-green-500" />
+                <Banknote className="w-4 h-4 text-green-500" />
                 <span className="text-sm text-muted-foreground">{t('reminders.pendingPayments', 'Offene Zahlungen')}</span>
               </div>
               <p className="text-2xl font-bold mt-1 text-green-600">{formatAmount(stats.payments)}</p>
@@ -420,40 +420,40 @@ export default function Reminders() {
         {/* Filters */}
         <Card>
           <CardContent className="pt-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder={t('reminders.search', 'Suchen...')}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder={t('reminders.search', 'Suchen...')}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
               </div>
-              <Select value={filterType} onValueChange={setFilterType}>
-                <SelectTrigger className="w-[150px]">
-                  <Filter className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder={t('reminders.filterType', 'Typ')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('common.all', 'Alle')}</SelectItem>
-                  <SelectItem value="termin">{t('reminders.types.termin', 'Termine')}</SelectItem>
-                  <SelectItem value="zahlung">{t('reminders.types.zahlung', 'Zahlungen')}</SelectItem>
-                  <SelectItem value="aufgabe">{t('reminders.types.aufgabe', 'Aufgaben')}</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder={t('reminders.filterStatus', 'Status')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t('common.all', 'Alle')}</SelectItem>
-                  <SelectItem value="offen">{t('reminders.status.open', 'Offen')}</SelectItem>
-                  <SelectItem value="erledigt">{t('reminders.status.done', 'Erledigt')}</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex gap-2">
+                <Select value={filterType} onValueChange={setFilterType}>
+                  <SelectTrigger className="w-[130px]">
+                    <Filter className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder={t('reminders.filterType', 'Typ')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('common.all', 'Alle')}</SelectItem>
+                    <SelectItem value="termin">{t('reminders.types.termin', 'Termine')}</SelectItem>
+                    <SelectItem value="zahlung">{t('reminders.types.zahlung', 'Zahlungen')}</SelectItem>
+                    <SelectItem value="aufgabe">{t('reminders.types.aufgabe', 'Aufgaben')}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="w-[120px]">
+                    <SelectValue placeholder={t('reminders.filterStatus', 'Status')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('common.all', 'Alle')}</SelectItem>
+                    <SelectItem value="offen">{t('reminders.status.open', 'Offen')}</SelectItem>
+                    <SelectItem value="erledigt">{t('reminders.status.done', 'Erledigt')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -559,7 +559,7 @@ export default function Reminders() {
                   </SelectItem>
                   <SelectItem value="zahlung">
                     <div className="flex items-center gap-2">
-                      <DollarSign className="w-4 h-4" />
+                      <Banknote className="w-4 h-4" />
                       {t('reminders.types.zahlung', 'Zahlung')}
                     </div>
                   </SelectItem>

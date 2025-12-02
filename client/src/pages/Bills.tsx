@@ -13,9 +13,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { 
   Plus, Search, Filter, Calendar, Clock, AlertTriangle, 
-  CheckCircle2, DollarSign, FileText, Trash2, Edit2, 
-  MoreVertical, Camera, Copy, Building2, CreditCard,
-  TrendingUp, Receipt, CalendarClock, Ban
+  CheckCircle2, FileText, Trash2, Edit2, 
+  MoreVertical, Camera, Copy, Building2, Banknote,
+  Receipt, CalendarClock
 } from 'lucide-react';
 import { useReminders, createReminder, updateReminder, deleteReminder, useFinanceEntries, createFinanceEntry, Reminder } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
@@ -517,20 +517,18 @@ export default function Bills() {
         {/* Filters */}
         <Card>
           <CardContent className="pt-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder={t('bills.search', 'Suchen...')}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder={t('bills.search', 'Suchen...')}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
               </div>
               <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-[150px]">
+                <SelectTrigger className="w-[130px]">
                   <Filter className="w-4 h-4 mr-2" />
                   <SelectValue placeholder={t('bills.filterStatus', 'Status')} />
                 </SelectTrigger>

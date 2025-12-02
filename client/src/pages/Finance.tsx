@@ -374,32 +374,35 @@ export default function Finance() {
                   {entryType === 'einnahme' ? '+' : '-'}
                   {formatAmount(entry.amount, entry.currency)}
                 </p>
-                <Select
-                  value={(entry as any).status || 'open'}
-                  onValueChange={(value) => handleStatusChange(entry.id, value)}
-                >
-                  <SelectTrigger className={`h-8 text-xs w-[100px] ${
-                    (entry as any).status === 'paid' 
-                      ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400' 
-                      : 'bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-400'
-                  }`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="open">
-                      <span className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-orange-500" />
-                        {t('finance.open')}
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="paid">
-                      <span className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-green-500" />
-                        {t('finance.paid')}
-                      </span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                {/* Status dropdown only for expenses (Ausgaben) */}
+                {entryType === 'ausgabe' && (
+                  <Select
+                    value={(entry as any).status || 'open'}
+                    onValueChange={(value) => handleStatusChange(entry.id, value)}
+                  >
+                    <SelectTrigger className={`h-8 text-xs w-[100px] ${
+                      (entry as any).status === 'paid' 
+                        ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400' 
+                        : 'bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-400'
+                    }`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="open">
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-orange-500" />
+                          {t('finance.open')}
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="paid">
+                        <span className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-green-500" />
+                          {t('finance.paid')}
+                        </span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
           );

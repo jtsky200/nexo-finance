@@ -627,14 +627,14 @@ export default function Reminders() {
             <div className="space-y-2">
               <Label>{t('reminders.recurrence', 'Wiederholung')}</Label>
               <Select
-                value={formData.recurrenceRule}
-                onValueChange={(value) => setFormData({ ...formData, recurrenceRule: value })}
+                value={formData.recurrenceRule || 'none'}
+                onValueChange={(value) => setFormData({ ...formData, recurrenceRule: value === 'none' ? '' : value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={t('reminders.noRecurrence', 'Keine Wiederholung')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">{t('reminders.noRecurrence', 'Keine Wiederholung')}</SelectItem>
+                  <SelectItem value="none">{t('reminders.noRecurrence', 'Keine Wiederholung')}</SelectItem>
                   <SelectItem value="daily">{t('finance.daily', 'Täglich')}</SelectItem>
                   <SelectItem value="weekly">{t('finance.weekly', 'Wöchentlich')}</SelectItem>
                   <SelectItem value="monthly">{t('finance.monthly', 'Monatlich')}</SelectItem>

@@ -722,14 +722,14 @@ export default function Bills() {
             <div className="space-y-2">
               <Label>{t('bills.recurrence', 'Wiederholung')}</Label>
               <Select
-                value={formData.recurrenceRule}
-                onValueChange={(value) => setFormData({ ...formData, recurrenceRule: value })}
+                value={formData.recurrenceRule || 'none'}
+                onValueChange={(value) => setFormData({ ...formData, recurrenceRule: value === 'none' ? '' : value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={t('bills.noRecurrence', 'Keine Wiederholung')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">{t('bills.noRecurrence', 'Keine Wiederholung')}</SelectItem>
+                  <SelectItem value="none">{t('bills.noRecurrence', 'Keine Wiederholung')}</SelectItem>
                   <SelectItem value="monthly">{t('finance.monthly', 'Monatlich')}</SelectItem>
                   <SelectItem value="quarterly">{t('bills.quarterly', 'Vierteljährlich')}</SelectItem>
                   <SelectItem value="yearly">{t('finance.yearly', 'Jährlich')}</SelectItem>

@@ -11,7 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Plus, Trash2, Edit2, Eye, Search, 
-  Phone, Mail, Filter, FileText
+  Phone, Mail, Filter, FileText, Users
 } from 'lucide-react';
 import { usePeople, usePersonDebts, createPerson, deletePerson, updatePerson } from '@/lib/firebaseHooks';
 import PersonInvoicesDialog from '@/components/PersonInvoicesDialog';

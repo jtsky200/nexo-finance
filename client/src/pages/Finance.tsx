@@ -326,8 +326,10 @@ export default function Finance() {
       await updateFinanceEntry(entryId, { status: newStatus } as any);
       toast.success(newStatus === 'paid' ? 'Als bezahlt markiert ✓' : 'Status aktualisiert');
       setStatusChangeConfirm(null);
-      refetch();
+      // Force immediate refetch
+      await refetch();
     } catch (error: any) {
+      console.error('Status update error:', error);
       toast.error(t('common.error') + ': ' + error.message);
     }
   };
@@ -401,23 +403,31 @@ export default function Finance() {
                     value={(entry as any).status || 'open'}
                     onValueChange={(value) => handleStatusChangeRequest(entry.id, entry, value)}
                   >
-                    <SelectTrigger className={`h-8 text-xs w-[100px] ${
+                    <SelectTrigger className={`h-8 text-xs w-[110px] ${
                       (entry as any).status === 'paid' 
                         ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400' 
                         : 'bg-orange-50 border-orange-200 text-orange-700 dark:bg-orange-900/20 dark:border-orange-800 dark:text-orange-400'
                     }`}>
-                      <SelectValue />
+                      <SelectValue>
+                        <span className="flex items-center gap-2">
+                          <span 
+                            className="w-2 h-2 rounded-full shrink-0" 
+                            style={{ backgroundColor: (entry as any).status === 'paid' ? '#22c55e' : '#f97316' }}
+                          />
+                          {(entry as any).status === 'paid' ? t('finance.paid') : t('finance.open')}
+                        </span>
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="open">
                         <span className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-orange-500" />
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#f97316' }} />
                           {t('finance.open')}
                         </span>
                       </SelectItem>
                       <SelectItem value="paid">
                         <span className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full bg-green-500" />
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#22c55e' }} />
                           {t('finance.paid')}
                         </span>
                       </SelectItem>

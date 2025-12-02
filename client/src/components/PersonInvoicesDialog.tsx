@@ -53,16 +53,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange }: Per
     if (open && person?.id) {
       refetch();
     }
-  }, [open, person?.id, refetch]);
-
-  // Refresh every 5 seconds when dialog is open
-  useEffect(() => {
-    if (!open) return;
-    const interval = setInterval(() => {
-      refetch();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [open, refetch]);
+  }, [open, person?.id]);
 
   const formatDate = (date: Date | any) => {
     if (!date) return '-';

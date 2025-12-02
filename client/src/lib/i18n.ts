@@ -101,7 +101,6 @@ const resources = {
         allCategories: 'Alle Kategorien',
         showingCategory: 'Zeigt',
         noIncome: 'Keine Einnahmen vorhanden',
-        description: 'Verwalten Sie Ihre Einnahmen und Ausgaben',
       },
       
       // Shopping List
@@ -354,7 +353,6 @@ const resources = {
         allCategories: 'All categories',
         showingCategory: 'Showing',
         noIncome: 'No income entries',
-        description: 'Manage your income and expenses',
       },
       
       // Shopping List

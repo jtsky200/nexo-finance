@@ -28,7 +28,21 @@ export const getReminders = onCall(async (request) => {
   }
 
   const snapshot = await query.orderBy('dueDate').get();
-  const reminders = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const reminders = snapshot.docs.map(doc => {
+    const data = doc.data();
+    // Convert Firestore Timestamps to ISO strings for proper serialization
+    const reminder: any = { id: doc.id, ...data };
+    if (data.dueDate && typeof data.dueDate.toDate === 'function') {
+      reminder.dueDate = data.dueDate.toDate().toISOString();
+    }
+    if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+      reminder.createdAt = data.createdAt.toDate().toISOString();
+    }
+    if (data.updatedAt && typeof data.updatedAt.toDate === 'function') {
+      reminder.updatedAt = data.updatedAt.toDate().toISOString();
+    }
+    return reminder;
+  });
 
   return { reminders };
 });
@@ -253,7 +267,18 @@ export const getTaxProfiles = onCall(async (request) => {
     .orderBy('taxYear', 'desc')
     .get();
 
-  const profiles = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const profiles = snapshot.docs.map(doc => {
+    const data = doc.data();
+    // Convert Firestore Timestamps to ISO strings for proper serialization
+    const profile: any = { id: doc.id, ...data };
+    if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+      profile.createdAt = data.createdAt.toDate().toISOString();
+    }
+    if (data.updatedAt && typeof data.updatedAt.toDate === 'function') {
+      profile.updatedAt = data.updatedAt.toDate().toISOString();
+    }
+    return profile;
+  });
 
   return { profiles };
 });
@@ -391,7 +416,18 @@ export const getPeople = onCall(async (request) => {
 
   const userId = request.auth.uid;
   const snapshot = await db.collection('people').where('userId', '==', userId).orderBy('name').get();
-  const people = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const people = snapshot.docs.map(doc => {
+    const data = doc.data();
+    // Convert Firestore Timestamps to ISO strings for proper serialization
+    const person: any = { id: doc.id, ...data };
+    if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+      person.createdAt = data.createdAt.toDate().toISOString();
+    }
+    if (data.updatedAt && typeof data.updatedAt.toDate === 'function') {
+      person.updatedAt = data.updatedAt.toDate().toISOString();
+    }
+    return person;
+  });
 
   return { people };
 });
@@ -509,7 +545,21 @@ export const getPersonInvoices = onCall(async (request) => {
   }
 
   const snapshot = await personRef.collection('invoices').orderBy('date', 'desc').get();
-  const invoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const invoices = snapshot.docs.map(doc => {
+    const data = doc.data();
+    // Convert Firestore Timestamps to ISO strings for proper serialization
+    const invoice: any = { id: doc.id, ...data };
+    if (data.date && typeof data.date.toDate === 'function') {
+      invoice.date = data.date.toDate().toISOString();
+    }
+    if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+      invoice.createdAt = data.createdAt.toDate().toISOString();
+    }
+    if (data.updatedAt && typeof data.updatedAt.toDate === 'function') {
+      invoice.updatedAt = data.updatedAt.toDate().toISOString();
+    }
+    return invoice;
+  });
 
   return { invoices };
 });
@@ -765,7 +815,21 @@ export const getShoppingList = onCall(async (request) => {
   }
 
   const snapshot = await query.orderBy('createdAt', 'desc').get();
-  const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const items = snapshot.docs.map(doc => {
+    const data = doc.data();
+    // Convert Firestore Timestamps to ISO strings for proper serialization
+    const item: any = { id: doc.id, ...data };
+    if (data.boughtAt && typeof data.boughtAt.toDate === 'function') {
+      item.boughtAt = data.boughtAt.toDate().toISOString();
+    }
+    if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+      item.createdAt = data.createdAt.toDate().toISOString();
+    }
+    if (data.updatedAt && typeof data.updatedAt.toDate === 'function') {
+      item.updatedAt = data.updatedAt.toDate().toISOString();
+    }
+    return item;
+  });
 
   return { items };
 });

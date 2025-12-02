@@ -48,19 +48,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setError(null);
       const provider = new GoogleAuthProvider();
+      provider.addScope('email');
+      provider.addScope('profile');
       provider.setCustomParameters({
         prompt: 'select_account'
       });
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      console.log('Google Sign-In successful:', result.user.email);
     } catch (err: any) {
       console.error('Google Sign-In Error:', err);
-      const errorMessage = err.code === 'auth/popup-blocked' 
-        ? 'Popup wurde blockiert. Bitte erlauben Sie Popups für diese Seite.'
-        : err.code === 'auth/unauthorized-domain'
-        ? 'Diese Domain ist nicht autorisiert. Bitte kontaktieren Sie den Administrator.'
-        : err.message || 'Ein Fehler ist aufgetreten';
+      console.error('Error code:', err.code);
+      console.error('Error message:', err.message);
+      
+      let errorMessage = 'Ein Fehler ist aufgetreten';
+      
+      switch (err.code) {
+        case 'auth/popup-blocked':
+          errorMessage = 'Popup wurde blockiert. Bitte erlauben Sie Popups für diese Seite.';
+          break;
+        case 'auth/popup-closed-by-user':
+          errorMessage = 'Anmeldung abgebrochen.';
+          break;
+        case 'auth/unauthorized-domain':
+          errorMessage = 'Diese Domain ist nicht für Google Sign-In autorisiert. Bitte fügen Sie die Domain in der Firebase Console hinzu.';
+          break;
+        case 'auth/cancelled-popup-request':
+          errorMessage = 'Nur ein Popup kann gleichzeitig geöffnet sein.';
+          break;
+        case 'auth/operation-not-allowed':
+          errorMessage = 'Google Sign-In ist nicht aktiviert. Bitte aktivieren Sie es in der Firebase Console.';
+          break;
+        case 'auth/network-request-failed':
+          errorMessage = 'Netzwerkfehler. Bitte überprüfen Sie Ihre Internetverbindung.';
+          break;
+        default:
+          errorMessage = err.message || 'Ein unbekannter Fehler ist aufgetreten';
+      }
+      
       setError(errorMessage);
-      throw err;
+      throw new Error(errorMessage);
     }
   };
 

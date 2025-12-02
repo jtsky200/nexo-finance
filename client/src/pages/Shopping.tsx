@@ -23,6 +23,7 @@ import {
 import { useShoppingList, createShoppingItem, deleteShoppingItem, markShoppingItemAsBought, createFinanceEntry } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
 // Swiss stores
 const stores = [
@@ -38,13 +39,13 @@ const stores = [
 ];
 
 // Category icons and colors
-const categoryConfig: Record<string, { icon: any; color: string; bg: string }> = {
-  'Lebensmittel': { icon: Apple, color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30' },
-  'Haushalt': { icon: HomeIcon, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
-  'Hygiene': { icon: Heart, color: 'text-pink-600', bg: 'bg-pink-100 dark:bg-pink-900/30' },
-  'Elektronik': { icon: Zap, color: 'text-yellow-600', bg: 'bg-yellow-100 dark:bg-yellow-900/30' },
-  'Kleidung': { icon: Shirt, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30' },
-  'Sonstiges': { icon: Package, color: 'text-gray-600', bg: 'bg-gray-100 dark:bg-gray-900/30' },
+const categoryConfig: Record<string, { icon: any; color: string; bg: string; chartColor: string }> = {
+  'Lebensmittel': { icon: Apple, color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30', chartColor: '#16a34a' },
+  'Haushalt': { icon: HomeIcon, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30', chartColor: '#2563eb' },
+  'Hygiene': { icon: Heart, color: 'text-pink-600', bg: 'bg-pink-100 dark:bg-pink-900/30', chartColor: '#db2777' },
+  'Elektronik': { icon: Zap, color: 'text-yellow-600', bg: 'bg-yellow-100 dark:bg-yellow-900/30', chartColor: '#ca8a04' },
+  'Kleidung': { icon: Shirt, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30', chartColor: '#9333ea' },
+  'Sonstiges': { icon: Package, color: 'text-gray-600', bg: 'bg-gray-100 dark:bg-gray-900/30', chartColor: '#6b7280' },
 };
 
 // Default quick add templates
@@ -190,6 +191,26 @@ export default function Shopping() {
     });
     return groups;
   }, [notBoughtItems]);
+
+  // Chart data for category breakdown
+  const categoryChartData = useMemo(() => {
+    const allItems = [...notBoughtItems, ...boughtItems];
+    const categoryTotals: Record<string, number> = {};
+    
+    allItems.forEach(item => {
+      const price = (item.actualPrice || item.estimatedPrice) * item.quantity / 100;
+      categoryTotals[item.category] = (categoryTotals[item.category] || 0) + price;
+    });
+
+    return Object.entries(categoryTotals)
+      .map(([name, value]) => ({
+        name,
+        value: Math.round(value * 100) / 100,
+        color: categoryConfig[name]?.chartColor || '#6b7280'
+      }))
+      .filter(item => item.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [notBoughtItems, boughtItems]);
 
   // Budget handlers
   const handleSetBudget = () => {
@@ -494,135 +515,243 @@ export default function Shopping() {
   return (
     <Layout title={t('shopping.title')}>
       <div className="space-y-6">
-        {/* Header with Budget */}
-        <div className="flex flex-col lg:flex-row gap-4">
-          {/* Budget Card */}
-          <Card className="flex-1">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2.5 rounded-lg ${isOverBudget ? 'bg-red-100 dark:bg-red-900/30' : 'bg-primary/10'}`}>
-                    <Wallet className={`w-5 h-5 ${isOverBudget ? 'text-red-600' : 'text-primary'}`} />
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Budget</p>
-                    {budget.isSet ? (
-                      <p className="text-xl font-bold">CHF {budget.amount.toFixed(2)}</p>
-                    ) : (
-                      <Button 
-                        variant="link" 
-                        className="p-0 h-auto text-lg font-bold text-primary"
-                        onClick={() => setShowBudgetDialog(true)}
-                      >
-                        Budget setzen
-                      </Button>
-                    )}
-                  </div>
+        {/* Stats Overview */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Budget */}
+          <Card className="col-span-1">
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-xl ${isOverBudget ? 'bg-red-100 dark:bg-red-900/30' : 'bg-blue-100 dark:bg-blue-900/30'}`}>
+                  <Wallet className={`w-5 h-5 ${isOverBudget ? 'text-red-600' : 'text-blue-600'}`} />
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground">Ausgegeben</p>
-                  <p className={`text-xl font-bold ${isOverBudget ? 'text-red-600' : 'text-orange-600'}`}>
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium">Budget</p>
+                  {budget.isSet ? (
+                    <p className="text-lg font-bold">CHF {budget.amount.toFixed(0)}</p>
+                  ) : (
+                    <Button 
+                      variant="link" 
+                      className="p-0 h-auto text-sm font-semibold text-blue-600"
+                      onClick={() => setShowBudgetDialog(true)}
+                    >
+                      Setzen →
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Spent */}
+          <Card className="col-span-1">
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-xl ${isOverBudget ? 'bg-red-100 dark:bg-red-900/30' : 'bg-orange-100 dark:bg-orange-900/30'}`}>
+                  <Banknote className={`w-5 h-5 ${isOverBudget ? 'text-red-600' : 'text-orange-600'}`} />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium">Ausgegeben</p>
+                  <p className={`text-lg font-bold ${isOverBudget ? 'text-red-600' : 'text-orange-600'}`}>
                     CHF {totalSpent.toFixed(2)}
                   </p>
                 </div>
               </div>
-              
-              {budget.isSet && (
-                <>
+            </CardContent>
+          </Card>
+
+          {/* Open Items */}
+          <Card className="col-span-1">
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-900/30">
+                  <ShoppingCart className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium">Offen</p>
+                  <p className="text-lg font-bold">{notBoughtItems.length} <span className="text-sm font-normal text-muted-foreground">Artikel</span></p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Bought Items */}
+          <Card className="col-span-1">
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-green-100 dark:bg-green-900/30">
+                  <Check className="w-5 h-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium">Eingekauft</p>
+                  <p className="text-lg font-bold">{boughtItems.length} <span className="text-sm font-normal text-muted-foreground">Artikel</span></p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Budget Progress & Category Chart */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Budget Progress */}
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-medium">Budget-Übersicht</CardTitle>
+                {budget.isSet && (
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => setShowBudgetDialog(true)}>
+                      <Edit2 className="w-3 h-3" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={handleClearBudget}>
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {budget.isSet ? (
+                <div className="space-y-4">
+                  <div className="flex items-end justify-between">
+                    <div>
+                      <p className="text-2xl font-bold">CHF {budgetRemaining.toFixed(2)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {isOverBudget ? 'über Budget' : 'verbleibend'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-muted-foreground">
+                        {Math.round(budgetProgress)}% verwendet
+                      </p>
+                    </div>
+                  </div>
                   <Progress 
                     value={Math.min(budgetProgress, 100)} 
-                    className={`h-2 ${isOverBudget ? '[&>div]:bg-red-500' : ''}`} 
+                    className={`h-3 ${isOverBudget ? '[&>div]:bg-red-500' : '[&>div]:bg-gradient-to-r [&>div]:from-blue-500 [&>div]:to-blue-600'}`} 
                   />
-                  <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                    <span>{notBoughtItems.length} Artikel offen (ca. CHF {totalEstimated.toFixed(2)})</span>
-                    <span className={isOverBudget ? 'text-red-600 font-medium' : ''}>
-                      {isOverBudget 
-                        ? `CHF ${Math.abs(budgetRemaining).toFixed(2)} über Budget!` 
-                        : `CHF ${budgetRemaining.toFixed(2)} übrig`}
-                    </span>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>CHF {totalSpent.toFixed(2)} ausgegeben</span>
+                    <span>CHF {budget.amount.toFixed(2)} Budget</span>
                   </div>
-                </>
-              )}
-              
-              {!budget.isSet && (
-                <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                  <span>{notBoughtItems.length} Artikel offen</span>
-                  <span>{boughtItems.length} eingekauft</span>
-                </div>
-              )}
-              
-              {budget.isSet && (
-                <div className="flex gap-2 mt-4">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => setShowBudgetDialog(true)}
-                  >
-                    <Edit2 className="w-3 h-3 mr-1" />
-                    Ändern
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={handleClearBudget}
-                  >
-                    Zurücksetzen
-                  </Button>
                   {totalSpent > 0 && (
                     <Button 
-                      variant="default" 
+                      variant="outline" 
                       size="sm"
-                      className="ml-auto"
+                      className="w-full"
                       onClick={handleSyncToFinance}
                     >
-                      <Banknote className="w-3 h-3 mr-1" />
-                      Zu Finanzen
+                      <Banknote className="w-4 h-4 mr-2" />
+                      CHF {totalSpent.toFixed(2)} zu Finanzen hinzufügen
                     </Button>
                   )}
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <Wallet className="w-10 h-10 mx-auto text-muted-foreground/30 mb-3" />
+                  <p className="text-sm text-muted-foreground mb-3">Kein Budget gesetzt</p>
+                  <Button onClick={() => setShowBudgetDialog(true)}>
+                    Budget setzen
+                  </Button>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Quick Actions */}
-          <Card className="lg:w-80 flex items-center">
-            <CardContent className="py-4 w-full">
-              <div className="grid grid-cols-2 gap-2">
-                <Button 
-                  variant="outline" 
-                  className="h-auto py-3 flex-col gap-1"
-                  onClick={() => setShowTemplateDialog(true)}
-                >
-                  <ListChecks className="w-5 h-5" />
-                  <span className="text-xs">Vorlagen</span>
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="h-auto py-3 flex-col gap-1"
-                  onClick={() => setShowReceiptScanner(true)}
-                >
-                  <ScanLine className="w-5 h-5" />
-                  <span className="text-xs">Quittung</span>
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="h-auto py-3 flex-col gap-1"
-                  onClick={() => setShowQuickAddManager(true)}
-                >
-                  <Settings className="w-5 h-5" />
-                  <span className="text-xs">Schnell-Art.</span>
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="h-auto py-3 flex-col gap-1"
-                  onClick={handleShareList}
-                >
-                  <Share2 className="w-5 h-5" />
-                  <span className="text-xs">Teilen</span>
-                </Button>
-              </div>
+          {/* Category Chart */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Nach Kategorie</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {categoryChartData.length > 0 ? (
+                <div className="flex items-center gap-4">
+                  <div className="w-24 h-24">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={categoryChartData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={25}
+                          outerRadius={40}
+                          paddingAngle={2}
+                          dataKey="value"
+                        >
+                          {categoryChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    {categoryChartData.slice(0, 4).map((cat) => (
+                      <div key={cat.name} className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <span 
+                            className="w-2 h-2 rounded-full" 
+                            style={{ backgroundColor: cat.color }}
+                          />
+                          <span className="truncate max-w-[80px]">{cat.name}</span>
+                        </div>
+                        <span className="font-medium">CHF {cat.value.toFixed(0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-xs text-muted-foreground">Noch keine Artikel</p>
+                </div>
+              )}
             </CardContent>
           </Card>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="flex flex-wrap gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => setShowTemplateDialog(true)}
+          >
+            <ListChecks className="w-4 h-4 mr-2" />
+            Vorlagen
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => setShowReceiptScanner(true)}
+          >
+            <ScanLine className="w-4 h-4 mr-2" />
+            Quittung scannen
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => setShowQuickAddManager(true)}
+          >
+            <Settings className="w-4 h-4 mr-2" />
+            Schnell-Artikel
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={handleShareList}
+          >
+            <Share2 className="w-4 h-4 mr-2" />
+            Teilen
+          </Button>
+          {boughtItems.length > 0 && (
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => setShowClearConfirm(true)}
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Aufräumen
+            </Button>
+          )}
         </div>
 
         {/* Quick Add Section */}

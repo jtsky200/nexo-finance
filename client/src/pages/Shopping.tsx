@@ -555,7 +555,7 @@ export default function Shopping() {
               </CardHeader>
               <CardContent className="py-0 pb-3">
                 {boughtItems.length === 0 ? (
-                  <div className="flex items-center justify-center min-h-[120px]">
+                  <div className="flex items-center justify-center min-h-[180px]">
                     <p className="text-sm text-muted-foreground">
                       Noch nichts eingekauft
                     </p>

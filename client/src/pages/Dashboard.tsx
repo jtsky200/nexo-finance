@@ -84,13 +84,13 @@ export default function Dashboard() {
     fetchTaxProfile();
   }, [currentYear]);
 
-  // Calculate totals
+  // Calculate totals - only count PAID expenses (consistent with Finance page)
   const totalIncome = financeEntries
     .filter(e => e.type === 'einnahme')
     .reduce((sum, e) => sum + e.amount, 0) / 100;
 
   const totalExpenses = financeEntries
-    .filter(e => e.type === 'ausgabe')
+    .filter(e => e.type === 'ausgabe' && (e as any).status === 'paid')
     .reduce((sum, e) => sum + e.amount, 0) / 100;
 
   const balance = totalIncome - totalExpenses;
@@ -173,7 +173,7 @@ export default function Dashboard() {
                   return (
                     <div
                       key={item.id}
-                      className={`flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer ${isOverdue ? 'bg-red-50' : ''}`}
+                      className={`flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer ${isOverdue ? 'bg-red-50 dark:bg-red-900/20' : ''}`}
                       onClick={() => setLocation('/reminders')}
                     >
                       <div className={`p-1.5 rounded ${item.type === 'termin' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
@@ -245,7 +245,7 @@ export default function Dashboard() {
                   return (
                     <div
                       key={bill.id}
-                      className={`flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer ${isOverdue ? 'bg-red-50' : isDueSoon ? 'bg-orange-50' : ''}`}
+                      className={`flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer ${isOverdue ? 'bg-red-50 dark:bg-red-900/20' : isDueSoon ? 'bg-orange-50 dark:bg-orange-900/20' : ''}`}
                       onClick={() => setLocation('/bills')}
                     >
                       <div className="p-1.5 rounded bg-green-100 text-green-600">

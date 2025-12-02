@@ -910,7 +910,7 @@ export default function Shopping() {
         {/* Filters */}
         <div className="flex flex-wrap gap-3 items-center mb-4">
           <Select value={filterCategory} onValueChange={setFilterCategory}>
-            <SelectTrigger className="w-[180px] h-9">
+            <SelectTrigger className="w-[160px] h-9">
               <Tag className="w-4 h-4 mr-2 shrink-0" />
               <SelectValue placeholder="Kategorie" />
             </SelectTrigger>
@@ -934,7 +934,7 @@ export default function Shopping() {
             </SelectContent>
           </Select>
           <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
-            <SelectTrigger className="w-[170px] h-9">
+            <SelectTrigger className="w-[160px] h-9">
               <SelectValue placeholder="Sortieren" />
             </SelectTrigger>
             <SelectContent>

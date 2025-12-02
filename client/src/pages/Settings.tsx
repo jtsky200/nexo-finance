@@ -142,7 +142,7 @@ export default function Settings() {
 
   return (
     <Layout title={t('settings.title')}>
-      <div className="max-w-2xl space-y-6">
+      <div className="max-w-2xl mx-auto space-y-6">
         {/* Profile Settings */}
         <Card>
           <CardHeader>

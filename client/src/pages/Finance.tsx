@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, ArrowUp, ArrowDown, Users, ShoppingCart, Trash2, Eye, Filter, X, Download, BarChart3 } from 'lucide-react';
-import { useFinanceEntries, usePeople, usePersonDebts, createPerson, deletePerson, updateFinanceEntry } from '@/lib/firebaseHooks';
+import { useFinanceEntries, usePeople, usePersonDebts, createPerson, deletePerson, updateFinanceEntry, deleteFinanceEntry } from '@/lib/firebaseHooks';
 import AddFinanceEntryDialog from '@/components/AddFinanceEntryDialog';
 import ShoppingListModal from '@/components/ShoppingListModal';
 import PersonInvoicesDialog from '@/components/PersonInvoicesDialog';
@@ -35,6 +35,8 @@ export default function Finance() {
     entry: any;
     newStatus: string;
   } | null>(null);
+  const [showClearAllDialog, setShowClearAllDialog] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
   const { data: allEntries = [], isLoading, refetch } = useFinanceEntries();
 
@@ -162,6 +164,38 @@ export default function Finance() {
 
   // Colors for pie chart
   const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'];
+
+  // Clear all entries function
+  const handleClearAllEntries = async () => {
+    if (allEntries.length === 0) {
+      toast.info(t('finance.noEntriesToDelete', 'Keine Einträge zum Löschen vorhanden'));
+      setShowClearAllDialog(false);
+      return;
+    }
+
+    setIsClearing(true);
+    try {
+      // Delete all entries one by one
+      for (const entry of allEntries) {
+        await deleteFinanceEntry(entry.id);
+      }
+      
+      // Reset filters
+      setCategoryFilter('all');
+      setActiveTab('overview');
+      
+      // Refresh data
+      await refetch();
+      
+      toast.success(t('finance.allEntriesDeleted', `${allEntries.length} Einträge gelöscht`));
+    } catch (error: any) {
+      console.error('Error clearing entries:', error);
+      toast.error(t('finance.clearError', 'Fehler beim Löschen: ') + error.message);
+    } finally {
+      setIsClearing(false);
+      setShowClearAllDialog(false);
+    }
+  };
 
   // Export functions
   const exportToCSV = () => {
@@ -555,6 +589,16 @@ export default function Finance() {
                 <Button variant="outline" size="sm" onClick={exportToPDF}>
                   <Download className="w-4 h-4 mr-2" />
                   PDF
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowClearAllDialog(true)}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                  disabled={allEntries.length === 0}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  {t('finance.clearAll', 'Alle löschen')}
                 </Button>
               </div>
             </div>
@@ -980,6 +1024,45 @@ export default function Finance() {
               className="bg-green-600 hover:bg-green-700"
             >
               Als bezahlt markieren
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Clear All Entries Confirmation Dialog */}
+      <AlertDialog open={showClearAllDialog} onOpenChange={setShowClearAllDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="w-5 h-5" />
+              {t('finance.clearAllTitle', 'Alle Einträge löschen?')}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                {t('finance.clearAllWarning', 'Diese Aktion kann nicht rückgängig gemacht werden.')}
+              </p>
+              <p className="font-medium text-foreground">
+                {t('finance.clearAllCount', `Es werden ${allEntries.length} Einträge gelöscht.`)}
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isClearing}>
+              {t('common.cancel', 'Abbrechen')}
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleClearAllEntries}
+              className="bg-red-600 hover:bg-red-700"
+              disabled={isClearing}
+            >
+              {isClearing ? (
+                <>
+                  <span className="animate-spin mr-2">⏳</span>
+                  {t('common.deleting', 'Löschen...')}
+                </>
+              ) : (
+                t('finance.clearAllConfirm', 'Ja, alle löschen')
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -583,8 +583,7 @@ export default function Finance() {
         {categoryData.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-                <div className="w-5 h-5 rounded-full bg-gradient-to-r from-red-500 to-orange-500" />
+              <CardTitle className="text-base sm:text-lg">
                 {t('finance.categoryBreakdown', 'Ausgaben nach Kategorie')}
               </CardTitle>
               <CardDescription>

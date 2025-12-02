@@ -627,7 +627,7 @@ export default function Shopping() {
                   </div>
                   <Progress 
                     value={Math.min(budgetProgress, 100)} 
-                    className={`h-3 ${isOverBudget ? '[&>div]:bg-red-500' : '[&>div]:bg-gradient-to-r [&>div]:from-blue-500 [&>div]:to-blue-600'}`} 
+                    className={`h-3 ${isOverBudget ? '[&>div]:bg-red-500' : '[&>div]:bg-primary'}`} 
                   />
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>CHF {totalSpent.toFixed(2)} ausgegeben</span>

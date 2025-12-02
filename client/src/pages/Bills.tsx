@@ -288,6 +288,7 @@ export default function Bills() {
           currency: bill.currency || 'CHF',
           notes: `Bezahlt: ${bill.title}`,
           paymentMethod: 'Überweisung',
+          isRecurring: false,
         });
       }
       

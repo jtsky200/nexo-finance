@@ -369,7 +369,9 @@ export default function Finance() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <p className="font-medium text-foreground">{entry.category}</p>
-                    <Badge variant="outline" className="text-xs">{entry.paymentMethod || 'N/A'}</Badge>
+                    {entry.paymentMethod && (
+                      <Badge variant="outline" className="text-xs">{entry.paymentMethod}</Badge>
+                    )}
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {formatDate(entry.date)}
@@ -389,8 +391,8 @@ export default function Finance() {
                   {entryType === 'einnahme' ? '+' : '-'}
                   {formatAmount(entry.amount, entry.currency)}
                 </p>
-                {/* Status dropdown only for expenses (Ausgaben) */}
-                {entryType === 'ausgabe' && (
+                {/* Status dropdown only for expenses (Ausgaben) - check entry.type directly */}
+                {(entry.type === 'ausgabe' || entryType === 'ausgabe') && (
                   <Select
                     value={(entry as any).status || 'open'}
                     onValueChange={(value) => handleStatusChangeRequest(entry.id, entry, value)}

@@ -605,7 +605,7 @@ export const createInvoice = onCall(async (request) => {
   }
 
   const userId = request.auth.uid;
-  const { personId, amount, description, date, status, direction, dueDate, reminderDate, reminderEnabled, notes } = request.data;
+  const { personId, amount, description, date, status, direction, dueDate, reminderDate, reminderEnabled, notes, isRecurring, recurringInterval } = request.data;
 
   // Verify person belongs to user
   const personRef = db.collection('people').doc(personId);
@@ -639,6 +639,23 @@ export const createInvoice = onCall(async (request) => {
   if (reminderEnabled && reminderDate) {
     invoiceData.reminderEnabled = true;
     invoiceData.reminderDate = admin.firestore.Timestamp.fromDate(new Date(reminderDate));
+  }
+
+  // Add recurring settings
+  if (isRecurring && recurringInterval) {
+    invoiceData.isRecurring = true;
+    invoiceData.recurringInterval = recurringInterval;
+    // Calculate next due date based on interval
+    if (dueDate) {
+      const nextDue = new Date(dueDate);
+      switch (recurringInterval) {
+        case 'weekly': nextDue.setDate(nextDue.getDate() + 7); break;
+        case 'monthly': nextDue.setMonth(nextDue.getMonth() + 1); break;
+        case 'quarterly': nextDue.setMonth(nextDue.getMonth() + 3); break;
+        case 'yearly': nextDue.setFullYear(nextDue.getFullYear() + 1); break;
+      }
+      invoiceData.nextDueDate = admin.firestore.Timestamp.fromDate(nextDue);
+    }
   }
 
   const docRef = await personRef.collection('invoices').add(invoiceData);
@@ -1223,6 +1240,98 @@ export const processRecurringEntries = onSchedule({
   }
 
   console.log(`Processed recurring entries. Created ${createdCount} new entries.`);
+});
+
+// Process recurring invoices - runs daily at midnight (Europe/Zurich)
+export const processRecurringInvoices = onSchedule({
+  schedule: '0 1 * * *', // Run at 1 AM
+  timeZone: 'Europe/Zurich',
+}, async () => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Get all people
+  const peopleSnapshot = await db.collection('people').get();
+  let createdCount = 0;
+
+  for (const personDoc of peopleSnapshot.docs) {
+    // Get recurring invoices for this person
+    const invoicesSnapshot = await personDoc.ref
+      .collection('invoices')
+      .where('isRecurring', '==', true)
+      .get();
+
+    for (const invoiceDoc of invoicesSnapshot.docs) {
+      const invoice = invoiceDoc.data();
+      
+      // Check if nextDueDate has passed
+      if (invoice.nextDueDate) {
+        const nextDue = invoice.nextDueDate.toDate();
+        nextDue.setHours(0, 0, 0, 0);
+
+        if (nextDue <= today) {
+          // Create new invoice
+          const newDueDate = new Date(nextDue);
+
+          // Calculate reminder offset from due date
+          let reminderOffset = 0;
+          if (invoice.dueDate && invoice.reminderDate) {
+            const originalDue = invoice.dueDate.toDate();
+            const originalReminder = invoice.reminderDate.toDate();
+            reminderOffset = Math.floor((originalDue.getTime() - originalReminder.getTime()) / (1000 * 60 * 60 * 24));
+          }
+
+          const newInvoiceData: any = {
+            amount: invoice.amount,
+            description: invoice.description,
+            date: admin.firestore.Timestamp.fromDate(today),
+            dueDate: admin.firestore.Timestamp.fromDate(newDueDate),
+            status: 'open',
+            direction: invoice.direction,
+            notes: invoice.notes,
+            isRecurring: false, // The new invoice is not recurring
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          };
+
+          // Add reminder if enabled
+          if (invoice.reminderEnabled && reminderOffset > 0) {
+            const newReminder = new Date(newDueDate);
+            newReminder.setDate(newReminder.getDate() - reminderOffset);
+            newInvoiceData.reminderEnabled = true;
+            newInvoiceData.reminderDate = admin.firestore.Timestamp.fromDate(newReminder);
+          }
+
+          await personDoc.ref.collection('invoices').add(newInvoiceData);
+
+          // Calculate next due date for the recurring invoice
+          const nextNextDue = new Date(nextDue);
+          switch (invoice.recurringInterval) {
+            case 'weekly': nextNextDue.setDate(nextNextDue.getDate() + 7); break;
+            case 'monthly': nextNextDue.setMonth(nextNextDue.getMonth() + 1); break;
+            case 'quarterly': nextNextDue.setMonth(nextNextDue.getMonth() + 3); break;
+            case 'yearly': nextNextDue.setFullYear(nextNextDue.getFullYear() + 1); break;
+          }
+
+          // Update the recurring invoice's next due date
+          await invoiceDoc.ref.update({
+            nextDueDate: admin.firestore.Timestamp.fromDate(nextNextDue),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          // Update person's totalOwed
+          await personDoc.ref.update({
+            totalOwed: admin.firestore.FieldValue.increment(invoice.amount),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+
+          createdCount++;
+        }
+      }
+    }
+  }
+
+  console.log(`Processed recurring invoices. Created ${createdCount} new invoices.`);
 });
 
 // ========== Budget Functions ==========

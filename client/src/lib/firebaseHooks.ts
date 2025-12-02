@@ -443,6 +443,8 @@ export interface Invoice {
   dueDate?: Date; // Fälligkeitsdatum
   reminderDate?: Date; // Erinnerungsdatum
   reminderEnabled?: boolean;
+  isRecurring?: boolean; // Wiederkehrende Rechnung
+  recurringInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
   status: 'open' | 'paid' | 'postponed';
   direction: 'incoming' | 'outgoing'; // incoming = Person schuldet mir, outgoing = Ich schulde Person
   notes?: string;
@@ -505,6 +507,8 @@ export async function createInvoice(personId: string, data: {
   reminderDate?: Date;
   reminderEnabled?: boolean;
   notes?: string;
+  isRecurring?: boolean;
+  recurringInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
 }) {
   const createInvoiceFunc = httpsCallable(functions, 'createInvoice');
   const result = await createInvoiceFunc({ personId, ...data });

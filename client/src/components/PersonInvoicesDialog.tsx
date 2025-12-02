@@ -10,7 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
   Plus, Trash2, Edit2, Camera, QrCode, Copy, 
-  FileText, X, Calendar, Bell, Clock, ArrowDownLeft, ArrowUpRight
+  FileText, X, Calendar, Bell, Clock, ArrowDownLeft, ArrowUpRight, Repeat
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
@@ -44,6 +44,8 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     dueDate: '',
     reminderEnabled: false,
     reminderDate: '',
+    isRecurring: false,
+    recurringInterval: 'monthly' as 'weekly' | 'monthly' | 'quarterly' | 'yearly',
     status: 'open',
     direction: 'incoming' as 'incoming' | 'outgoing', // incoming = Person schuldet mir, outgoing = Ich schulde Person
     notes: '',
@@ -102,6 +104,8 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         reminderEnabled: newInvoice.reminderEnabled,
         reminderDate: newInvoice.reminderDate ? new Date(newInvoice.reminderDate) : undefined,
         notes: newInvoice.notes || undefined,
+        isRecurring: newInvoice.isRecurring,
+        recurringInterval: newInvoice.isRecurring ? newInvoice.recurringInterval : undefined,
       });
       
       toast.success('Rechnung hinzugefügt');
@@ -112,6 +116,8 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         dueDate: '',
         reminderEnabled: false,
         reminderDate: '',
+        isRecurring: false,
+        recurringInterval: 'monthly',
         status: 'open',
         direction: person?.type === 'external' ? 'incoming' : 'outgoing',
         notes: '',
@@ -537,6 +543,47 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     Die Erinnerung erscheint im Kalender
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Wiederkehrende Rechnung */}
+            <div className="space-y-3 p-4 border rounded-lg">
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  id="isRecurring"
+                  checked={newInvoice.isRecurring}
+                  onCheckedChange={(checked) => setNewInvoice({ 
+                    ...newInvoice, 
+                    isRecurring: checked as boolean
+                  })}
+                />
+                <Label htmlFor="isRecurring" className="flex items-center gap-2 cursor-pointer">
+                  <Repeat className="w-4 h-4" />
+                  Wiederkehrende Rechnung
+                </Label>
+              </div>
+              
+              {newInvoice.isRecurring && (
+                <div>
+                  <Label>Wiederholungsintervall</Label>
+                  <Select
+                    value={newInvoice.recurringInterval}
+                    onValueChange={(value: any) => setNewInvoice({ ...newInvoice, recurringInterval: value })}
+                  >
+                    <SelectTrigger className="mt-2 h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="weekly">Wöchentlich</SelectItem>
+                      <SelectItem value="monthly">Monatlich</SelectItem>
+                      <SelectItem value="quarterly">Vierteljährlich</SelectItem>
+                      <SelectItem value="yearly">Jährlich</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Die Rechnung wird automatisch zum Fälligkeitsdatum neu erstellt
                   </p>
                 </div>
               )}

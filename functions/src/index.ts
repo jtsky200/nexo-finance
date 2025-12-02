@@ -417,18 +417,36 @@ export const getPeople = onCall(async (request) => {
 
   const userId = request.auth.uid;
   const snapshot = await db.collection('people').where('userId', '==', userId).orderBy('name').get();
-  const people = snapshot.docs.map(doc => {
+  
+  // Get people with their invoices
+  const people = await Promise.all(snapshot.docs.map(async (doc) => {
     const data = doc.data();
-    // Convert Firestore Timestamps to ISO strings for proper serialization
     const person: any = { id: doc.id, ...data };
+    
+    // Convert Firestore Timestamps to ISO strings
     if (data.createdAt && typeof data.createdAt.toDate === 'function') {
       person.createdAt = data.createdAt.toDate().toISOString();
     }
     if (data.updatedAt && typeof data.updatedAt.toDate === 'function') {
       person.updatedAt = data.updatedAt.toDate().toISOString();
     }
+    
+    // Load invoices for this person
+    const invoicesSnapshot = await db.collection('people').doc(doc.id).collection('invoices').get();
+    person.invoices = invoicesSnapshot.docs.map(invDoc => {
+      const invData = invDoc.data();
+      const invoice: any = { id: invDoc.id, ...invData };
+      if (invData.date && typeof invData.date.toDate === 'function') {
+        invoice.date = invData.date.toDate().toISOString();
+      }
+      if (invData.createdAt && typeof invData.createdAt.toDate === 'function') {
+        invoice.createdAt = invData.createdAt.toDate().toISOString();
+      }
+      return invoice;
+    });
+    
     return person;
-  });
+  }));
 
   return { people };
 });

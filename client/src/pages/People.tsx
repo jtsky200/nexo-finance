@@ -10,10 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
-  Plus, Users, Trash2, Edit2, Eye, Search, 
-  Phone, Mail, CreditCard, AlertCircle, CheckCircle2,
-  Clock, ArrowUpRight, ArrowDownRight, Filter, MoreVertical,
-  Camera, FileText
+  Plus, Trash2, Edit2, Eye, Search, 
+  Phone, Mail, Filter, FileText
 } from 'lucide-react';
 import { usePeople, usePersonDebts, createPerson, deletePerson, updatePerson } from '@/lib/firebaseHooks';
 import PersonInvoicesDialog from '@/components/PersonInvoicesDialog';
@@ -190,57 +188,29 @@ export default function People() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                  <Users className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">{t('people.totalPeople', 'Personen')}</p>
-                  <p className="text-2xl font-bold">{stats.totalPeople}</p>
-                </div>
-              </div>
+              <p className="text-sm text-muted-foreground mb-1">{t('people.totalPeople', 'Personen')}</p>
+              <p className="text-2xl font-bold">{stats.totalPeople}</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-red-200 dark:border-red-900">
+            <CardContent className="pt-6">
+              <p className="text-sm text-muted-foreground mb-1">{t('people.openDebts', 'Offene Schulden')}</p>
+              <p className="text-2xl font-bold text-red-600">{formatAmount(stats.totalOpenDebt)}</p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-green-200 dark:border-green-900">
+            <CardContent className="pt-6">
+              <p className="text-sm text-muted-foreground mb-1">{t('people.totalPaid', 'Bezahlt')}</p>
+              <p className="text-2xl font-bold text-green-600">{formatAmount(stats.totalPaid)}</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
-                  <AlertCircle className="w-5 h-5 text-red-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">{t('people.openDebts', 'Offene Schulden')}</p>
-                  <p className="text-2xl font-bold text-red-600">{formatAmount(stats.totalOpenDebt)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                  <CheckCircle2 className="w-5 h-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">{t('people.totalPaid', 'Bezahlt')}</p>
-                  <p className="text-2xl font-bold text-green-600">{formatAmount(stats.totalPaid)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
-                  <Clock className="w-5 h-5 text-orange-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">{t('people.withOpenDebt', 'Mit Schulden')}</p>
-                  <p className="text-2xl font-bold text-orange-600">{stats.peopleWithOpenDebt}</p>
-                </div>
-              </div>
+              <p className="text-sm text-muted-foreground mb-1">{t('people.withOpenDebt', 'Mit Schulden')}</p>
+              <p className="text-2xl font-bold">{stats.peopleWithOpenDebt}</p>
             </CardContent>
           </Card>
         </div>

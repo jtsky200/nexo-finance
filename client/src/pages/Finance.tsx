@@ -30,8 +30,13 @@ export default function Finance() {
   const [activeTab, setActiveTab] = useState('overview');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [deletePersonId, setDeletePersonId] = useState<string | null>(null);
+  const [statusChangeConfirm, setStatusChangeConfirm] = useState<{
+    entryId: string;
+    entry: any;
+    newStatus: string;
+  } | null>(null);
 
-  const { data: allEntries = [], isLoading } = useFinanceEntries();
+  const { data: allEntries = [], isLoading, refetch } = useFinanceEntries();
 
   // Get unique categories from all entries
   const categories = useMemo(() => {
@@ -306,12 +311,22 @@ export default function Finance() {
     }
   };
 
-  const handleStatusChange = async (entryId: string, newStatus: string) => {
+  const handleStatusChangeRequest = (entryId: string, entry: any, newStatus: string) => {
+    // Only show confirmation when changing to "paid"
+    if (newStatus === 'paid' && (entry.status || 'open') !== 'paid') {
+      setStatusChangeConfirm({ entryId, entry, newStatus });
+    } else {
+      // Direct change for reopening
+      confirmStatusChange(entryId, newStatus);
+    }
+  };
+
+  const confirmStatusChange = async (entryId: string, newStatus: string) => {
     try {
       await updateFinanceEntry(entryId, { status: newStatus } as any);
-      toast.success(t('finance.statusUpdated'));
-      // Reload page to refresh data
-      window.location.reload();
+      toast.success(newStatus === 'paid' ? 'Als bezahlt markiert ✓' : 'Status aktualisiert');
+      setStatusChangeConfirm(null);
+      refetch();
     } catch (error: any) {
       toast.error(t('common.error') + ': ' + error.message);
     }
@@ -378,7 +393,7 @@ export default function Finance() {
                 {entryType === 'ausgabe' && (
                   <Select
                     value={(entry as any).status || 'open'}
-                    onValueChange={(value) => handleStatusChange(entry.id, value)}
+                    onValueChange={(value) => handleStatusChangeRequest(entry.id, entry, value)}
                   >
                     <SelectTrigger className={`h-8 text-xs w-[100px] ${
                       (entry as any).status === 'paid' 
@@ -868,6 +883,47 @@ export default function Finance() {
             <AlertDialogCancel>{t('common.cancel', 'Abbrechen')}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeletePerson} className="bg-red-600 hover:bg-red-700">
               {t('common.delete', 'Löschen')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Status Change Confirmation Dialog */}
+      <AlertDialog open={!!statusChangeConfirm} onOpenChange={(open) => !open && setStatusChangeConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-green-500" />
+              Ausgabe als bezahlt markieren?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <div className="bg-muted/50 rounded-lg p-3 mt-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-foreground">
+                    {statusChangeConfirm?.entry?.category || 'Ausgabe'}
+                  </span>
+                  <span className="text-sm font-bold text-red-600">
+                    -{formatAmount(statusChangeConfirm?.entry?.amount || 0, statusChangeConfirm?.entry?.currency || 'CHF')}
+                  </span>
+                </div>
+                {statusChangeConfirm?.entry?.notes && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {statusChangeConfirm.entry.notes}
+                  </p>
+                )}
+              </div>
+              <p className="text-sm">
+                Diese Ausgabe wird als <span className="font-medium text-green-600">bezahlt</span> markiert.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => statusChangeConfirm && confirmStatusChange(statusChangeConfirm.entryId, statusChangeConfirm.newStatus)}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Als bezahlt markieren
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

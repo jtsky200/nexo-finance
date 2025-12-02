@@ -68,7 +68,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4">
+        <nav className="flex-1 px-3 py-4 flex flex-col gap-2">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location === item.path;
@@ -81,7 +81,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
               >
                 <a
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-md transition-colors",
+                    "flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors",
                     "hover:bg-accent hover:text-accent-foreground",
                     isActive 
                       ? "bg-primary text-primary-foreground" 

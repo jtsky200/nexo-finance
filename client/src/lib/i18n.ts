@@ -107,6 +107,29 @@ const resources = {
         last6Months: 'Einnahmen vs. Ausgaben der letzten 6 Monate',
         exportSuccess: 'Export erfolgreich',
         exportError: 'Export fehlgeschlagen',
+        // Recurring
+        recurring: 'Wiederkehrend',
+        recurrenceRule: 'Wiederholungsregel',
+        daily: 'Täglich',
+        weekly: 'Wöchentlich',
+        monthly: 'Monatlich',
+        yearly: 'Jährlich',
+        recurringHint: 'Dieser Eintrag wird automatisch wiederholt erstellt.',
+        // Budget
+        budget: 'Budget',
+        budgets: 'Budgets',
+        setBudget: 'Budget festlegen',
+        budgetAmount: 'Budget-Betrag',
+        budgetUsed: 'Verbraucht',
+        budgetRemaining: 'Verbleibend',
+        budgetExceeded: 'Budget überschritten',
+        noBudgets: 'Noch keine Budgets festgelegt',
+        addBudget: 'Budget hinzufügen',
+        editBudget: 'Budget bearbeiten',
+        deleteBudget: 'Budget löschen',
+        budgetPeriod: 'Zeitraum',
+        // Categories breakdown
+        categoryBreakdown: 'Ausgaben nach Kategorie',
       },
       
       // Shopping List
@@ -365,6 +388,29 @@ const resources = {
         last6Months: 'Income vs. Expenses over the last 6 months',
         exportSuccess: 'Export successful',
         exportError: 'Export failed',
+        // Recurring
+        recurring: 'Recurring',
+        recurrenceRule: 'Recurrence Rule',
+        daily: 'Daily',
+        weekly: 'Weekly',
+        monthly: 'Monthly',
+        yearly: 'Yearly',
+        recurringHint: 'This entry will be automatically recreated.',
+        // Budget
+        budget: 'Budget',
+        budgets: 'Budgets',
+        setBudget: 'Set Budget',
+        budgetAmount: 'Budget Amount',
+        budgetUsed: 'Used',
+        budgetRemaining: 'Remaining',
+        budgetExceeded: 'Budget exceeded',
+        noBudgets: 'No budgets set yet',
+        addBudget: 'Add Budget',
+        editBudget: 'Edit Budget',
+        deleteBudget: 'Delete Budget',
+        budgetPeriod: 'Period',
+        // Categories breakdown
+        categoryBreakdown: 'Expenses by Category',
       },
       
       // Shopping List

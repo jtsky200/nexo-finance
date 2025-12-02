@@ -17,6 +17,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { RefreshCw } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -33,6 +35,8 @@ const financeSchema = z.object({
   currency: z.string(),
   paymentMethod: z.string().optional(),
   notes: z.string().optional(),
+  isRecurring: z.boolean().optional(),
+  recurrenceRule: z.string().optional(),
 });
 
 type FinanceFormData = z.infer<typeof financeSchema>;
@@ -51,12 +55,17 @@ export default function AddFinanceEntryDialog({
   const { t } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrenceRule, setRecurrenceRule] = useState('monthly');
+
   const form = useForm<FinanceFormData>({
     resolver: zodResolver(financeSchema),
     defaultValues: {
       type: defaultType,
       currency: 'CHF',
       date: new Date().toISOString().slice(0, 16),
+      isRecurring: false,
+      recurrenceRule: 'monthly',
     },
   });
 
@@ -85,7 +94,8 @@ export default function AddFinanceEntryDialog({
         currency: data.currency,
         paymentMethod: data.paymentMethod,
         notes: data.notes,
-        isRecurring: false,
+        isRecurring: isRecurring,
+        recurrenceRule: isRecurring ? recurrenceRule : undefined,
       });
 
       toast.success('Eintrag erfolgreich erstellt');
@@ -211,6 +221,43 @@ export default function AddFinanceEntryDialog({
               placeholder="Optionale Notizen..."
               rows={3}
             />
+          </div>
+
+          {/* Recurring Entry Section */}
+          <div className="space-y-3 p-4 bg-muted/50 rounded-lg border">
+            <div className="flex items-center space-x-3">
+              <Checkbox
+                id="isRecurring"
+                checked={isRecurring}
+                onCheckedChange={(checked) => setIsRecurring(checked === true)}
+              />
+              <div className="flex items-center gap-2">
+                <RefreshCw className="h-4 w-4 text-muted-foreground" />
+                <Label htmlFor="isRecurring" className="cursor-pointer font-medium">
+                  {t('finance.recurring')}
+                </Label>
+              </div>
+            </div>
+            
+            {isRecurring && (
+              <div className="space-y-2 pt-2">
+                <Label>{t('finance.recurrenceRule')}</Label>
+                <Select value={recurrenceRule} onValueChange={setRecurrenceRule}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="daily">{t('finance.daily')}</SelectItem>
+                    <SelectItem value="weekly">{t('finance.weekly')}</SelectItem>
+                    <SelectItem value="monthly">{t('finance.monthly')}</SelectItem>
+                    <SelectItem value="yearly">{t('finance.yearly')}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {t('finance.recurringHint')}
+                </p>
+              </div>
+            )}
           </div>
 
           <DialogFooter>

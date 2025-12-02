@@ -1,4 +1,5 @@
 import {onCall, HttpsError} from 'firebase-functions/v2/https';
+import {onSchedule} from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
 
 admin.initializeApp();
@@ -967,5 +968,181 @@ export const markShoppingItemAsBought = onCall(async (request) => {
     return { success: true, expenseId: expenseRef.id };
   }
 
+  return { success: true };
+});
+
+// ========== Scheduled Functions ==========
+
+// Process recurring finance entries - runs daily at midnight (Europe/Zurich)
+export const processRecurringEntries = onSchedule({
+  schedule: '0 0 * * *',
+  timeZone: 'Europe/Zurich',
+}, async () => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Get all recurring entries
+  const recurringSnapshot = await db
+    .collection('financeEntries')
+    .where('isRecurring', '==', true)
+    .get();
+
+  let createdCount = 0;
+
+  for (const doc of recurringSnapshot.docs) {
+    const entry = doc.data();
+    const lastDate = entry.date.toDate();
+    lastDate.setHours(0, 0, 0, 0);
+
+    // Calculate days difference
+    const daysDiff = Math.floor((today.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Check if we need to create a new entry based on recurrence rule
+    let shouldCreate = false;
+
+    switch (entry.recurrenceRule) {
+      case 'daily':
+        shouldCreate = daysDiff >= 1;
+        break;
+      case 'weekly':
+        shouldCreate = daysDiff >= 7;
+        break;
+      case 'monthly':
+        // Check if a month has passed
+        const lastMonth = lastDate.getMonth();
+        const lastYear = lastDate.getFullYear();
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
+        shouldCreate = (currentYear > lastYear) || (currentYear === lastYear && currentMonth > lastMonth);
+        break;
+      case 'yearly':
+        shouldCreate = daysDiff >= 365;
+        break;
+    }
+
+    if (shouldCreate) {
+      // Create new entry with today's date
+      await db.collection('financeEntries').add({
+        userId: entry.userId,
+        type: entry.type,
+        category: entry.category,
+        amount: entry.amount,
+        currency: entry.currency,
+        paymentMethod: entry.paymentMethod,
+        notes: `${entry.notes || ''} (Automatisch erstellt)`.trim(),
+        isRecurring: false, // The new entry is not recurring, only the original
+        recurrenceRule: null,
+        date: admin.firestore.Timestamp.fromDate(today),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      // Update the original recurring entry's date to today
+      await doc.ref.update({
+        date: admin.firestore.Timestamp.fromDate(today),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      createdCount++;
+    }
+  }
+
+  console.log(`Processed recurring entries. Created ${createdCount} new entries.`);
+});
+
+// ========== Budget Functions ==========
+
+export const getBudgets = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const snapshot = await db.collection('budgets')
+    .where('userId', '==', userId)
+    .get();
+
+  const budgets = snapshot.docs.map(doc => {
+    const data = doc.data();
+    const budget: any = { id: doc.id, ...data };
+    if (data.createdAt && typeof data.createdAt.toDate === 'function') {
+      budget.createdAt = data.createdAt.toDate().toISOString();
+    }
+    if (data.updatedAt && typeof data.updatedAt.toDate === 'function') {
+      budget.updatedAt = data.updatedAt.toDate().toISOString();
+    }
+    return budget;
+  });
+
+  return { budgets };
+});
+
+export const createBudget = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { category, amount, period, currency } = request.data;
+
+  const budgetData = {
+    userId,
+    category,
+    amount,
+    period: period || 'monthly', // monthly, yearly
+    currency: currency || 'CHF',
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  const docRef = await db.collection('budgets').add(budgetData);
+  return { id: docRef.id, ...budgetData };
+});
+
+export const updateBudget = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { id, ...updateData } = request.data;
+
+  const docRef = db.collection('budgets').doc(id);
+  const doc = await docRef.get();
+
+  if (!doc.exists) {
+    throw new HttpsError('not-found', 'Budget not found');
+  }
+
+  if (doc.data()?.userId !== userId) {
+    throw new HttpsError('permission-denied', 'Not authorized');
+  }
+
+  updateData.updatedAt = admin.firestore.FieldValue.serverTimestamp();
+  await docRef.update(updateData);
+
+  return { success: true };
+});
+
+export const deleteBudget = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { id } = request.data;
+
+  const docRef = db.collection('budgets').doc(id);
+  const doc = await docRef.get();
+
+  if (!doc.exists) {
+    throw new HttpsError('not-found', 'Budget not found');
+  }
+
+  if (doc.data()?.userId !== userId) {
+    throw new HttpsError('permission-denied', 'Not authorized');
+  }
+
+  await docRef.delete();
   return { success: true };
 });

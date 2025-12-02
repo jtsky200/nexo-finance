@@ -15,7 +15,7 @@ import AddFinanceEntryDialog from '@/components/AddFinanceEntryDialog';
 import ShoppingListModal from '@/components/ShoppingListModal';
 import PersonInvoicesDialog from '@/components/PersonInvoicesDialog';
 import { toast } from 'sonner';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 export default function Finance() {
   const { t } = useTranslation();
@@ -123,6 +123,23 @@ export default function Finance() {
 
     return Object.values(months);
   }, [allEntries]);
+
+  // Category breakdown for pie chart
+  const categoryData = useMemo(() => {
+    const categories: { [key: string]: number } = {};
+    
+    expenseEntries.forEach(entry => {
+      const cat = entry.category || 'Sonstiges';
+      categories[cat] = (categories[cat] || 0) + entry.amount / 100;
+    });
+
+    return Object.entries(categories)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [expenseEntries]);
+
+  // Colors for pie chart
+  const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'];
 
   // Export functions
   const exportToCSV = () => {
@@ -490,6 +507,90 @@ export default function Finance() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Charts Row - Pie Chart for Categories */}
+        {categoryData.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+                <div className="w-5 h-5 rounded-full bg-gradient-to-r from-red-500 to-orange-500" />
+                {t('finance.categoryBreakdown', 'Ausgaben nach Kategorie')}
+              </CardTitle>
+              <CardDescription>
+                {t('finance.totalExpenses')}: {formatAmount(totalExpenses * 100)}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col lg:flex-row items-center gap-6">
+                <div className="h-[250px] w-full lg:w-1/2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={categoryData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={2}
+                        dataKey="value"
+                      >
+                        {categoryData.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        formatter={(value: number) => [`CHF ${value.toFixed(2)}`, '']}
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--background))', 
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px'
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="w-full lg:w-1/2 space-y-2">
+                  {categoryData.slice(0, 6).map((cat, index) => {
+                    const percentage = totalExpenses > 0 ? (cat.value / totalExpenses * 100) : 0;
+                    return (
+                      <div key={cat.name} className="flex items-center gap-3">
+                        <div 
+                          className="w-3 h-3 rounded-full shrink-0" 
+                          style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm font-medium truncate">{cat.name}</span>
+                            <span className="text-sm text-muted-foreground ml-2">
+                              {percentage.toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-muted rounded-full h-1.5 mt-1">
+                            <div 
+                              className="h-1.5 rounded-full transition-all" 
+                              style={{ 
+                                width: `${percentage}%`,
+                                backgroundColor: COLORS[index % COLORS.length]
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <span className="text-sm font-medium w-20 text-right">
+                          CHF {cat.value.toFixed(0)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {categoryData.length > 6 && (
+                    <p className="text-xs text-muted-foreground text-center pt-2">
+                      +{categoryData.length - 6} weitere Kategorien
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Tabs */}
         <div className="space-y-4">

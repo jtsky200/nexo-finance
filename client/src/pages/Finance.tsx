@@ -352,15 +352,19 @@ export default function Finance() {
     return (
       <div className="space-y-2">
         {entries.map((entry) => {
-          const entryType = entry.type || type;
+          // Determine entry type - check entry.type first, then fallback to passed type
+          const isExpense = entry.type === 'ausgabe' || type === 'ausgabe';
+          const isIncome = entry.type === 'einnahme' || type === 'einnahme';
+          const entryType = entry.type || type || 'ausgabe'; // Default to ausgabe if unknown
+          
           return (
             <div
               key={entry.id}
               className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors gap-2"
             >
               <div className="flex items-start gap-3 flex-1">
-                <div className={`mt-1 ${entryType === 'einnahme' ? 'text-green-500' : 'text-red-500'}`}>
-                  {entryType === 'einnahme' ? (
+                <div className={`mt-1 ${isIncome ? 'text-green-500' : 'text-red-500'}`}>
+                  {isIncome ? (
                     <TrendingUp className="w-4 h-4" />
                   ) : (
                     <TrendingDown className="w-4 h-4" />
@@ -387,12 +391,12 @@ export default function Finance() {
                 </div>
               </div>
               <div className="flex items-center gap-2 sm:flex-col sm:items-end">
-                <p className={`font-semibold text-base sm:text-lg ${entryType === 'einnahme' ? 'text-green-600' : 'text-red-600'}`}>
-                  {entryType === 'einnahme' ? '+' : '-'}
+                <p className={`font-semibold text-base sm:text-lg ${isIncome ? 'text-green-600' : 'text-red-600'}`}>
+                  {isIncome ? '+' : '-'}
                   {formatAmount(entry.amount, entry.currency)}
                 </p>
-                {/* Status dropdown only for expenses (Ausgaben) - check entry.type directly */}
-                {(entry.type === 'ausgabe' || entryType === 'ausgabe') && (
+                {/* Status dropdown for all expenses */}
+                {!isIncome && (
                   <Select
                     value={(entry as any).status || 'open'}
                     onValueChange={(value) => handleStatusChangeRequest(entry.id, entry, value)}

@@ -585,8 +585,8 @@ export default function Shopping() {
           </Card>
 
           {/* Quick Actions */}
-          <Card className="lg:w-80">
-            <CardContent className="pt-6">
+          <Card className="lg:w-80 flex items-center">
+            <CardContent className="py-4 w-full">
               <div className="grid grid-cols-2 gap-2">
                 <Button 
                   variant="outline" 

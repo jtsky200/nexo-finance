@@ -185,7 +185,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange }: Per
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl w-full max-h-[85vh] flex flex-col p-0">
           {/* Header */}
-          <div className="p-6 border-b bg-muted/30">
+          <div className="p-6 pt-10 border-b bg-muted/30">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl font-bold">

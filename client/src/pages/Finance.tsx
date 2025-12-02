@@ -870,11 +870,6 @@ export default function Finance() {
 
             <div className="flex justify-between items-center">
               <h2 className="text-lg sm:text-xl font-semibold">{t('finance.quickOverview', 'Schnellübersicht')}</h2>
-              <Button size="sm" onClick={() => setShowAddPersonDialog(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                <span className="hidden sm:inline">{t('finance.addPerson')}</span>
-                <span className="sm:hidden">+</span>
-              </Button>
             </div>
 
             <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">

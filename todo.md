@@ -217,7 +217,14 @@
 - [x] Fix paymentMethod translation - Added "Zahlungsmethode" translation
 - [x] Test button interactions - Eintrag hinzufügen works
 - [x] Deploy fixes to Firebase - Deployed successfully
-- [ ] Fix status dropdown not working when changed
+- [x] Fix status dropdown not working when changed - Fixed handleStatusChange to update status field
+- [x] Test all status changes on live site - Status dropdown works correctly
 - [ ] Fix date not being saved correctly (shows N/A even after entry with date)
-- [ ] Investigate why updateFinanceEntry doesn't trigger
-- [ ] Test all status changes on live site
+- [ ] Investigate date serialization issue in Cloud Functions
+
+## GitHub Repository Setup (2025-12-01)
+- [x] Create GitHub repository: nexo-finance
+- [x] Remove sensitive files from git (Firebase credentials)
+- [x] Add comprehensive README.md
+- [x] Push clean code to GitHub
+- [x] Repository URL: https://github.com/jtsky200/nexo-finance

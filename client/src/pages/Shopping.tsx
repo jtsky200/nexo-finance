@@ -451,16 +451,16 @@ export default function Shopping() {
             {/* Items grouped by category */}
             {isLoading ? (
               <Card>
-                <CardContent className="py-12 text-center text-muted-foreground">
+                <CardContent className="py-8 text-center text-muted-foreground">
                   Wird geladen...
                 </CardContent>
               </Card>
             ) : notBoughtItems.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <ShoppingBag className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                  <p className="text-muted-foreground">Deine Einkaufsliste ist leer</p>
-                  <p className="text-sm text-muted-foreground mt-1">
+              <Card className="h-fit">
+                <CardContent className="py-8 text-center">
+                  <ShoppingBag className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+                  <p className="text-muted-foreground text-sm">Deine Einkaufsliste ist leer</p>
+                  <p className="text-xs text-muted-foreground mt-1">
                     Füge Artikel hinzu oder nutze eine Vorlage
                   </p>
                 </CardContent>
@@ -534,7 +534,7 @@ export default function Shopping() {
 
           {/* Sidebar - Bought Items */}
           <div className="space-y-4">
-            <Card>
+            <Card className="h-fit">
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm flex items-center gap-2">
@@ -550,23 +550,21 @@ export default function Shopping() {
               </CardHeader>
               <CardContent className="py-0 pb-3">
                 {boughtItems.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-6">
+                  <p className="text-sm text-muted-foreground text-center py-4">
                     Noch nichts eingekauft
                   </p>
                 ) : (
-                  <div className="space-y-1 max-h-[400px] overflow-y-auto">
+                  <div className="space-y-1 max-h-[300px] overflow-y-auto">
                     {boughtItems.map((item) => (
                       <div
                         key={item.id}
-                        className="flex items-center gap-3 p-2 rounded-lg bg-muted/30"
+                        className="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-muted/50 group"
                       >
                         <Check className="w-4 h-4 text-green-600 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm line-through text-muted-foreground truncate">
-                            {item.item}
-                          </p>
-                        </div>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="flex-1 text-sm line-through text-muted-foreground truncate">
+                          {item.item}
+                        </span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
                           {formatPrice(item.actualPrice || item.estimatedPrice)}
                         </span>
                       </div>
@@ -576,18 +574,14 @@ export default function Shopping() {
               </CardContent>
             </Card>
 
-            {/* Tips Card */}
-            <Card className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 border-amber-200/50">
-              <CardContent className="pt-4">
-                <div className="flex items-start gap-3">
-                  <Lightbulb className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-sm">Tipp</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Tippe auf die Checkbox, um einen Artikel als eingekauft zu markieren. 
-                      Der Betrag wird automatisch zu deinen Ausgaben hinzugefügt.
-                    </p>
-                  </div>
+            {/* Tips Card - only visible on hover */}
+            <Card className="bg-amber-50/50 dark:bg-amber-950/10 border-amber-200/30 opacity-0 hover:opacity-100 transition-opacity duration-300">
+              <CardContent className="py-3 px-4">
+                <div className="flex items-start gap-2">
+                  <Lightbulb className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-muted-foreground">
+                    Tippe auf die Checkbox, um einen Artikel als eingekauft zu markieren.
+                  </p>
                 </div>
               </CardContent>
             </Card>

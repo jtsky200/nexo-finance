@@ -415,51 +415,51 @@ export default function Shopping() {
           </CardContent>
         </Card>
 
-        {/* Shopping List */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          {/* Main List */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Filters */}
-            <div className="flex flex-wrap gap-2 items-center">
-              <Select value={filterCategory} onValueChange={setFilterCategory}>
-                <SelectTrigger className="w-[160px] h-9">
-                  <Tag className="w-4 h-4 mr-2" />
-                  <SelectValue placeholder="Kategorie" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alle Kategorien</SelectItem>
-                  {categories.map(cat => (
-                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
-                <SelectTrigger className="w-[140px] h-9">
-                  <SelectValue placeholder="Sortieren" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="category">Nach Kategorie</SelectItem>
-                  <SelectItem value="name">Nach Name</SelectItem>
-                  <SelectItem value="price">Nach Preis</SelectItem>
-                </SelectContent>
-              </Select>
-              {filterCategory !== 'all' && (
-                <Button variant="ghost" size="sm" onClick={() => setFilterCategory('all')}>
-                  Filter zurücksetzen
-                </Button>
-              )}
-            </div>
+        {/* Filters */}
+        <div className="flex flex-wrap gap-2 items-center mb-4">
+          <Select value={filterCategory} onValueChange={setFilterCategory}>
+            <SelectTrigger className="w-[160px] h-9">
+              <Tag className="w-4 h-4 mr-2" />
+              <SelectValue placeholder="Kategorie" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle Kategorien</SelectItem>
+              {categories.map(cat => (
+                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+            <SelectTrigger className="w-[140px] h-9">
+              <SelectValue placeholder="Sortieren" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="category">Nach Kategorie</SelectItem>
+              <SelectItem value="name">Nach Name</SelectItem>
+              <SelectItem value="price">Nach Preis</SelectItem>
+            </SelectContent>
+          </Select>
+          {filterCategory !== 'all' && (
+            <Button variant="ghost" size="sm" onClick={() => setFilterCategory('all')}>
+              Filter zurücksetzen
+            </Button>
+          )}
+        </div>
 
+        {/* Shopping List */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+          {/* Main List */}
+          <div className="lg:col-span-2">
             {/* Items grouped by category */}
             {isLoading ? (
-              <Card>
-                <CardContent className="py-8 text-center text-muted-foreground">
+              <Card className="h-full">
+                <CardContent className="py-8 text-center text-muted-foreground h-full flex items-center justify-center">
                   Wird geladen...
                 </CardContent>
               </Card>
             ) : notBoughtItems.length === 0 ? (
-              <Card className="h-fit">
-                <CardContent className="py-8 text-center">
+              <Card className="h-full">
+                <CardContent className="py-8 text-center h-full flex flex-col items-center justify-center">
                   <ShoppingBag className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
                   <p className="text-muted-foreground text-sm">Deine Einkaufsliste ist leer</p>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -535,11 +535,8 @@ export default function Shopping() {
           </div>
 
           {/* Sidebar - Bought Items */}
-          <div className="space-y-4">
-            {/* Spacer to align with filters on the left */}
-            <div className="h-9" />
-            
-            <Card className="h-fit">
+          <div>
+            <Card className="h-full flex flex-col">
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm flex items-center gap-2">
@@ -553,9 +550,9 @@ export default function Shopping() {
                   )}
                 </div>
               </CardHeader>
-              <CardContent className="py-0 pb-3">
+              <CardContent className="py-0 pb-3 flex-1 flex flex-col">
                 {boughtItems.length === 0 ? (
-                  <div className="flex items-center justify-center min-h-[180px]">
+                  <div className="flex-1 flex items-center justify-center">
                     <p className="text-sm text-muted-foreground">
                       Noch nichts eingekauft
                     </p>
@@ -578,18 +575,6 @@ export default function Shopping() {
                     ))}
                   </div>
                 )}
-              </CardContent>
-            </Card>
-
-            {/* Tips Card - only visible on hover */}
-            <Card className="bg-amber-50/50 dark:bg-amber-950/10 border-amber-200/30 opacity-0 hover:opacity-100 transition-opacity duration-300">
-              <CardContent className="py-3 px-4">
-                <div className="flex items-start gap-2">
-                  <Lightbulb className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                  <p className="text-xs text-muted-foreground">
-                    Tippe auf die Checkbox, um einen Artikel als eingekauft zu markieren.
-                  </p>
-                </div>
               </CardContent>
             </Card>
           </div>

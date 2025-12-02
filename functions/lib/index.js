@@ -804,7 +804,7 @@ exports.deleteInvoice = (0, https_1.onCall)(async (request) => {
 });
 // ========== Calendar Functions ==========
 exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
-    var _a;
+    var _a, _b;
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
@@ -868,23 +868,31 @@ exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
             }
         }
     }
-    // Get regular reminders (Termine & Aufgaben)
+    // Get regular reminders (Termine & Aufgaben) - field is 'dueDate' not 'date'
     const remindersSnapshot = await db.collection('reminders').where('userId', '==', userId).get();
     console.log(`Found ${remindersSnapshot.docs.length} reminders for user ${userId}`);
     for (const reminderDoc of remindersSnapshot.docs) {
         const reminderData = reminderDoc.data();
         let reminderDate;
-        // Handle different date formats
-        if ((_a = reminderData.date) === null || _a === void 0 ? void 0 : _a.toDate) {
+        // Handle different date formats - reminders use 'dueDate' field
+        if ((_a = reminderData.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) {
+            reminderDate = reminderData.dueDate.toDate();
+        }
+        else if (reminderData.dueDate) {
+            reminderDate = new Date(reminderData.dueDate);
+        }
+        else if ((_b = reminderData.date) === null || _b === void 0 ? void 0 : _b.toDate) {
+            // Fallback to 'date' field if exists
             reminderDate = reminderData.date.toDate();
         }
         else if (reminderData.date) {
             reminderDate = new Date(reminderData.date);
         }
         else {
-            console.log(`Reminder ${reminderDoc.id} has no date, skipping`);
+            console.log(`Reminder ${reminderDoc.id} has no date/dueDate, skipping`);
             continue;
         }
+        console.log(`Reminder ${reminderDoc.id}: ${reminderData.title} at ${reminderDate.toISOString()}`);
         // Filter by date range if provided - but be more lenient
         if (startDate && endDate) {
             const start = new Date(startDate);
@@ -894,24 +902,29 @@ exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
             const reminderDateOnly = new Date(reminderDate);
             reminderDateOnly.setHours(12, 0, 0, 0);
             if (reminderDateOnly < start || reminderDateOnly > end) {
+                console.log(`  -> Filtered out (outside range ${start.toISOString()} - ${end.toISOString()})`);
                 continue;
             }
         }
         // Extract time if available
         const hours = reminderDate.getHours();
         const minutes = reminderDate.getMinutes();
-        const timeStr = hours > 0 || minutes > 0 ?
+        const timeStr = (hours > 0 || minutes > 0) ?
             `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}` : undefined;
+        // Map reminder type to calendar event type
+        const eventType = reminderData.type === 'zahlung' ? 'reminder' : 'appointment';
         events.push({
             id: `appointment-${reminderDoc.id}`,
-            type: 'appointment',
+            type: eventType,
             title: reminderData.title,
             date: reminderDate.toISOString(),
             time: timeStr,
-            description: reminderData.description,
-            category: reminderData.category,
+            description: reminderData.notes || reminderData.description,
+            category: reminderData.type, // termin, aufgabe, zahlung
             priority: reminderData.priority,
-            completed: reminderData.completed || false,
+            completed: reminderData.status === 'erledigt',
+            amount: reminderData.amount,
+            currency: reminderData.currency,
         });
     }
     console.log(`Total events: ${events.length}`);

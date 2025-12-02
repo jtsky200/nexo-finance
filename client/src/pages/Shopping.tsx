@@ -779,10 +779,10 @@ export default function Shopping() {
         </Card>
 
         {/* Filters */}
-        <div className="flex flex-wrap gap-2 items-center mb-4">
+        <div className="flex flex-wrap gap-3 items-center mb-4">
           <Select value={filterCategory} onValueChange={setFilterCategory}>
-            <SelectTrigger className="w-[160px] h-9">
-              <Tag className="w-4 h-4 mr-2" />
+            <SelectTrigger className="w-[180px] h-9">
+              <Tag className="w-4 h-4 mr-2 shrink-0" />
               <SelectValue placeholder="Kategorie" />
             </SelectTrigger>
             <SelectContent>
@@ -793,8 +793,8 @@ export default function Shopping() {
             </SelectContent>
           </Select>
           <Select value={filterStore} onValueChange={setFilterStore}>
-            <SelectTrigger className="w-[140px] h-9">
-              <Store className="w-4 h-4 mr-2" />
+            <SelectTrigger className="w-[160px] h-9">
+              <Store className="w-4 h-4 mr-2 shrink-0" />
               <SelectValue placeholder="Laden" />
             </SelectTrigger>
             <SelectContent>
@@ -805,7 +805,7 @@ export default function Shopping() {
             </SelectContent>
           </Select>
           <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
-            <SelectTrigger className="w-[140px] h-9">
+            <SelectTrigger className="w-[170px] h-9">
               <SelectValue placeholder="Sortieren" />
             </SelectTrigger>
             <SelectContent>

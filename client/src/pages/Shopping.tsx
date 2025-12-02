@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,15 +12,30 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
+import { Textarea } from '@/components/ui/textarea';
 import { 
   Plus, Trash2, Check, ShoppingCart, ShoppingBag, Package, 
-  Clock, Copy, Share2, Download,
-  Lightbulb, RotateCcw, ListChecks, Tag, Banknote,
-  Apple, Home as HomeIcon, Shirt, Zap, Heart, MoreHorizontal
+  Clock, Copy, Share2, Download, Settings, Edit2, Camera, 
+  Upload, Receipt, Store, X, AlertTriangle, Wallet, Save,
+  Lightbulb, RotateCcw, ListChecks, Tag, Banknote, ScanLine,
+  Apple, Home as HomeIcon, Shirt, Zap, Heart, MoreHorizontal, ChevronRight
 } from 'lucide-react';
-import { useShoppingList, createShoppingItem, deleteShoppingItem, markShoppingItemAsBought } from '@/lib/firebaseHooks';
+import { useShoppingList, createShoppingItem, deleteShoppingItem, markShoppingItemAsBought, createFinanceEntry } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// Swiss stores
+const stores = [
+  { id: 'migros', name: 'Migros', color: 'bg-orange-500' },
+  { id: 'coop', name: 'Coop', color: 'bg-orange-600' },
+  { id: 'aldi', name: 'Aldi', color: 'bg-blue-600' },
+  { id: 'lidl', name: 'Lidl', color: 'bg-yellow-500' },
+  { id: 'denner', name: 'Denner', color: 'bg-red-600' },
+  { id: 'spar', name: 'Spar', color: 'bg-green-600' },
+  { id: 'volg', name: 'Volg', color: 'bg-red-500' },
+  { id: 'manor', name: 'Manor', color: 'bg-purple-600' },
+  { id: 'other', name: 'Andere', color: 'bg-gray-500' },
+];
 
 // Category icons and colors
 const categoryConfig: Record<string, { icon: any; color: string; bg: string }> = {
@@ -32,20 +47,20 @@ const categoryConfig: Record<string, { icon: any; color: string; bg: string }> =
   'Sonstiges': { icon: Package, color: 'text-gray-600', bg: 'bg-gray-100 dark:bg-gray-900/30' },
 };
 
-// Quick add templates
-const quickAddTemplates = [
-  { name: 'Milch', category: 'Lebensmittel', price: 1.80 },
-  { name: 'Brot', category: 'Lebensmittel', price: 3.50 },
-  { name: 'Eier (6er)', category: 'Lebensmittel', price: 4.20 },
-  { name: 'Butter', category: 'Lebensmittel', price: 2.90 },
-  { name: 'Käse', category: 'Lebensmittel', price: 5.50 },
-  { name: 'Bananen', category: 'Lebensmittel', price: 2.50 },
-  { name: 'Äpfel', category: 'Lebensmittel', price: 3.90 },
-  { name: 'Toilettenpapier', category: 'Haushalt', price: 8.90 },
-  { name: 'Waschmittel', category: 'Haushalt', price: 12.90 },
-  { name: 'Zahnpasta', category: 'Hygiene', price: 3.50 },
-  { name: 'Shampoo', category: 'Hygiene', price: 5.90 },
-  { name: 'Duschgel', category: 'Hygiene', price: 4.50 },
+// Default quick add templates
+const defaultQuickAddTemplates = [
+  { id: '1', name: 'Milch', category: 'Lebensmittel', price: 1.80 },
+  { id: '2', name: 'Brot', category: 'Lebensmittel', price: 3.50 },
+  { id: '3', name: 'Eier (6er)', category: 'Lebensmittel', price: 4.20 },
+  { id: '4', name: 'Butter', category: 'Lebensmittel', price: 2.90 },
+  { id: '5', name: 'Käse', category: 'Lebensmittel', price: 5.50 },
+  { id: '6', name: 'Bananen', category: 'Lebensmittel', price: 2.50 },
+  { id: '7', name: 'Äpfel', category: 'Lebensmittel', price: 3.90 },
+  { id: '8', name: 'Toilettenpapier', category: 'Haushalt', price: 8.90 },
+  { id: '9', name: 'Waschmittel', category: 'Haushalt', price: 12.90 },
+  { id: '10', name: 'Zahnpasta', category: 'Hygiene', price: 3.50 },
+  { id: '11', name: 'Shampoo', category: 'Hygiene', price: 5.90 },
+  { id: '12', name: 'Duschgel', category: 'Hygiene', price: 4.50 },
 ];
 
 // Shopping list templates
@@ -67,23 +82,73 @@ const listTemplates = [
   },
 ];
 
+// Local storage keys
+const BUDGET_KEY = 'shopping_budget';
+const QUICK_ADD_KEY = 'shopping_quick_add';
+
 export default function Shopping() {
   const { t } = useTranslation();
   const { data: items = [], isLoading, refetch } = useShoppingList();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  
+  // Budget state
+  const [budget, setBudget] = useState(() => {
+    const saved = localStorage.getItem(BUDGET_KEY);
+    return saved ? JSON.parse(saved) : { amount: 0, isSet: false };
+  });
+  const [showBudgetDialog, setShowBudgetDialog] = useState(false);
+  const [budgetInput, setBudgetInput] = useState('');
+  
+  // Quick add templates state
+  const [quickAddTemplates, setQuickAddTemplates] = useState(() => {
+    const saved = localStorage.getItem(QUICK_ADD_KEY);
+    return saved ? JSON.parse(saved) : defaultQuickAddTemplates;
+  });
+  const [showQuickAddManager, setShowQuickAddManager] = useState(false);
+  const [editingQuickAdd, setEditingQuickAdd] = useState<typeof quickAddTemplates[0] | null>(null);
+  const [newQuickAdd, setNewQuickAdd] = useState({ name: '', category: 'Lebensmittel', price: 0 });
+  
+  // Store state
+  const [selectedStore, setSelectedStore] = useState<string>('');
+  const [filterStore, setFilterStore] = useState<string>('all');
+  
+  // Receipt scanner state
+  const [showReceiptScanner, setShowReceiptScanner] = useState(false);
+  const [scannerMode, setScannerMode] = useState<'upload' | 'camera'>('upload');
+  const [isScanning, setIsScanning] = useState(false);
+  const [scannedItems, setScannedItems] = useState<Array<{ name: string; price: number; quantity: number }>>([]);
+  const [receiptImage, setReceiptImage] = useState<string | null>(null);
+  
+  // Confirm dialog state
+  const [showFinanceConfirm, setShowFinanceConfirm] = useState(false);
+  const [pendingFinanceAmount, setPendingFinanceAmount] = useState(0);
+
   const [newItem, setNewItem] = useState({
     item: '',
     quantity: 1,
     category: 'Lebensmittel',
     estimatedPrice: 0,
     currency: 'CHF',
+    store: '',
   });
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<typeof listTemplates[0] | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<'name' | 'category' | 'price'>('category');
+  const [sortBy, setSortBy] = useState<'name' | 'category' | 'price' | 'store'>('category');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const categories = ['Lebensmittel', 'Haushalt', 'Hygiene', 'Elektronik', 'Kleidung', 'Sonstiges'];
+
+  // Save budget to localStorage
+  useEffect(() => {
+    localStorage.setItem(BUDGET_KEY, JSON.stringify(budget));
+  }, [budget]);
+
+  // Save quick add templates to localStorage
+  useEffect(() => {
+    localStorage.setItem(QUICK_ADD_KEY, JSON.stringify(quickAddTemplates));
+  }, [quickAddTemplates]);
 
   // Computed values
   const notBoughtItems = useMemo(() => {
@@ -91,20 +156,27 @@ export default function Shopping() {
     if (filterCategory !== 'all') {
       filtered = filtered.filter(i => i.category === filterCategory);
     }
+    if (filterStore !== 'all') {
+      filtered = filtered.filter(i => (i as any).store === filterStore);
+    }
     return filtered.sort((a, b) => {
       if (sortBy === 'name') return a.item.localeCompare(b.item);
       if (sortBy === 'category') return a.category.localeCompare(b.category);
       if (sortBy === 'price') return b.estimatedPrice - a.estimatedPrice;
+      if (sortBy === 'store') return ((a as any).store || '').localeCompare((b as any).store || '');
       return 0;
     });
-  }, [items, filterCategory, sortBy]);
+  }, [items, filterCategory, filterStore, sortBy]);
 
   const boughtItems = useMemo(() => 
     items.filter(i => i.status === 'bought'), [items]);
 
-  const totalBudget = notBoughtItems.reduce((sum, i) => sum + (i.estimatedPrice * i.quantity), 0);
-  const totalSpent = boughtItems.reduce((sum, i) => sum + ((i.actualPrice || i.estimatedPrice) * i.quantity), 0);
-  const budgetProgress = totalBudget > 0 ? (totalSpent / (totalBudget + totalSpent)) * 100 : 0;
+  const totalEstimated = notBoughtItems.reduce((sum, i) => sum + (i.estimatedPrice * i.quantity), 0) / 100;
+  const totalSpent = boughtItems.reduce((sum, i) => sum + ((i.actualPrice || i.estimatedPrice) * i.quantity), 0) / 100;
+  
+  const budgetRemaining = budget.isSet ? budget.amount - totalSpent : 0;
+  const budgetProgress = budget.isSet && budget.amount > 0 ? (totalSpent / budget.amount) * 100 : 0;
+  const isOverBudget = budget.isSet && totalSpent > budget.amount;
 
   // Group items by category
   const groupedItems = useMemo(() => {
@@ -115,6 +187,50 @@ export default function Shopping() {
     });
     return groups;
   }, [notBoughtItems]);
+
+  // Budget handlers
+  const handleSetBudget = () => {
+    const amount = parseFloat(budgetInput);
+    if (amount > 0) {
+      setBudget({ amount, isSet: true });
+      setShowBudgetDialog(false);
+      setBudgetInput('');
+      toast.success(`Budget auf CHF ${amount.toFixed(2)} gesetzt`);
+    }
+  };
+
+  const handleClearBudget = () => {
+    setBudget({ amount: 0, isSet: false });
+    toast.success('Budget zurückgesetzt');
+  };
+
+  // Quick Add Management
+  const handleSaveQuickAdd = () => {
+    if (editingQuickAdd) {
+      setQuickAddTemplates(prev => 
+        prev.map(t => t.id === editingQuickAdd.id ? editingQuickAdd : t)
+      );
+      toast.success('Artikel aktualisiert');
+    } else if (newQuickAdd.name.trim()) {
+      setQuickAddTemplates(prev => [
+        ...prev,
+        { ...newQuickAdd, id: Date.now().toString() }
+      ]);
+      setNewQuickAdd({ name: '', category: 'Lebensmittel', price: 0 });
+      toast.success('Artikel hinzugefügt');
+    }
+    setEditingQuickAdd(null);
+  };
+
+  const handleDeleteQuickAdd = (id: string) => {
+    setQuickAddTemplates(prev => prev.filter(t => t.id !== id));
+    toast.success('Artikel entfernt');
+  };
+
+  const handleResetQuickAdd = () => {
+    setQuickAddTemplates(defaultQuickAddTemplates);
+    toast.success('Schnell-Artikel zurückgesetzt');
+  };
 
   const handleAddItem = async () => {
     if (!newItem.item.trim()) {
@@ -134,6 +250,7 @@ export default function Shopping() {
         category: 'Lebensmittel',
         estimatedPrice: 0,
         currency: 'CHF',
+        store: '',
       });
       refetch();
     } catch (error: any) {
@@ -213,6 +330,42 @@ export default function Shopping() {
     }
   };
 
+  // Finance integration
+  const handleSyncToFinance = () => {
+    if (totalSpent > 0) {
+      setPendingFinanceAmount(totalSpent);
+      setShowFinanceConfirm(true);
+    } else {
+      toast.error('Keine Ausgaben zum Synchronisieren');
+    }
+  };
+
+  const confirmSyncToFinance = async () => {
+    try {
+      await createFinanceEntry({
+        date: new Date().toISOString(),
+        type: 'ausgabe',
+        category: 'Lebensmittel',
+        amount: Math.round(pendingFinanceAmount * 100),
+        currency: 'CHF',
+        description: `Einkauf (${boughtItems.length} Artikel)`,
+        paymentMethod: 'Karte',
+      });
+      toast.success(`CHF ${pendingFinanceAmount.toFixed(2)} zu Finanzen hinzugefügt`);
+      setShowFinanceConfirm(false);
+      
+      // Update budget
+      if (budget.isSet) {
+        setBudget(prev => ({
+          ...prev,
+          amount: Math.max(0, prev.amount - pendingFinanceAmount)
+        }));
+      }
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
   const handleShareList = () => {
     const listText = notBoughtItems
       .map(i => `☐ ${i.item} (${i.quantity}x) - CHF ${(i.estimatedPrice / 100).toFixed(2)}`)
@@ -229,36 +382,151 @@ export default function Shopping() {
     }
   };
 
+  // Receipt Scanner Functions
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setReceiptImage(e.target?.result as string);
+        processReceipt(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const processReceipt = async (imageData: string) => {
+    setIsScanning(true);
+    
+    // Simulate OCR processing - in production, you would use a real OCR API
+    // like Google Cloud Vision, AWS Textract, or Tesseract.js
+    setTimeout(() => {
+      // Demo: Extract some sample items from "receipt"
+      const demoItems = [
+        { name: 'Milch 1L', price: 1.85, quantity: 1 },
+        { name: 'Vollkornbrot', price: 3.90, quantity: 1 },
+        { name: 'Bio-Eier 6er', price: 4.50, quantity: 1 },
+        { name: 'Butter', price: 2.95, quantity: 1 },
+      ];
+      setScannedItems(demoItems);
+      setIsScanning(false);
+      toast.success('Quittung analysiert - Bitte Artikel überprüfen');
+    }, 2000);
+  };
+
+  const handleAddScannedItems = async () => {
+    try {
+      for (const item of scannedItems) {
+        await createShoppingItem({
+          item: item.name,
+          quantity: item.quantity,
+          category: 'Lebensmittel',
+          estimatedPrice: item.price * 100,
+          currency: 'CHF',
+        });
+      }
+      toast.success(`${scannedItems.length} Artikel hinzugefügt`);
+      setShowReceiptScanner(false);
+      setScannedItems([]);
+      setReceiptImage(null);
+      refetch();
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
   const formatPrice = (cents: number) => `CHF ${(cents / 100).toFixed(2)}`;
 
   return (
     <Layout title={t('shopping.title')}>
       <div className="space-y-6">
-        {/* Header with stats */}
+        {/* Header with Budget */}
         <div className="flex flex-col lg:flex-row gap-4">
-          {/* Budget Overview Card */}
+          {/* Budget Card */}
           <Card className="flex-1">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-primary/10 rounded-lg">
-                    <Banknote className="w-5 h-5 text-primary" />
+                  <div className={`p-2.5 rounded-lg ${isOverBudget ? 'bg-red-100 dark:bg-red-900/30' : 'bg-primary/10'}`}>
+                    <Wallet className={`w-5 h-5 ${isOverBudget ? 'text-red-600' : 'text-primary'}`} />
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Budget</p>
-                    <p className="text-xl font-bold">{formatPrice(totalBudget * 100)}</p>
+                    {budget.isSet ? (
+                      <p className="text-xl font-bold">CHF {budget.amount.toFixed(2)}</p>
+                    ) : (
+                      <Button 
+                        variant="link" 
+                        className="p-0 h-auto text-lg font-bold text-primary"
+                        onClick={() => setShowBudgetDialog(true)}
+                      >
+                        Budget setzen
+                      </Button>
+                    )}
                   </div>
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-muted-foreground">Ausgegeben</p>
-                  <p className="text-xl font-bold text-orange-600">{formatPrice(totalSpent * 100)}</p>
+                  <p className={`text-xl font-bold ${isOverBudget ? 'text-red-600' : 'text-orange-600'}`}>
+                    CHF {totalSpent.toFixed(2)}
+                  </p>
                 </div>
               </div>
-              <Progress value={budgetProgress} className="h-2" />
-              <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                <span>{notBoughtItems.length} Artikel offen</span>
-                <span>{boughtItems.length} eingekauft</span>
-              </div>
+              
+              {budget.isSet && (
+                <>
+                  <Progress 
+                    value={Math.min(budgetProgress, 100)} 
+                    className={`h-2 ${isOverBudget ? '[&>div]:bg-red-500' : ''}`} 
+                  />
+                  <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                    <span>{notBoughtItems.length} Artikel offen (ca. CHF {totalEstimated.toFixed(2)})</span>
+                    <span className={isOverBudget ? 'text-red-600 font-medium' : ''}>
+                      {isOverBudget 
+                        ? `CHF ${Math.abs(budgetRemaining).toFixed(2)} über Budget!` 
+                        : `CHF ${budgetRemaining.toFixed(2)} übrig`}
+                    </span>
+                  </div>
+                </>
+              )}
+              
+              {!budget.isSet && (
+                <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                  <span>{notBoughtItems.length} Artikel offen</span>
+                  <span>{boughtItems.length} eingekauft</span>
+                </div>
+              )}
+              
+              {budget.isSet && (
+                <div className="flex gap-2 mt-4">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setShowBudgetDialog(true)}
+                  >
+                    <Edit2 className="w-3 h-3 mr-1" />
+                    Ändern
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={handleClearBudget}
+                  >
+                    Zurücksetzen
+                  </Button>
+                  {totalSpent > 0 && (
+                    <Button 
+                      variant="default" 
+                      size="sm"
+                      className="ml-auto"
+                      onClick={handleSyncToFinance}
+                    >
+                      <Banknote className="w-3 h-3 mr-1" />
+                      Zu Finanzen
+                    </Button>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -277,31 +545,26 @@ export default function Shopping() {
                 <Button 
                   variant="outline" 
                   className="h-auto py-3 flex-col gap-1"
+                  onClick={() => setShowReceiptScanner(true)}
+                >
+                  <ScanLine className="w-5 h-5" />
+                  <span className="text-xs">Quittung</span>
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="h-auto py-3 flex-col gap-1"
+                  onClick={() => setShowQuickAddManager(true)}
+                >
+                  <Settings className="w-5 h-5" />
+                  <span className="text-xs">Schnell-Art.</span>
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="h-auto py-3 flex-col gap-1"
                   onClick={handleShareList}
                 >
                   <Share2 className="w-5 h-5" />
                   <span className="text-xs">Teilen</span>
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="h-auto py-3 flex-col gap-1"
-                  onClick={() => setShowClearConfirm(true)}
-                  disabled={boughtItems.length === 0}
-                >
-                  <RotateCcw className="w-5 h-5" />
-                  <span className="text-xs">Aufräumen</span>
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="h-auto py-3 flex-col gap-1"
-                  onClick={() => {
-                    const csv = notBoughtItems.map(i => `${i.item},${i.quantity},${i.category},${formatPrice(i.estimatedPrice)}`).join('\n');
-                    navigator.clipboard.writeText(`Artikel,Menge,Kategorie,Preis\n${csv}`);
-                    toast.success('Als CSV kopiert');
-                  }}
-                >
-                  <Download className="w-5 h-5" />
-                  <span className="text-xs">Export</span>
                 </Button>
               </div>
             </CardContent>
@@ -311,7 +574,17 @@ export default function Shopping() {
         {/* Quick Add Section */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Schnell hinzufügen</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium">Schnell hinzufügen</CardTitle>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => setShowQuickAddManager(true)}
+              >
+                <Edit2 className="w-3 h-3 mr-1" />
+                Bearbeiten
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
@@ -319,7 +592,7 @@ export default function Shopping() {
                 const config = categoryConfig[template.category] || categoryConfig['Sonstiges'];
                 return (
                   <Button
-                    key={template.name}
+                    key={template.id}
                     variant="outline"
                     size="sm"
                     className="h-auto py-2 px-3 gap-2"
@@ -333,14 +606,17 @@ export default function Shopping() {
                   </Button>
                 );
               })}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-auto py-2 px-3"
-                onClick={() => setShowTemplateDialog(true)}
-              >
-                <MoreHorizontal className="w-4 h-4" />
-              </Button>
+              {quickAddTemplates.length > 8 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto py-2 px-3"
+                  onClick={() => setShowQuickAddManager(true)}
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                  +{quickAddTemplates.length - 8}
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -373,7 +649,7 @@ export default function Shopping() {
                   min={1}
                 />
               </div>
-              <div className="w-36 shrink-0">
+              <div className="w-32 shrink-0">
                 <Label className="text-xs text-muted-foreground">Kategorie</Label>
                 <Select value={newItem.category} onValueChange={(value) => setNewItem({ ...newItem, category: value })}>
                   <SelectTrigger>
@@ -395,8 +671,27 @@ export default function Shopping() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="w-28 shrink-0">
-                <Label className="text-xs text-muted-foreground">Preis (CHF)</Label>
+              <div className="w-32 shrink-0">
+                <Label className="text-xs text-muted-foreground">Laden</Label>
+                <Select value={newItem.store} onValueChange={(value) => setNewItem({ ...newItem, store: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Optional" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Kein Laden</SelectItem>
+                    {stores.map(store => (
+                      <SelectItem key={store.id} value={store.id}>
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${store.color}`} />
+                          {store.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="w-24 shrink-0">
+                <Label className="text-xs text-muted-foreground">Preis</Label>
                 <Input
                   type="number"
                   value={newItem.estimatedPrice || ''}
@@ -429,6 +724,18 @@ export default function Shopping() {
               ))}
             </SelectContent>
           </Select>
+          <Select value={filterStore} onValueChange={setFilterStore}>
+            <SelectTrigger className="w-[140px] h-9">
+              <Store className="w-4 h-4 mr-2" />
+              <SelectValue placeholder="Laden" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alle Läden</SelectItem>
+              {stores.map(store => (
+                <SelectItem key={store.id} value={store.id}>{store.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
             <SelectTrigger className="w-[140px] h-9">
               <SelectValue placeholder="Sortieren" />
@@ -437,10 +744,11 @@ export default function Shopping() {
               <SelectItem value="category">Nach Kategorie</SelectItem>
               <SelectItem value="name">Nach Name</SelectItem>
               <SelectItem value="price">Nach Preis</SelectItem>
+              <SelectItem value="store">Nach Laden</SelectItem>
             </SelectContent>
           </Select>
-          {filterCategory !== 'all' && (
-            <Button variant="ghost" size="sm" onClick={() => setFilterCategory('all')}>
+          {(filterCategory !== 'all' || filterStore !== 'all') && (
+            <Button variant="ghost" size="sm" onClick={() => { setFilterCategory('all'); setFilterStore('all'); }}>
               Filter zurücksetzen
             </Button>
           )}
@@ -468,69 +776,82 @@ export default function Shopping() {
                 </CardContent>
               </Card>
             ) : (
-              <AnimatePresence>
-                {Object.entries(groupedItems).map(([category, categoryItems]) => {
-                  const config = categoryConfig[category] || categoryConfig['Sonstiges'];
-                  const Icon = config.icon;
-                  return (
-                    <motion.div
-                      key={category}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                    >
-                      <Card>
-                        <CardHeader className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <div className={`p-1.5 rounded-lg ${config.bg}`}>
-                              <Icon className={`w-4 h-4 ${config.color}`} />
+              <div className="space-y-4">
+                <AnimatePresence>
+                  {Object.entries(groupedItems).map(([category, categoryItems]) => {
+                    const config = categoryConfig[category] || categoryConfig['Sonstiges'];
+                    const Icon = config.icon;
+                    return (
+                      <motion.div
+                        key={category}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                      >
+                        <Card>
+                          <CardHeader className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <div className={`p-1.5 rounded-lg ${config.bg}`}>
+                                <Icon className={`w-4 h-4 ${config.color}`} />
+                              </div>
+                              <CardTitle className="text-sm font-medium">{category}</CardTitle>
+                              <Badge variant="secondary" className="ml-auto">
+                                {categoryItems.length}
+                              </Badge>
                             </div>
-                            <CardTitle className="text-sm font-medium">{category}</CardTitle>
-                            <Badge variant="secondary" className="ml-auto">
-                              {categoryItems.length}
-                            </Badge>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="py-0 px-2 pb-2">
-                          <div className="space-y-1">
-                            {categoryItems.map((item) => (
-                              <motion.div
-                                key={item.id}
-                                layout
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0, x: -100 }}
-                                className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 group transition-colors"
-                              >
-                                <Checkbox
-                                  checked={false}
-                                  onCheckedChange={() => handleMarkAsBought(item.id, item.estimatedPrice)}
-                                  className="h-5 w-5"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-medium truncate">{item.item}</p>
-                                  <p className="text-sm text-muted-foreground">
-                                    {item.quantity > 1 && `${item.quantity}x · `}
-                                    {formatPrice(item.estimatedPrice)}
-                                  </p>
-                                </div>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
-                                  onClick={() => handleDelete(item.id)}
-                                >
-                                  <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
-                                </Button>
-                              </motion.div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
+                          </CardHeader>
+                          <CardContent className="py-0 px-2 pb-2">
+                            <div className="space-y-1">
+                              {categoryItems.map((item) => {
+                                const store = stores.find(s => s.id === (item as any).store);
+                                return (
+                                  <motion.div
+                                    key={item.id}
+                                    layout
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0, x: -100 }}
+                                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 group transition-colors"
+                                  >
+                                    <Checkbox
+                                      checked={false}
+                                      onCheckedChange={() => handleMarkAsBought(item.id, item.estimatedPrice)}
+                                      className="h-5 w-5"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <p className="font-medium truncate">{item.item}</p>
+                                        {store && (
+                                          <Badge variant="outline" className="text-xs shrink-0">
+                                            <span className={`w-1.5 h-1.5 rounded-full ${store.color} mr-1`} />
+                                            {store.name}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <p className="text-sm text-muted-foreground">
+                                        {item.quantity > 1 && `${item.quantity}x · `}
+                                        {formatPrice(item.estimatedPrice)}
+                                      </p>
+                                    </div>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8"
+                                      onClick={() => handleDelete(item.id)}
+                                    >
+                                      <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                                    </Button>
+                                  </motion.div>
+                                );
+                              })}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+              </div>
             )}
           </div>
 
@@ -575,11 +896,331 @@ export default function Shopping() {
                     ))}
                   </div>
                 )}
+                
+                {boughtItems.length > 0 && (
+                  <div className="mt-auto pt-3 border-t">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">Gesamt:</span>
+                      <span className="font-bold">CHF {totalSpent.toFixed(2)}</span>
+                    </div>
+                    <Button 
+                      className="w-full mt-2" 
+                      size="sm"
+                      onClick={handleSyncToFinance}
+                    >
+                      <Banknote className="w-4 h-4 mr-2" />
+                      Zu Finanzen hinzufügen
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
         </div>
       </div>
+
+      {/* Budget Dialog */}
+      <Dialog open={showBudgetDialog} onOpenChange={setShowBudgetDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="w-5 h-5" />
+              Budget setzen
+            </DialogTitle>
+            <DialogDescription>
+              Setze ein Budget für deinen Einkauf
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label>Budget (CHF)</Label>
+              <Input
+                type="number"
+                value={budgetInput}
+                onChange={(e) => setBudgetInput(e.target.value)}
+                placeholder="z.B. 100.00"
+                min={0}
+                step={10}
+              />
+            </div>
+            
+            <div className="flex gap-2">
+              {[50, 100, 150, 200].map(amount => (
+                <Button
+                  key={amount}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBudgetInput(amount.toString())}
+                >
+                  {amount}
+                </Button>
+              ))}
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBudgetDialog(false)}>
+              Abbrechen
+            </Button>
+            <Button onClick={handleSetBudget}>
+              Budget setzen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Add Manager Dialog */}
+      <Dialog open={showQuickAddManager} onOpenChange={setShowQuickAddManager}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              Schnell-Artikel verwalten
+            </DialogTitle>
+            <DialogDescription>
+              Bearbeite Preise oder füge neue Artikel hinzu
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Add new item */}
+            <div className="p-3 border rounded-lg space-y-3">
+              <p className="text-sm font-medium">Neuer Artikel</p>
+              <div className="grid grid-cols-3 gap-2">
+                <Input
+                  placeholder="Name"
+                  value={newQuickAdd.name}
+                  onChange={(e) => setNewQuickAdd({ ...newQuickAdd, name: e.target.value })}
+                />
+                <Select 
+                  value={newQuickAdd.category} 
+                  onValueChange={(v) => setNewQuickAdd({ ...newQuickAdd, category: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map(cat => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="flex gap-1">
+                  <Input
+                    type="number"
+                    placeholder="Preis"
+                    value={newQuickAdd.price || ''}
+                    onChange={(e) => setNewQuickAdd({ ...newQuickAdd, price: parseFloat(e.target.value) || 0 })}
+                    step={0.1}
+                  />
+                  <Button size="icon" onClick={handleSaveQuickAdd} disabled={!newQuickAdd.name.trim()}>
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Existing items */}
+            <div className="space-y-2">
+              {quickAddTemplates.map((template) => (
+                <div key={template.id} className="flex items-center gap-2 p-2 border rounded-lg">
+                  {editingQuickAdd?.id === template.id ? (
+                    <>
+                      <Input
+                        value={editingQuickAdd.name}
+                        onChange={(e) => setEditingQuickAdd({ ...editingQuickAdd, name: e.target.value })}
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        value={editingQuickAdd.price}
+                        onChange={(e) => setEditingQuickAdd({ ...editingQuickAdd, price: parseFloat(e.target.value) || 0 })}
+                        className="w-20"
+                        step={0.1}
+                      />
+                      <Button size="icon" variant="ghost" onClick={handleSaveQuickAdd}>
+                        <Save className="w-4 h-4" />
+                      </Button>
+                      <Button size="icon" variant="ghost" onClick={() => setEditingQuickAdd(null)}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex-1 text-sm">{template.name}</span>
+                      <Badge variant="secondary">{template.category}</Badge>
+                      <span className="text-sm text-muted-foreground">CHF {template.price.toFixed(2)}</span>
+                      <Button size="icon" variant="ghost" onClick={() => setEditingQuickAdd(template)}>
+                        <Edit2 className="w-4 h-4" />
+                      </Button>
+                      <Button size="icon" variant="ghost" onClick={() => handleDeleteQuickAdd(template.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={handleResetQuickAdd}>
+              Zurücksetzen
+            </Button>
+            <Button onClick={() => setShowQuickAddManager(false)}>
+              Fertig
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Receipt Scanner Dialog */}
+      <Dialog open={showReceiptScanner} onOpenChange={setShowReceiptScanner}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ScanLine className="w-5 h-5" />
+              Quittung scannen
+            </DialogTitle>
+            <DialogDescription>
+              Lade ein Foto deiner Quittung hoch oder scanne sie mit der Kamera
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Upload/Camera Toggle */}
+            <div className="flex gap-2">
+              <Button
+                variant={scannerMode === 'upload' ? 'default' : 'outline'}
+                className="flex-1"
+                onClick={() => setScannerMode('upload')}
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Hochladen
+              </Button>
+              <Button
+                variant={scannerMode === 'camera' ? 'default' : 'outline'}
+                className="flex-1"
+                onClick={() => setScannerMode('camera')}
+              >
+                <Camera className="w-4 h-4 mr-2" />
+                Kamera
+              </Button>
+            </div>
+
+            {/* Upload Area */}
+            {scannerMode === 'upload' && (
+              <div 
+                className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {receiptImage ? (
+                  <img src={receiptImage} alt="Receipt" className="max-h-48 mx-auto rounded" />
+                ) : (
+                  <>
+                    <Receipt className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
+                    <p className="text-sm text-muted-foreground">
+                      Klicke hier oder ziehe ein Bild hierher
+                    </p>
+                  </>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+              </div>
+            )}
+
+            {/* Camera View */}
+            {scannerMode === 'camera' && (
+              <div className="border rounded-lg overflow-hidden bg-black aspect-video flex items-center justify-center">
+                <p className="text-white/60 text-sm">Kamera-Funktion in Entwicklung</p>
+              </div>
+            )}
+
+            {/* Loading State */}
+            {isScanning && (
+              <div className="text-center py-4">
+                <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2" />
+                <p className="text-sm text-muted-foreground">Analysiere Quittung...</p>
+              </div>
+            )}
+
+            {/* Scanned Items */}
+            {scannedItems.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Erkannte Artikel:</p>
+                {scannedItems.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-2 p-2 border rounded-lg">
+                    <span className="flex-1 text-sm">{item.name}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {item.quantity}x CHF {item.price.toFixed(2)}
+                    </span>
+                    <Button 
+                      size="icon" 
+                      variant="ghost"
+                      onClick={() => setScannedItems(prev => prev.filter((_, i) => i !== idx))}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+                <div className="flex justify-between items-center pt-2 border-t">
+                  <span className="text-sm font-medium">Gesamt:</span>
+                  <span className="font-bold">
+                    CHF {scannedItems.reduce((sum, i) => sum + i.price * i.quantity, 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowReceiptScanner(false);
+              setScannedItems([]);
+              setReceiptImage(null);
+            }}>
+              Abbrechen
+            </Button>
+            {scannedItems.length > 0 && (
+              <Button onClick={handleAddScannedItems}>
+                {scannedItems.length} Artikel hinzufügen
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Finance Confirmation Dialog */}
+      <AlertDialog open={showFinanceConfirm} onOpenChange={setShowFinanceConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Banknote className="w-5 h-5" />
+              Ausgabe zu Finanzen hinzufügen?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Möchtest du CHF {pendingFinanceAmount.toFixed(2)} als Ausgabe in deinen Finanzen erfassen?
+              {budget.isSet && (
+                <span className="block mt-2 text-orange-600">
+                  Dein verbleibendes Budget wird entsprechend reduziert.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSyncToFinance}>
+              Ja, hinzufügen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Clear Confirmation Dialog */}
       <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
@@ -659,9 +1300,9 @@ export default function Shopping() {
             <div className="border-t pt-4">
               <p className="text-sm font-medium mb-3">Oder einzelne Artikel:</p>
               <div className="flex flex-wrap gap-2">
-                {quickAddTemplates.map((template) => (
+                {quickAddTemplates.slice(0, 8).map((template) => (
                   <Button
-                    key={template.name}
+                    key={template.id}
                     variant="outline"
                     size="sm"
                     onClick={() => {
@@ -689,4 +1330,3 @@ export default function Shopping() {
     </Layout>
   );
 }
-

@@ -717,8 +717,8 @@ export default function Shopping() {
             </div>
             
             {/* Row 2: Kategorie + Laden + Preis + Button */}
-            <div className="flex flex-wrap gap-3 items-end">
-              <div className="w-[140px]">
+            <div className="flex flex-wrap gap-4 items-end">
+              <div className="w-[160px]">
                 <Label className="text-xs text-muted-foreground">Kategorie</Label>
                 <Select value={newItem.category} onValueChange={(value) => setNewItem({ ...newItem, category: value })}>
                   <SelectTrigger>
@@ -740,7 +740,7 @@ export default function Shopping() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="w-[120px]">
+              <div className="w-[140px]">
                 <Label className="text-xs text-muted-foreground">Laden</Label>
                 <Select value={newItem.store} onValueChange={(value) => setNewItem({ ...newItem, store: value })}>
                   <SelectTrigger>

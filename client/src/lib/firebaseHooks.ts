@@ -262,34 +262,39 @@ export function usePeople() {
   const [people, setPeople] = useState<Person[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const fetchPeople = async () => {
+    try {
+      setIsLoading(true);
+      const getPeopleFunc = httpsCallable(functions, 'getPeople');
+      const result = await getPeopleFunc({});
+      const data = result.data as { people: any[] };
+      
+      const mappedPeople = data.people.map((p: any) => ({
+        ...p,
+        createdAt: p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.createdAt),
+        updatedAt: p.updatedAt?.toDate ? p.updatedAt.toDate() : new Date(p.updatedAt),
+      }));
+      
+      setPeople(mappedPeople);
+      setError(null);
+    } catch (err) {
+      setError(err as Error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchPeople = async () => {
-      try {
-        setIsLoading(true);
-        const getPeopleFunc = httpsCallable(functions, 'getPeople');
-        const result = await getPeopleFunc({});
-        const data = result.data as { people: any[] };
-        
-        const mappedPeople = data.people.map((p: any) => ({
-          ...p,
-          createdAt: p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.createdAt),
-          updatedAt: p.updatedAt?.toDate ? p.updatedAt.toDate() : new Date(p.updatedAt),
-        }));
-        
-        setPeople(mappedPeople);
-        setError(null);
-      } catch (err) {
-        setError(err as Error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchPeople();
-  }, []);
+  }, [refreshKey]);
 
-  return { data: people, isLoading, error };
+  const refetch = () => {
+    setRefreshKey(prev => prev + 1);
+  };
+
+  return { data: people, isLoading, error, refetch };
 }
 
 export async function createPerson(data: Omit<Person, 'id' | 'userId' | 'totalOwed' | 'createdAt' | 'updatedAt'>) {
@@ -436,14 +441,17 @@ export interface Invoice {
   updatedAt: Date;
 }
 
-export function usePersonInvoices(personId: string) {
+export function usePersonInvoices(personId: string | undefined) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const fetchInvoices = async () => {
-    if (!personId) return;
+    if (!personId) {
+      setInvoices([]);
+      setIsLoading(false);
+      return;
+    }
     
     try {
       setIsLoading(true);
@@ -469,10 +477,10 @@ export function usePersonInvoices(personId: string) {
 
   useEffect(() => {
     fetchInvoices();
-  }, [personId, refreshKey]);
+  }, [personId]);
 
-  const refetch = () => {
-    setRefreshKey(prev => prev + 1);
+  const refetch = async () => {
+    await fetchInvoices();
   };
 
   return { data: invoices, isLoading, error, refetch };

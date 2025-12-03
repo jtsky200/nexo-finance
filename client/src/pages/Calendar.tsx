@@ -13,8 +13,9 @@ import {
   ChevronLeft, ChevronRight, Calendar as CalendarIcon, 
   AlertTriangle, Bell, Clock, CheckCircle, ArrowDownLeft, ArrowUpRight,
   FileText, Filter, Plus, X, Edit2, Trash2, RefreshCw, Eye,
-  Briefcase, Palmtree
+  Briefcase, Palmtree, Search, Repeat, Download, Share2
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { functions } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { useReminders, createReminder, updateReminder, deleteReminder } from '@/lib/firebaseHooks';
@@ -69,7 +70,11 @@ export default function Calendar() {
     time: '',
     category: 'general',
     priority: 'medium',
+    isRecurring: false,
+    recurrenceRule: 'weekly' as 'daily' | 'weekly' | 'monthly' | 'yearly',
+    recurrenceCount: 4,
   });
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Get reminders
   const { data: reminders = [], refetch: refetchReminders } = useReminders();
@@ -165,10 +170,20 @@ export default function Calendar() {
     const firstDay = getFirstDayOfMonth(currentDate);
     const days: { date: Date; isCurrentMonth: boolean; events: CalendarEvent[]; vacations: any[] }[] = [];
 
-    // Apply filter to events
-    const filteredEvts = filterType === 'all' 
+    // Apply filter and search to events
+    let filteredEvts = filterType === 'all' 
       ? events 
       : events.filter(e => e.type === filterType);
+    
+    // Apply search
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filteredEvts = filteredEvts.filter(e => 
+        e.title.toLowerCase().includes(query) ||
+        (e.personName && e.personName.toLowerCase().includes(query)) ||
+        (e.description && e.description.toLowerCase().includes(query))
+      );
+    }
 
     const prevMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
     const daysInPrevMonth = getDaysInMonth(prevMonth);
@@ -193,7 +208,7 @@ export default function Calendar() {
     }
 
     return days;
-  }, [currentDate, events, getVacationsForDate, filterType]);
+  }, [currentDate, events, getVacationsForDate, filterType, searchQuery]);
 
   const filteredEvents = useMemo(() => {
     let filtered = events.filter(event => {
@@ -206,8 +221,18 @@ export default function Calendar() {
       filtered = filtered.filter(event => event.type === filterType);
     }
 
+    // Apply search
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(e => 
+        e.title.toLowerCase().includes(query) ||
+        (e.personName && e.personName.toLowerCase().includes(query)) ||
+        (e.description && e.description.toLowerCase().includes(query))
+      );
+    }
+
     return filtered.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [events, currentDate, filterType]);
+  }, [events, currentDate, filterType, searchQuery]);
 
   const stats = useMemo(() => {
     const monthEvents = events.filter(event => {
@@ -320,7 +345,7 @@ export default function Calendar() {
     setShowEventDialog(true);
   };
 
-  // Add new appointment
+  // Add new appointment (with recurring support)
   const handleAddEvent = async () => {
     if (!newEvent.title.trim()) {
       toast.error('Titel ist erforderlich');
@@ -328,21 +353,134 @@ export default function Calendar() {
     }
 
     try {
-      await createReminder({
-        title: newEvent.title,
-        description: newEvent.description,
-        date: new Date(newEvent.date + (newEvent.time ? `T${newEvent.time}` : 'T12:00')),
-        category: newEvent.category,
-        priority: newEvent.priority,
-        completed: false,
-      });
+      const baseDate = new Date(newEvent.date + (newEvent.time ? `T${newEvent.time}` : 'T12:00'));
+      
+      if (newEvent.isRecurring) {
+        // Create multiple events for recurring
+        const dates: Date[] = [baseDate];
+        for (let i = 1; i < newEvent.recurrenceCount; i++) {
+          const nextDate = new Date(baseDate);
+          if (newEvent.recurrenceRule === 'daily') nextDate.setDate(baseDate.getDate() + i);
+          else if (newEvent.recurrenceRule === 'weekly') nextDate.setDate(baseDate.getDate() + (i * 7));
+          else if (newEvent.recurrenceRule === 'monthly') nextDate.setMonth(baseDate.getMonth() + i);
+          else if (newEvent.recurrenceRule === 'yearly') nextDate.setFullYear(baseDate.getFullYear() + i);
+          dates.push(nextDate);
+        }
+        
+        for (const date of dates) {
+          await createReminder({
+            title: newEvent.title,
+            description: newEvent.description,
+            date,
+            category: newEvent.category,
+            priority: newEvent.priority,
+            completed: false,
+          });
+        }
+        toast.success(`${dates.length} wiederkehrende Termine erstellt`);
+      } else {
+        await createReminder({
+          title: newEvent.title,
+          description: newEvent.description,
+          date: baseDate,
+          category: newEvent.category,
+          priority: newEvent.priority,
+          completed: false,
+        });
+        toast.success('Termin erstellt');
+      }
 
-      toast.success('Termin erstellt');
-      setNewEvent({ title: '', description: '', date: new Date().toISOString().split('T')[0], time: '', category: 'general', priority: 'medium' });
+      setNewEvent({ title: '', description: '', date: new Date().toISOString().split('T')[0], time: '', category: 'general', priority: 'medium', isRecurring: false, recurrenceRule: 'weekly', recurrenceCount: 4 });
       setShowAddDialog(false);
       await refreshAll();
     } catch (error: any) {
       toast.error('Fehler: ' + error.message);
+    }
+  };
+
+  // Export as PDF
+  const handleExportPDF = () => {
+    const monthName = currentDate.toLocaleDateString('de-CH', { month: 'long', year: 'numeric' });
+    const content = `
+      <html>
+      <head>
+        <title>Kalender - ${monthName}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          h1 { color: #333; border-bottom: 2px solid #333; padding-bottom: 10px; }
+          .event { padding: 8px; margin: 5px 0; border-left: 3px solid #3b82f6; background: #f5f5f5; }
+          .date { font-weight: bold; color: #666; }
+        </style>
+      </head>
+      <body>
+        <h1>Kalender - ${monthName}</h1>
+        ${filteredEvents.map(e => `
+          <div class="event">
+            <div class="date">${new Date(e.date).toLocaleDateString('de-CH')}</div>
+            <div><strong>${e.title}</strong></div>
+            ${e.personName ? `<div>Person: ${e.personName}</div>` : ''}
+          </div>
+        `).join('')}
+      </body>
+      </html>
+    `;
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(content);
+      printWindow.document.close();
+      printWindow.print();
+    }
+    toast.success('PDF Export geöffnet');
+  };
+
+  // Export as ICS
+  const handleExportICS = () => {
+    const icsContent = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Nexo//Calendar//DE',
+      ...filteredEvents.map(e => {
+        const date = new Date(e.date);
+        const dateStr = date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+        return [
+          'BEGIN:VEVENT',
+          `DTSTART:${dateStr}`,
+          `DTEND:${dateStr}`,
+          `SUMMARY:${e.title}`,
+          `DESCRIPTION:${e.description || ''}`,
+          `UID:${e.id}@nexo`,
+          'END:VEVENT'
+        ].join('\n');
+      }),
+      'END:VCALENDAR'
+    ].join('\n');
+    
+    const blob = new Blob([icsContent], { type: 'text/calendar' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `kalender-${currentDate.getFullYear()}-${currentDate.getMonth() + 1}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('ICS Datei heruntergeladen');
+  };
+
+  // Share calendar
+  const handleShareCalendar = async () => {
+    const shareUrl = window.location.href;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Mein Kalender',
+          text: 'Schau dir meinen Kalender an',
+          url: shareUrl
+        });
+      } catch (e) {
+        // User cancelled
+      }
+    } else {
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success('Link in Zwischenablage kopiert');
     }
   };
 
@@ -429,6 +567,31 @@ export default function Calendar() {
           </div>
         </div>
 
+        {/* Search & Export Row */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Events suchen..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Button variant="outline" size="sm" onClick={handleExportPDF}>
+            <Download className="w-4 h-4 mr-2" />
+            PDF
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExportICS}>
+            <Download className="w-4 h-4 mr-2" />
+            ICS
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleShareCalendar}>
+            <Share2 className="w-4 h-4 mr-2" />
+            Teilen
+          </Button>
+        </div>
+
         {/* Statistics */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           <Card 
@@ -476,6 +639,35 @@ export default function Calendar() {
               <p className="text-2xl font-bold">{stats.appointments}</p>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Color Legend */}
+        <div className="flex flex-wrap items-center gap-4 text-sm">
+          <span className="text-muted-foreground">Legende:</span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-amber-200" />
+            <span>Rechnungen</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-green-200" />
+            <span>Termine</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-slate-300" />
+            <span>Arbeit</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-emerald-200" />
+            <span>Frei</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-cyan-200" />
+            <span>Ferien</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-red-200" />
+            <span>Überfällig</span>
+          </div>
         </div>
 
         {/* Calendar View */}
@@ -632,10 +824,10 @@ export default function Calendar() {
           </Card>
         )}
 
-        {/* Week View */}
+        {/* Week View with Time Grid */}
         {view === 'week' && (
           <Card>
-            <CardContent className="pt-6">
+            <CardContent className="pt-6 overflow-x-auto">
               {(() => {
                 const today = new Date();
                 const startOfWeek = new Date(today);
@@ -653,36 +845,92 @@ export default function Calendar() {
                   return { date, events: dayEvents };
                 });
 
+                const hours = Array.from({ length: 13 }, (_, i) => i + 8); // 08:00 - 20:00
+
                 return (
-                  <div className="grid grid-cols-7 gap-2">
-                    {weekDays.map((day, index) => (
-                      <div 
-                        key={index} 
-                        className="min-h-[300px] cursor-pointer"
-                        onClick={() => handleDayClick(day)}
-                      >
-                        <div className={`text-center p-2 rounded-t-lg ${
-                          isToday(day.date) ? 'bg-primary text-primary-foreground' : 'bg-muted'
-                        }`}>
+                  <div className="min-w-[800px]">
+                    {/* Header */}
+                    <div className="grid grid-cols-8 border-b">
+                      <div className="p-2 text-center text-sm text-muted-foreground">Zeit</div>
+                      {weekDays.map((day, index) => (
+                        <div 
+                          key={index} 
+                          className={`p-2 text-center cursor-pointer ${
+                            isToday(day.date) ? 'bg-primary text-primary-foreground rounded' : ''
+                          }`}
+                          onClick={() => handleDayClick(day)}
+                        >
                           <div className="text-sm font-medium">{dayNames[index]}</div>
                           <div className="text-lg font-bold">{day.date.getDate()}</div>
                         </div>
-                        <div className="border border-t-0 rounded-b-lg p-2 space-y-2 min-h-[250px] hover:bg-accent/50 transition-colors">
-                          {day.events.map(event => (
-                            <div
-                              key={event.id}
-                              onClick={(e) => handleEventClick(event, e)}
-                              className={`text-xs p-2 rounded cursor-pointer hover:opacity-80 ${getEventColor(event)}`}
-                            >
-                              <div className="font-medium truncate">{event.title}</div>
-                              {event.amount && (
-                                <div className="opacity-90">{formatAmount(event.amount)}</div>
-                              )}
-                            </div>
-                          ))}
+                      ))}
+                    </div>
+                    
+                    {/* Time Grid */}
+                    <div className="relative">
+                      {hours.map(hour => (
+                        <div key={hour} className="grid grid-cols-8 border-b min-h-[50px]">
+                          <div className="p-1 text-xs text-muted-foreground text-right pr-2 border-r">
+                            {hour.toString().padStart(2, '0')}:00
+                          </div>
+                          {weekDays.map((day, dayIndex) => {
+                            const hourEvents = day.events.filter(e => {
+                              if (!e.time) return hour === 9; // Default to 9 AM
+                              const eventHour = parseInt(e.time.split(':')[0]);
+                              return eventHour === hour;
+                            });
+                            return (
+                              <div 
+                                key={dayIndex} 
+                                className="p-0.5 border-r hover:bg-accent/30 transition-colors relative"
+                                onClick={() => {
+                                  setNewEvent(prev => ({ 
+                                    ...prev, 
+                                    date: day.date.toISOString().split('T')[0],
+                                    time: `${hour.toString().padStart(2, '0')}:00`
+                                  }));
+                                  setShowAddDialog(true);
+                                }}
+                              >
+                                {hourEvents.map(event => (
+                                  <div
+                                    key={event.id}
+                                    onClick={(e) => { e.stopPropagation(); handleEventClick(event, e); }}
+                                    className={`text-xs p-1 rounded cursor-pointer hover:opacity-80 truncate ${getEventColor(event)}`}
+                                    title={event.title}
+                                  >
+                                    {event.time && <span className="font-medium">{event.time}</span>} {event.title}
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })}
                         </div>
+                      ))}
+                    </div>
+                    
+                    {/* All-day events section */}
+                    <div className="mt-4 border-t pt-4">
+                      <div className="text-sm font-medium text-muted-foreground mb-2">Ganztägig / Ohne Uhrzeit</div>
+                      <div className="grid grid-cols-7 gap-2">
+                        {weekDays.map((day, index) => {
+                          const allDayEvents = day.events.filter(e => !e.time);
+                          return (
+                            <div key={index} className="space-y-1">
+                              {allDayEvents.map(event => (
+                                <div
+                                  key={event.id}
+                                  onClick={(e) => handleEventClick(event, e)}
+                                  className={`text-xs p-1.5 rounded cursor-pointer hover:opacity-80 ${getEventColor(event)}`}
+                                >
+                                  <div className="font-medium truncate">{event.title}</div>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
+                    </div>
                   </div>
                 );
               })()}
@@ -916,10 +1164,61 @@ export default function Calendar() {
                 rows={3}
               />
             </div>
+
+            {/* Recurring Events */}
+            <div className="border rounded-lg p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <Checkbox 
+                  id="recurring"
+                  checked={newEvent.isRecurring}
+                  onCheckedChange={(checked) => setNewEvent({ ...newEvent, isRecurring: !!checked })}
+                />
+                <Label htmlFor="recurring" className="flex items-center gap-2 cursor-pointer">
+                  <Repeat className="w-4 h-4" />
+                  Wiederholen
+                </Label>
+              </div>
+              
+              {newEvent.isRecurring && (
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <div>
+                    <Label className="text-xs">Intervall</Label>
+                    <Select value={newEvent.recurrenceRule} onValueChange={(v: any) => setNewEvent({ ...newEvent, recurrenceRule: v })}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="daily">Täglich</SelectItem>
+                        <SelectItem value="weekly">Wöchentlich</SelectItem>
+                        <SelectItem value="monthly">Monatlich</SelectItem>
+                        <SelectItem value="yearly">Jährlich</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Anzahl</Label>
+                    <Select value={String(newEvent.recurrenceCount)} onValueChange={(v) => setNewEvent({ ...newEvent, recurrenceCount: parseInt(v) })}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="2">2 Termine</SelectItem>
+                        <SelectItem value="4">4 Termine</SelectItem>
+                        <SelectItem value="6">6 Termine</SelectItem>
+                        <SelectItem value="12">12 Termine</SelectItem>
+                        <SelectItem value="52">52 Termine</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setShowAddDialog(false)}>Abbrechen</Button>
-            <Button onClick={handleAddEvent}>Erstellen</Button>
+            <Button onClick={handleAddEvent}>
+              {newEvent.isRecurring ? `${newEvent.recurrenceCount} Termine erstellen` : 'Erstellen'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -31,17 +29,13 @@ interface WorkScheduleDialogProps {
 }
 
 const SCHEDULE_TYPES = [
-  { value: 'full', label: 'Vollzeit', shortLabel: 'V', icon: Briefcase, color: 'bg-blue-500', lightColor: 'bg-blue-100 text-blue-800 border-blue-300' },
-  { value: 'half-am', label: 'Morgen', shortLabel: 'M', icon: Sun, color: 'bg-amber-500', lightColor: 'bg-amber-100 text-amber-800 border-amber-300' },
-  { value: 'half-pm', label: 'Nachmittag', shortLabel: 'N', icon: Moon, color: 'bg-purple-500', lightColor: 'bg-purple-100 text-purple-800 border-purple-300' },
-  { value: 'off', label: 'Frei', shortLabel: 'F', icon: Coffee, color: 'bg-green-500', lightColor: 'bg-green-100 text-green-800 border-green-300' },
+  { value: 'full', label: 'Vollzeit', shortLabel: 'V', icon: Briefcase, color: 'bg-blue-600 hover:bg-blue-700', lightColor: 'bg-blue-100 text-blue-800' },
+  { value: 'half-am', label: 'Morgen', shortLabel: 'M', icon: Sun, color: 'bg-amber-500 hover:bg-amber-600', lightColor: 'bg-amber-100 text-amber-800' },
+  { value: 'half-pm', label: 'Nachmittag', shortLabel: 'N', icon: Moon, color: 'bg-purple-600 hover:bg-purple-700', lightColor: 'bg-purple-100 text-purple-800' },
+  { value: 'off', label: 'Frei', shortLabel: 'F', icon: Coffee, color: 'bg-green-600 hover:bg-green-700', lightColor: 'bg-green-100 text-green-800' },
 ];
 
-const DAY_NAMES = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
-const FULL_DAY_NAMES = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
-
 export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }: WorkScheduleDialogProps) {
-  const { t } = useTranslation();
   const { data: people = [], isLoading: peopleLoading } = usePeople();
   const [schedules, setSchedules] = useState<WorkSchedule[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -49,22 +43,18 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedType, setSelectedType] = useState<string>('full');
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
-  const [isSelecting, setIsSelecting] = useState(false);
 
-  // Get household members
   const householdMembers = useMemo(() => 
     people.filter(p => p.type === 'household' || !p.type), 
     [people]
   );
 
-  // Set default person
   useEffect(() => {
     if (householdMembers.length > 0 && !selectedPerson) {
       setSelectedPerson(householdMembers[0].id);
     }
   }, [householdMembers, selectedPerson]);
 
-  // Fetch schedules
   const fetchSchedules = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -86,7 +76,6 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
     }
   }, [open, fetchSchedules]);
 
-  // Calendar calculations
   const calendarDays = useMemo(() => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
@@ -94,13 +83,10 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
     const startDayOfWeek = firstDay.getDay();
-    
-    // Adjust for Monday start (0 = Monday, 6 = Sunday)
     const adjustedStartDay = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
     
     const days: { date: Date; isCurrentMonth: boolean }[] = [];
     
-    // Previous month days
     const prevMonth = new Date(year, month, 0);
     const daysInPrevMonth = prevMonth.getDate();
     for (let i = adjustedStartDay - 1; i >= 0; i--) {
@@ -110,7 +96,6 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
       });
     }
     
-    // Current month days
     for (let i = 1; i <= daysInMonth; i++) {
       days.push({
         date: new Date(year, month, i),
@@ -118,7 +103,6 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
       });
     }
     
-    // Next month days
     const remainingDays = 42 - days.length;
     for (let i = 1; i <= remainingDays; i++) {
       days.push({
@@ -130,18 +114,15 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
     return days;
   }, [currentMonth]);
 
-  // Get schedule for a specific date and person
   const getScheduleForDate = useCallback((date: Date, personId: string) => {
     const dateStr = date.toISOString().split('T')[0];
     return schedules.find(s => s.personId === personId && s.date === dateStr);
   }, [schedules]);
 
-  // Get type info
   const getTypeInfo = (type: string) => {
     return SCHEDULE_TYPES.find(t => t.value === type) || SCHEDULE_TYPES[0];
   };
 
-  // Handle date click
   const handleDateClick = (date: Date) => {
     if (!date || !selectedPerson) return;
     const dateStr = date.toISOString().split('T')[0];
@@ -157,7 +138,6 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
     });
   };
 
-  // Apply selected type to selected dates
   const applyToSelected = async () => {
     if (selectedDates.size === 0 || !selectedPerson) {
       toast.error('Bitte wähle zuerst Tage aus');
@@ -192,7 +172,6 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
     }
   };
 
-  // Delete schedule for a date
   const deleteSchedule = async (scheduleId: string) => {
     try {
       const deleteScheduleFunc = httpsCallable(functions, 'deleteWorkSchedule');
@@ -205,7 +184,6 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
     }
   };
 
-  // Quick actions
   const selectAllWeekdays = (dayOfWeek: number) => {
     const newDates = new Set(selectedDates);
     calendarDays.forEach(day => {
@@ -231,7 +209,6 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
     setSelectedDates(new Set());
   };
 
-  // Calculate statistics
   const stats = useMemo(() => {
     if (!selectedPerson) return { workDays: 0, hours: 0, freeDays: 0 };
     
@@ -259,52 +236,50 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
     return { workDays, hours, freeDays };
   }, [schedules, selectedPerson, currentMonth]);
 
-  // Check if date is today
   const isToday = (date: Date) => {
     const today = new Date();
     return date.toDateString() === today.toDateString();
   };
 
-  // Month names
   const monthNames = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 
                       'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[1100px] w-[95vw] max-h-[90vh] overflow-y-auto p-0">
-        <DialogHeader className="p-6 pb-4 border-b">
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <Briefcase className="w-6 h-6" />
+      <DialogContent className="w-[95vw] max-w-[1400px] h-[90vh] overflow-y-auto p-0">
+        <DialogHeader className="p-10 pb-8 border-b bg-muted/30">
+          <DialogTitle className="flex items-center gap-4 text-3xl font-bold">
+            <Briefcase className="w-9 h-9" />
             Arbeitszeiten planen
           </DialogTitle>
         </DialogHeader>
 
         {peopleLoading ? (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
+          <div className="text-center py-24">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto" />
           </div>
         ) : householdMembers.length === 0 ? (
-          <div className="text-center py-12 px-6">
-            <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-            <p className="text-muted-foreground mb-2">Keine Haushaltsmitglieder gefunden</p>
-            <p className="text-sm text-muted-foreground">
+          <div className="text-center py-24 px-10">
+            <Users className="w-20 h-20 mx-auto text-muted-foreground/50 mb-8" />
+            <p className="text-xl text-muted-foreground mb-3">Keine Haushaltsmitglieder gefunden</p>
+            <p className="text-lg text-muted-foreground">
               Füge zuerst Personen als "Haushalt" auf der Personen-Seite hinzu.
             </p>
           </div>
         ) : (
-          <div className="p-6 space-y-4">
+          <div className="p-10 space-y-10">
             {/* Person Selector */}
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-medium">Person:</span>
-              <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-6">
+              <span className="text-lg font-semibold">Person:</span>
+              <div className="flex flex-wrap gap-4">
                 {householdMembers.map(person => (
                   <Button
                     key={person.id}
                     variant={selectedPerson === person.id ? 'default' : 'outline'}
-                    size="sm"
                     onClick={() => setSelectedPerson(person.id)}
+                    className="text-lg px-8 py-6 h-auto"
                   >
-                    <div className="w-5 h-5 rounded-full bg-primary-foreground text-primary flex items-center justify-center text-xs font-medium mr-2">
+                    <div className="w-9 h-9 rounded-full bg-primary-foreground text-primary flex items-center justify-center text-base font-bold mr-4">
                       {person.name.charAt(0).toUpperCase()}
                     </div>
                     {person.name}
@@ -314,83 +289,86 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
             </div>
 
             {/* Statistics */}
-            <div className="grid grid-cols-3 gap-3">
-              <Card>
-                <CardContent className="py-3 px-4 text-center">
-                  <p className="text-2xl font-bold text-blue-600">{stats.workDays}</p>
-                  <p className="text-xs text-muted-foreground">Arbeitstage</p>
+            <div className="grid grid-cols-3 gap-8">
+              <Card className="border-2">
+                <CardContent className="py-8 px-10 text-center">
+                  <p className="text-5xl font-bold text-blue-600">{stats.workDays}</p>
+                  <p className="text-lg text-muted-foreground mt-3">Arbeitstage</p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="py-3 px-4 text-center">
-                  <p className="text-2xl font-bold text-amber-600">{stats.hours}h</p>
-                  <p className="text-xs text-muted-foreground">Stunden</p>
+              <Card className="border-2">
+                <CardContent className="py-8 px-10 text-center">
+                  <p className="text-5xl font-bold text-amber-600">{stats.hours}h</p>
+                  <p className="text-lg text-muted-foreground mt-3">Stunden</p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="py-3 px-4 text-center">
-                  <p className="text-2xl font-bold text-green-600">{stats.freeDays}</p>
-                  <p className="text-xs text-muted-foreground">Frei</p>
+              <Card className="border-2">
+                <CardContent className="py-8 px-10 text-center">
+                  <p className="text-5xl font-bold text-green-600">{stats.freeDays}</p>
+                  <p className="text-lg text-muted-foreground mt-3">Freie Tage</p>
                 </CardContent>
               </Card>
             </div>
 
             {/* Month Navigation */}
-            <div className="flex items-center justify-between">
-              <Button variant="outline" size="icon" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}>
-                <ChevronLeft className="w-4 h-4" />
+            <div className="flex items-center justify-center gap-8">
+              <Button variant="outline" className="h-14 w-14" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}>
+                <ChevronLeft className="w-7 h-7" />
               </Button>
-              <h3 className="text-lg font-semibold">
+              <h3 className="text-3xl font-bold min-w-[300px] text-center">
                 {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
               </h3>
-              <Button variant="outline" size="icon" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}>
-                <ChevronRight className="w-4 h-4" />
+              <Button variant="outline" className="h-14 w-14" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}>
+                <ChevronRight className="w-7 h-7" />
               </Button>
             </div>
 
-            {/* Type Selector & Actions */}
-            <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/50 rounded-lg">
-              <span className="text-sm font-medium mr-2">Typ:</span>
-              {SCHEDULE_TYPES.map(type => {
-                const Icon = type.icon;
-                return (
-                  <Button
-                    key={type.value}
-                    variant={selectedType === type.value ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setSelectedType(type.value)}
-                    className={selectedType === type.value ? type.color : ''}
-                  >
-                    <Icon className="w-4 h-4 mr-1" />
-                    {type.label}
-                  </Button>
-                );
-              })}
+            {/* Type Selector */}
+            <div className="flex flex-wrap items-center gap-6 p-8 bg-muted/50 rounded-xl">
+              <span className="text-lg font-semibold">Arbeitstyp:</span>
+              <div className="flex flex-wrap gap-4">
+                {SCHEDULE_TYPES.map(type => {
+                  const Icon = type.icon;
+                  return (
+                    <Button
+                      key={type.value}
+                      variant={selectedType === type.value ? 'default' : 'outline'}
+                      onClick={() => setSelectedType(type.value)}
+                      className={`text-lg px-8 py-6 h-auto ${selectedType === type.value ? type.color + ' text-white' : ''}`}
+                    >
+                      <Icon className="w-6 h-6 mr-3" />
+                      {type.label}
+                    </Button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Quick Select Buttons */}
-            <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/30 rounded-lg">
-              <span className="text-sm font-medium mr-1">Schnellauswahl:</span>
-              <Button variant="outline" size="sm" onClick={selectWorkWeek}>
+            <div className="flex flex-wrap items-center gap-4">
+              <span className="text-lg font-semibold">Schnellauswahl:</span>
+              <Button variant="outline" className="text-lg px-8 py-5 h-auto" onClick={selectWorkWeek}>
                 Mo-Fr
               </Button>
-              <span className="text-muted-foreground">|</span>
-              {[1, 2, 3, 4, 5, 6, 0].map(dow => (
-                <Button 
-                  key={dow} 
-                  variant="ghost" 
-                  size="sm"
-                  className="px-2"
-                  onClick={() => selectAllWeekdays(dow)}
-                >
-                  {DAY_NAMES[dow]}
-                </Button>
-              ))}
+              <div className="h-10 w-px bg-border" />
+              {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((day, idx) => {
+                const dow = idx === 6 ? 0 : idx + 1;
+                return (
+                  <Button 
+                    key={day} 
+                    variant="ghost" 
+                    className="text-lg px-6 py-5 h-auto"
+                    onClick={() => selectAllWeekdays(dow)}
+                  >
+                    {day}
+                  </Button>
+                );
+              })}
               {selectedDates.size > 0 && (
                 <>
-                  <span className="text-muted-foreground">|</span>
-                  <Button variant="destructive" size="sm" onClick={clearSelection}>
-                    <Trash2 className="w-4 h-4 mr-1" />
+                  <div className="h-10 w-px bg-border" />
+                  <Button variant="destructive" className="text-lg px-8 py-5 h-auto" onClick={clearSelection}>
+                    <Trash2 className="w-6 h-6 mr-3" />
                     Löschen ({selectedDates.size})
                   </Button>
                 </>
@@ -398,11 +376,11 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
             </div>
 
             {/* Calendar Grid */}
-            <div className="border rounded-lg overflow-hidden">
+            <div className="border-2 rounded-xl overflow-hidden flex-1">
               {/* Day Headers */}
               <div className="grid grid-cols-7 bg-muted">
                 {['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'].map(day => (
-                  <div key={day} className="p-3 text-center text-sm font-semibold border-b">
+                  <div key={day} className="p-5 text-center text-lg font-bold border-b-2">
                     {day}
                   </div>
                 ))}
@@ -421,36 +399,36 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
                       key={index}
                       onClick={() => day.isCurrentMonth && handleDateClick(day.date)}
                       className={`
-                        min-h-[70px] p-2 border-b border-r cursor-pointer transition-all relative
+                        min-h-[120px] p-4 border-b border-r cursor-pointer transition-all relative
                         ${day.isCurrentMonth ? 'bg-background hover:bg-accent/50' : 'bg-muted/30'}
                         ${isToday(day.date) ? 'ring-2 ring-primary ring-inset' : ''}
                         ${isSelected ? 'bg-primary/20' : ''}
                       `}
                     >
-                      <div className={`text-xs font-medium mb-1 ${day.isCurrentMonth ? '' : 'text-muted-foreground'}`}>
+                      <div className={`text-xl font-bold mb-3 ${day.isCurrentMonth ? '' : 'text-muted-foreground'}`}>
                         {day.date.getDate()}
                       </div>
                       
                       {schedule && typeInfo && (
                         <div 
-                          className={`text-xs px-1 py-0.5 rounded ${typeInfo.lightColor} flex items-center justify-between group`}
+                          className={`text-base px-4 py-3 rounded-lg ${typeInfo.lightColor} flex items-center justify-between group font-semibold`}
                         >
-                          <span className="truncate">{typeInfo.shortLabel}</span>
+                          <span>{typeInfo.label}</span>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               if (schedule.id) deleteSchedule(schedule.id);
                             }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity ml-2"
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="w-5 h-5" />
                           </button>
                         </div>
                       )}
 
                       {isSelected && (
-                        <div className="absolute top-1 right-1">
-                          <Check className="w-4 h-4 text-primary" />
+                        <div className="absolute top-3 right-3">
+                          <Check className="w-7 h-7 text-primary" />
                         </div>
                       )}
                     </div>
@@ -461,21 +439,21 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
 
             {/* Apply Button */}
             {selectedDates.size > 0 && (
-              <Button onClick={applyToSelected} className="w-full" size="lg">
-                <Check className="w-4 h-4 mr-2" />
+              <Button onClick={applyToSelected} className="w-full h-16 text-xl">
+                <Check className="w-7 h-7 mr-4" />
                 {getTypeInfo(selectedType).label} auf {selectedDates.size} Tage anwenden
               </Button>
             )}
 
             {/* Legend */}
-            <div className="flex flex-wrap gap-3 pt-2 border-t">
-              <span className="text-sm text-muted-foreground">Legende:</span>
+            <div className="flex flex-wrap items-center gap-6 pt-6 border-t-2">
+              <span className="text-lg font-semibold">Legende:</span>
               {SCHEDULE_TYPES.map(type => {
                 const Icon = type.icon;
                 return (
-                  <Badge key={type.value} variant="outline" className={type.lightColor}>
-                    <Icon className="w-3 h-3 mr-1" />
-                    {type.shortLabel} = {type.label}
+                  <Badge key={type.value} variant="outline" className={`${type.lightColor} text-base px-5 py-3`}>
+                    <Icon className="w-5 h-5 mr-3" />
+                    {type.label}
                   </Badge>
                 );
               })}

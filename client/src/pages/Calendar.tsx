@@ -565,34 +565,206 @@ export default function Calendar() {
   // Export as PDF
   const handleExportPDF = () => {
     const monthName = currentDate.toLocaleDateString('de-CH', { month: 'long', year: 'numeric' });
+    
+    // Group events by date
+    const eventsByDate: Record<string, CalendarEvent[]> = {};
+    filteredEvents.forEach(e => {
+      const dateKey = new Date(e.date).toLocaleDateString('de-CH');
+      if (!eventsByDate[dateKey]) eventsByDate[dateKey] = [];
+      eventsByDate[dateKey].push(e);
+    });
+
+    const getTypeColor = (type: string) => {
+      switch(type) {
+        case 'due': return '#ef4444';
+        case 'appointment': return '#f97316';
+        case 'reminder': return '#3b82f6';
+        case 'work': return '#64748b';
+        case 'school': return '#8b5cf6';
+        case 'hort': return '#ec4899';
+        default: return '#6b7280';
+      }
+    };
+
+    const getTypeLabel = (type: string) => {
+      switch(type) {
+        case 'due': return 'Rechnung';
+        case 'appointment': return 'Termin';
+        case 'reminder': return 'Erinnerung';
+        case 'work': return 'Arbeit';
+        case 'school': return 'Schule';
+        case 'hort': return 'Hort';
+        default: return 'Event';
+      }
+    };
+
     const content = `
+      <!DOCTYPE html>
       <html>
       <head>
-        <title>Kalender - ${monthName}</title>
+        <meta charset="UTF-8">
+        <title>Kalender ${monthName}</title>
         <style>
-          body { font-family: Arial, sans-serif; padding: 20px; }
-          h1 { color: #333; border-bottom: 2px solid #333; padding-bottom: 10px; }
-          .event { padding: 8px; margin: 5px 0; border-left: 3px solid #3b82f6; background: #f5f5f5; }
-          .date { font-weight: bold; color: #666; }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            padding: 40px; 
+            background: #fff;
+            color: #1f2937;
+            line-height: 1.5;
+          }
+          .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e5e7eb;
+          }
+          .header h1 { 
+            font-size: 28px; 
+            font-weight: 600;
+            color: #111827;
+          }
+          .header .meta {
+            text-align: right;
+            color: #6b7280;
+            font-size: 14px;
+          }
+          .stats {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+          }
+          .stat-box {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 15px 20px;
+            min-width: 100px;
+          }
+          .stat-box .label { font-size: 12px; color: #6b7280; text-transform: uppercase; }
+          .stat-box .value { font-size: 24px; font-weight: 600; color: #111827; }
+          .date-group {
+            margin-bottom: 20px;
+          }
+          .date-header {
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
+            padding: 10px 0;
+            border-bottom: 1px solid #e5e7eb;
+            margin-bottom: 10px;
+          }
+          .event-row {
+            display: flex;
+            align-items: center;
+            padding: 12px 15px;
+            margin-bottom: 8px;
+            background: #f9fafb;
+            border-radius: 8px;
+            border-left: 4px solid #3b82f6;
+          }
+          .event-type {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            padding: 3px 8px;
+            border-radius: 4px;
+            color: white;
+            margin-right: 15px;
+            min-width: 70px;
+            text-align: center;
+          }
+          .event-content {
+            flex: 1;
+          }
+          .event-title {
+            font-weight: 600;
+            color: #111827;
+            font-size: 15px;
+          }
+          .event-details {
+            font-size: 13px;
+            color: #6b7280;
+            margin-top: 2px;
+          }
+          .event-amount {
+            font-weight: 600;
+            font-size: 15px;
+            color: #111827;
+          }
+          .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            font-size: 12px;
+            color: #9ca3af;
+            text-align: center;
+          }
+          @media print {
+            body { padding: 20px; }
+            .event-row { break-inside: avoid; }
+          }
         </style>
       </head>
       <body>
-        <h1>Kalender - ${monthName}</h1>
-        ${filteredEvents.map(e => `
-          <div class="event">
-            <div class="date">${new Date(e.date).toLocaleDateString('de-CH')}</div>
-            <div><strong>${e.title}</strong></div>
-            ${e.personName ? `<div>Person: ${e.personName}</div>` : ''}
+        <div class="header">
+          <h1>Kalender ${monthName}</h1>
+          <div class="meta">
+            <div>Erstellt am ${new Date().toLocaleDateString('de-CH')}</div>
+            <div>${filteredEvents.length} Events</div>
+          </div>
+        </div>
+        
+        <div class="stats">
+          <div class="stat-box">
+            <div class="label">Gesamt</div>
+            <div class="value">${filteredEvents.length}</div>
+          </div>
+          <div class="stat-box">
+            <div class="label">Rechnungen</div>
+            <div class="value">${filteredEvents.filter(e => e.type === 'due').length}</div>
+          </div>
+          <div class="stat-box">
+            <div class="label">Termine</div>
+            <div class="value">${filteredEvents.filter(e => e.type === 'appointment').length}</div>
+          </div>
+        </div>
+
+        ${Object.entries(eventsByDate).map(([date, events]) => `
+          <div class="date-group">
+            <div class="date-header">${date}</div>
+            ${events.map(e => `
+              <div class="event-row" style="border-left-color: ${getTypeColor(e.type)}">
+                <div class="event-type" style="background: ${getTypeColor(e.type)}">${getTypeLabel(e.type)}</div>
+                <div class="event-content">
+                  <div class="event-title">${e.title}</div>
+                  ${e.personName || e.time || e.description ? `
+                    <div class="event-details">
+                      ${e.time ? e.time + ' Uhr' : ''}
+                      ${e.personName ? (e.time ? ' · ' : '') + e.personName : ''}
+                      ${e.description ? (e.time || e.personName ? ' · ' : '') + e.description : ''}
+                    </div>
+                  ` : ''}
+                </div>
+                ${e.amount ? `<div class="event-amount">CHF ${(e.amount / 100).toFixed(2)}</div>` : ''}
+              </div>
+            `).join('')}
           </div>
         `).join('')}
+
+        <div class="footer">
+          Nexo Kalender · ${new Date().toLocaleDateString('de-CH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+        </div>
       </body>
       </html>
     `;
+    
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       printWindow.document.write(content);
       printWindow.document.close();
-      printWindow.print();
     }
     toast.success('PDF Export geöffnet');
   };
@@ -737,59 +909,27 @@ export default function Calendar() {
     <Layout title="Kalender">
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        {/* Header Row 1: Navigation */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" onClick={goToPreviousMonth}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <h2 className="text-xl font-bold min-w-[200px] text-center">
+            <h2 className="text-xl font-bold min-w-[180px] text-center">
               {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
             </h2>
             <Button variant="outline" size="icon" onClick={goToNextMonth}>
               <ChevronRight className="w-4 h-4" />
             </Button>
-            <Button variant="outline" onClick={goToToday}>Heute</Button>
+            <Button variant="outline" size="sm" onClick={goToToday}>Heute</Button>
             <Button variant="outline" size="icon" onClick={refreshAll} title="Aktualisieren">
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             </Button>
           </div>
           
-          <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={() => {
-              setNewEvent({ ...newEvent, date: new Date().toISOString().split('T')[0] });
-              setShowAddDialog(true);
-            }}>
-              <Plus className="w-4 h-4 mr-2" />
-              Neuer Termin
-            </Button>
-
-            <Button variant="outline" onClick={() => setShowWorkScheduleDialog(true)}>
-              <Briefcase className="w-4 h-4 mr-2" />
-              Arbeitszeiten
-            </Button>
-
-            <Button variant="outline" onClick={() => setShowVacationDialog(true)}>
-              <Palmtree className="w-4 h-4 mr-2" />
-              Ferien
-            </Button>
-
-            <Button variant="outline" onClick={() => setShowSchoolPlannerDialog(true)}>
-              <GraduationCap className="w-4 h-4 mr-2" />
-              Schulplaner
-            </Button>
-
-            <Button variant="outline" onClick={() => setShowSchoolHolidayDialog(true)}>
-              <Sun className="w-4 h-4 mr-2" />
-              Schulferien
-            </Button>
-
-            <Button variant="outline" onClick={() => setLocation('/bills')}>
-              <FileText className="w-4 h-4 mr-2" />
-              Rechnungen
-            </Button>
-            
+          <div className="flex items-center gap-2">
             <Select value={view} onValueChange={(v: any) => setView(v)}>
-              <SelectTrigger className="w-[120px]">
+              <SelectTrigger className="w-[100px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -800,7 +940,7 @@ export default function Calendar() {
             </Select>
             
             <Select value={filterType} onValueChange={setFilterType}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger className="w-[140px]">
                 <Filter className="w-4 h-4 mr-2" />
                 <SelectValue />
               </SelectTrigger>
@@ -815,36 +955,77 @@ export default function Calendar() {
           </div>
         </div>
 
-        {/* Search & Export Row */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        {/* Header Row 2: Actions */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={() => {
+            setNewEvent({ ...newEvent, date: new Date().toISOString().split('T')[0] });
+            setShowAddDialog(true);
+          }}>
+            <Plus className="w-4 h-4 mr-1" />
+            Termin
+          </Button>
+
+          <div className="h-6 w-px bg-border" />
+
+          <Button variant="outline" size="sm" onClick={() => setShowWorkScheduleDialog(true)}>
+            <Briefcase className="w-4 h-4 mr-1" />
+            Arbeit
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowVacationDialog(true)}>
+            <Palmtree className="w-4 h-4 mr-1" />
+            Ferien
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowSchoolPlannerDialog(true)}>
+            <GraduationCap className="w-4 h-4 mr-1" />
+            Schule
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowSchoolHolidayDialog(true)}>
+            <Sun className="w-4 h-4 mr-1" />
+            Schulferien
+          </Button>
+
+          <div className="h-6 w-px bg-border" />
+
+          <Button variant="outline" size="sm" onClick={() => setLocation('/bills')}>
+            <FileText className="w-4 h-4 mr-1" />
+            Rechnungen
+          </Button>
+
+          <div className="h-6 w-px bg-border hidden sm:block" />
+
+          <div className="relative max-w-[180px]">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
-              placeholder="Events suchen..."
+              placeholder="Suchen..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
+              className="pl-7 h-8 text-sm"
             />
           </div>
-          <Button variant="outline" size="sm" onClick={handleExportPDF}>
-            <Download className="w-4 h-4 mr-2" />
+        </div>
+
+        {/* Header Row 3: Export & Notifications */}
+        <div className="flex items-center gap-1 text-sm">
+          <span className="text-muted-foreground mr-1">Export:</span>
+          <Button variant="ghost" size="sm" className="h-7 px-2" onClick={handleExportPDF}>
             PDF
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExportICS}>
-            <Download className="w-4 h-4 mr-2" />
+          <Button variant="ghost" size="sm" className="h-7 px-2" onClick={handleExportICS}>
             ICS
           </Button>
-          <Button variant="outline" size="sm" onClick={handleShareCalendar}>
-            <Share2 className="w-4 h-4 mr-2" />
+          <Button variant="ghost" size="sm" className="h-7 px-2" onClick={handleShareCalendar}>
+            <Share2 className="w-3.5 h-3.5 mr-1" />
             Teilen
           </Button>
+          <div className="h-5 w-px bg-border mx-1" />
           <Button 
-            variant={notificationsEnabled ? 'default' : 'outline'} 
-            size="sm" 
+            variant={notificationsEnabled ? 'default' : 'ghost'} 
+            size="sm"
+            className="h-7"
             onClick={handleToggleNotifications}
           >
-            <BellRing className="w-4 h-4 mr-2" />
-            {notificationsEnabled ? 'Benachrichtigt' : 'Benachrichtigen'}
+            <BellRing className="w-3.5 h-3.5 mr-1" />
+            {notificationsEnabled ? 'An' : 'Benachrichtigen'}
           </Button>
         </div>
 

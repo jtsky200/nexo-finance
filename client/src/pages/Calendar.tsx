@@ -165,6 +165,11 @@ export default function Calendar() {
     const firstDay = getFirstDayOfMonth(currentDate);
     const days: { date: Date; isCurrentMonth: boolean; events: CalendarEvent[]; vacations: any[] }[] = [];
 
+    // Apply filter to events
+    const filteredEvts = filterType === 'all' 
+      ? events 
+      : events.filter(e => e.type === filterType);
+
     const prevMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
     const daysInPrevMonth = getDaysInMonth(prevMonth);
     for (let i = firstDay - 1; i >= 0; i--) {
@@ -174,7 +179,7 @@ export default function Calendar() {
 
     for (let i = 1; i <= daysInMonth; i++) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), i);
-      const dayEvents = events.filter(event => {
+      const dayEvents = filteredEvts.filter(event => {
         const eventDate = new Date(event.date);
         return eventDate.toDateString() === date.toDateString();
       });
@@ -188,7 +193,7 @@ export default function Calendar() {
     }
 
     return days;
-  }, [currentDate, events, getVacationsForDate]);
+  }, [currentDate, events, getVacationsForDate, filterType]);
 
   const filteredEvents = useMemo(() => {
     let filtered = events.filter(event => {
@@ -417,8 +422,8 @@ export default function Calendar() {
               <SelectContent>
                 <SelectItem value="all">Alle Events</SelectItem>
                 <SelectItem value="due">Rechnungen</SelectItem>
-                <SelectItem value="reminder">Erinnerungen</SelectItem>
                 <SelectItem value="appointment">Termine</SelectItem>
+                <SelectItem value="work">Arbeitszeiten</SelectItem>
               </SelectContent>
             </Select>
           </div>

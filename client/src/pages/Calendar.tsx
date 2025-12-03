@@ -629,9 +629,25 @@ export default function Calendar() {
               <AlertTriangle className="w-5 h-5 text-orange-500" />
               Anstehende Fälligkeiten (nächste 7 Tage)
             </CardTitle>
-            <Button variant="outline" size="sm" onClick={() => setLocation('/bills')}>
-              Alle Rechnungen
-            </Button>
+            <Select 
+              defaultValue="bills"
+              onValueChange={(value) => {
+                if (value === 'bills') setLocation('/bills');
+                else if (value === 'reminders') setLocation('/reminders');
+                else if (value === 'people') setLocation('/people');
+                else if (value === 'finance') setLocation('/finance');
+              }}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Schnellzugriff" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="bills">Alle Rechnungen</SelectItem>
+                <SelectItem value="reminders">Alle Erinnerungen</SelectItem>
+                <SelectItem value="people">Alle Personen</SelectItem>
+                <SelectItem value="finance">Finanzen</SelectItem>
+              </SelectContent>
+            </Select>
           </CardHeader>
           <CardContent>
             {(() => {

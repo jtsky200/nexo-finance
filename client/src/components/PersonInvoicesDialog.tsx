@@ -239,9 +239,15 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
   return (
     <>
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="max-w-[700px] w-[95vw] max-h-[90vh] p-0 gap-0 overflow-hidden">
-          {/* Header */}
-          <div className="bg-slate-50 dark:bg-slate-900 px-6 py-6 border-b">
+        <DialogContent className="max-w-[700px] w-[95vw] max-h-[90vh] p-0 gap-0 overflow-hidden" showCloseButton={false}>
+          {/* Header with custom close button */}
+          <div className="bg-slate-50 dark:bg-slate-900 px-6 py-6 border-b relative">
+            <button
+              onClick={() => handleClose(false)}
+              className="absolute top-4 right-4 p-2 rounded-md opacity-70 hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+            >
+              <X className="w-5 h-5" />
+            </button>
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl font-bold shrink-0">

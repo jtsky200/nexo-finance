@@ -943,6 +943,13 @@ exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
                 }
             }
             console.log(`Adding invoice event: ${invoiceData.description} on ${eventDate.toISOString()}`);
+            // Only add ONE event per invoice - prefer dueDate over reminderDate
+            // If reminder is on the same day as due date, only show due date
+            const reminderDate = invoiceData.reminderEnabled && invoiceData.reminderDate
+                ? invoiceData.reminderDate.toDate()
+                : null;
+            const isSameDay = reminderDate && eventDate &&
+                reminderDate.toDateString() === eventDate.toDateString();
             events.push({
                 id: `due-${invoiceDoc.id}`,
                 type: 'due',
@@ -956,31 +963,9 @@ exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
                 invoiceId: invoiceDoc.id,
                 isOverdue: isOverdue,
                 hasDueDate: !!invoiceData.dueDate,
+                hasReminder: !!reminderDate && !isSameDay,
+                reminderDate: reminderDate && !isSameDay ? reminderDate.toISOString() : null,
             });
-            // Add reminder events if enabled
-            if (invoiceData.reminderEnabled && invoiceData.reminderDate) {
-                const reminderDate = invoiceData.reminderDate.toDate();
-                // Filter by date range if provided
-                if (startDate && endDate) {
-                    const start = new Date(startDate);
-                    const end = new Date(endDate);
-                    if (reminderDate < start || reminderDate > end)
-                        continue;
-                }
-                events.push({
-                    id: `reminder-${invoiceDoc.id}`,
-                    type: 'reminder',
-                    title: `Erinnerung: ${personData.name}: ${invoiceData.description}`,
-                    date: reminderDate.toISOString(),
-                    amount: invoiceData.amount,
-                    status: invoiceData.status,
-                    direction: invoiceData.direction || 'incoming',
-                    personId: personDoc.id,
-                    personName: personData.name,
-                    invoiceId: invoiceDoc.id,
-                    dueDate: invoiceData.dueDate ? invoiceData.dueDate.toDate().toISOString() : null,
-                });
-            }
         }
     }
     // Get regular reminders (Termine & Aufgaben) - field is 'dueDate' not 'date'

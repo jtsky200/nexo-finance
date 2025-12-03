@@ -203,19 +203,59 @@ export default function Calendar() {
   };
 
   const getEventColor = (event: CalendarEvent) => {
-    if (event.isOverdue) return 'bg-red-500 text-white';
-    if (event.type === 'due') return 'bg-orange-500 text-white';
+    // Überfällige Rechnungen immer rot
+    if (event.isOverdue) return 'bg-red-600 text-white';
+    
+    // Rechnungen/Fälligkeiten (due) - Orange
+    if (event.type === 'due') {
+      if (event.status === 'paid') return 'bg-green-600 text-white';
+      if (event.status === 'postponed') return 'bg-yellow-500 text-white';
+      return 'bg-orange-500 text-white';
+    }
+    
+    // Zahlungserinnerungen - Blau
     if (event.type === 'reminder') return 'bg-blue-500 text-white';
-    if (event.type === 'appointment') return 'bg-green-500 text-white';
+    
+    // Termine/Aufgaben - Grün
+    if (event.type === 'appointment') {
+      if (event.completed) return 'bg-gray-400 text-white';
+      if (event.category === 'termin') return 'bg-green-600 text-white';
+      if (event.category === 'aufgabe') return 'bg-purple-500 text-white';
+      return 'bg-green-600 text-white';
+    }
+    
     return 'bg-gray-500 text-white';
+  };
+
+  const getEventBorderColor = (event: CalendarEvent) => {
+    if (event.isOverdue) return 'border-l-4 border-l-red-600';
+    if (event.type === 'due') return 'border-l-4 border-l-orange-500';
+    if (event.type === 'reminder') return 'border-l-4 border-l-blue-500';
+    if (event.type === 'appointment') return 'border-l-4 border-l-green-600';
+    return '';
   };
 
   const getEventIcon = (event: CalendarEvent) => {
     if (event.isOverdue) return <AlertTriangle className="w-4 h-4" />;
-    if (event.type === 'due') return <Clock className="w-4 h-4" />;
+    if (event.type === 'due') return <FileText className="w-4 h-4" />;
     if (event.type === 'reminder') return <Bell className="w-4 h-4" />;
-    if (event.type === 'appointment') return <CalendarIcon className="w-4 h-4" />;
+    if (event.type === 'appointment') {
+      if (event.category === 'aufgabe') return <CheckCircle className="w-4 h-4" />;
+      return <CalendarIcon className="w-4 h-4" />;
+    }
     return <FileText className="w-4 h-4" />;
+  };
+
+  const getEventTypeLabel = (event: CalendarEvent) => {
+    if (event.type === 'due') return 'Rechnung';
+    if (event.type === 'reminder') return 'Erinnerung';
+    if (event.type === 'appointment') {
+      if (event.category === 'termin') return 'Termin';
+      if (event.category === 'aufgabe') return 'Aufgabe';
+      if (event.category === 'zahlung') return 'Zahlung';
+      return 'Termin';
+    }
+    return 'Event';
   };
 
   const isToday = (date: Date) => {
@@ -295,13 +335,22 @@ export default function Calendar() {
             </Button>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button onClick={() => {
               setNewEvent({ ...newEvent, date: new Date().toISOString().split('T')[0] });
               setShowAddDialog(true);
             }}>
               <Plus className="w-4 h-4 mr-2" />
               Neuer Termin
+            </Button>
+
+            <Button variant="outline" onClick={() => setLocation('/bills')}>
+              <FileText className="w-4 h-4 mr-2" />
+              Rechnungen
+            </Button>
+
+            <Button variant="outline" onClick={() => setLocation('/people')}>
+              Personen
             </Button>
             
             <Select value={view} onValueChange={(v: any) => setView(v)}>
@@ -316,15 +365,30 @@ export default function Calendar() {
             </Select>
             
             <Select value={filterType} onValueChange={setFilterType}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-[150px]">
                 <Filter className="w-4 h-4 mr-2" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Alle</SelectItem>
-                <SelectItem value="due">Fälligkeiten</SelectItem>
-                <SelectItem value="reminder">Erinnerungen</SelectItem>
-                <SelectItem value="appointment">Termine</SelectItem>
+                <SelectItem value="all">Alle Events</SelectItem>
+                <SelectItem value="due">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-orange-500"></span>
+                    Rechnungen
+                  </span>
+                </SelectItem>
+                <SelectItem value="reminder">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    Erinnerungen
+                  </span>
+                </SelectItem>
+                <SelectItem value="appointment">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-green-600"></span>
+                    Termine
+                  </span>
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -332,33 +396,63 @@ export default function Calendar() {
 
         {/* Statistics */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-          <Card className="cursor-pointer hover:border-primary" onClick={() => setFilterType('all')}>
+          <Card 
+            className={`cursor-pointer transition-all hover:shadow-md ${filterType === 'all' ? 'ring-2 ring-primary' : ''}`} 
+            onClick={() => setFilterType('all')}
+          >
             <CardContent className="pt-4 pb-4">
               <p className="text-sm text-muted-foreground">Gesamt</p>
               <p className="text-2xl font-bold">{stats.total}</p>
             </CardContent>
           </Card>
-          <Card className={`cursor-pointer hover:border-primary ${stats.overdue > 0 ? 'border-red-500' : ''}`}>
+          <Card 
+            className={`cursor-pointer transition-all hover:shadow-md ${stats.overdue > 0 ? 'border-red-500 bg-red-50 dark:bg-red-900/10' : ''}`}
+            onClick={() => {
+              // Filter to show only overdue
+              setFilterType('all');
+            }}
+          >
             <CardContent className="pt-4 pb-4">
-              <p className="text-sm text-muted-foreground">Überfällig</p>
+              <div className="flex items-center gap-2">
+                <AlertTriangle className={`w-4 h-4 ${stats.overdue > 0 ? 'text-red-600' : 'text-muted-foreground'}`} />
+                <p className="text-sm text-muted-foreground">Überfällig</p>
+              </div>
               <p className={`text-2xl font-bold ${stats.overdue > 0 ? 'text-red-600' : ''}`}>{stats.overdue}</p>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:border-primary border-orange-200" onClick={() => setFilterType('due')}>
+          <Card 
+            className={`cursor-pointer transition-all hover:shadow-md border-l-4 border-l-orange-500 ${filterType === 'due' ? 'ring-2 ring-orange-500' : ''}`} 
+            onClick={() => setFilterType('due')}
+          >
             <CardContent className="pt-4 pb-4">
-              <p className="text-sm text-muted-foreground">Fälligkeiten</p>
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-orange-500" />
+                <p className="text-sm text-muted-foreground">Rechnungen</p>
+              </div>
               <p className="text-2xl font-bold text-orange-600">{stats.dueThisMonth}</p>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:border-primary border-blue-200" onClick={() => setFilterType('reminder')}>
+          <Card 
+            className={`cursor-pointer transition-all hover:shadow-md border-l-4 border-l-blue-500 ${filterType === 'reminder' ? 'ring-2 ring-blue-500' : ''}`} 
+            onClick={() => setFilterType('reminder')}
+          >
             <CardContent className="pt-4 pb-4">
-              <p className="text-sm text-muted-foreground">Erinnerungen</p>
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-blue-500" />
+                <p className="text-sm text-muted-foreground">Erinnerungen</p>
+              </div>
               <p className="text-2xl font-bold text-blue-600">{stats.reminders}</p>
             </CardContent>
           </Card>
-          <Card className="cursor-pointer hover:border-primary border-green-200" onClick={() => setFilterType('appointment')}>
+          <Card 
+            className={`cursor-pointer transition-all hover:shadow-md border-l-4 border-l-green-600 ${filterType === 'appointment' ? 'ring-2 ring-green-600' : ''}`} 
+            onClick={() => setFilterType('appointment')}
+          >
             <CardContent className="pt-4 pb-4">
-              <p className="text-sm text-muted-foreground">Termine</p>
+              <div className="flex items-center gap-2">
+                <CalendarIcon className="w-4 h-4 text-green-600" />
+                <p className="text-sm text-muted-foreground">Termine</p>
+              </div>
               <p className="text-2xl font-bold text-green-600">{stats.appointments}</p>
             </CardContent>
           </Card>
@@ -419,8 +513,13 @@ export default function Calendar() {
         {/* List View */}
         {view === 'list' && (
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Alle Events im {monthNames[currentDate.getMonth()]}</CardTitle>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-orange-500"></span> Rechnungen</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-600"></span> Termine</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-500"></span> Erinnerungen</span>
+              </div>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -431,8 +530,8 @@ export default function Calendar() {
                     <div
                       key={event.id}
                       onClick={() => { setSelectedEvent(event); setShowEventDialog(true); }}
-                      className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer hover:bg-accent transition-colors ${
-                        event.isOverdue ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : ''
+                      className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer hover:bg-accent transition-colors ${getEventBorderColor(event)} ${
+                        event.isOverdue ? 'bg-red-50 dark:bg-red-900/20' : ''
                       }`}
                     >
                       <div className="flex items-center gap-4">
@@ -442,12 +541,21 @@ export default function Calendar() {
                         <div>
                           <div className="flex items-center gap-2">
                             <h4 className="font-medium">{event.title}</h4>
+                            <Badge variant="secondary" className="text-xs">
+                              {getEventTypeLabel(event)}
+                            </Badge>
                             {event.isOverdue && (
-                              <Badge className="bg-red-500 text-white">Überfällig</Badge>
+                              <Badge className="bg-red-600 text-white">Überfällig</Badge>
                             )}
                           </div>
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <span>{formatDate(event.date)}</span>
+                            {event.time && (
+                              <>
+                                <span>•</span>
+                                <span>{event.time} Uhr</span>
+                              </>
+                            )}
                             {event.personName && (
                               <>
                                 <span>•</span>
@@ -458,20 +566,28 @@ export default function Calendar() {
                         </div>
                       </div>
                       
-                      {event.amount && (
-                        <div className="text-right">
-                          <p className="font-bold">{formatAmount(event.amount)}</p>
-                          {event.status && (
-                            <Badge variant="outline" className={
-                              event.status === 'paid' ? 'text-green-600' :
-                              event.status === 'open' ? 'text-red-600' : 'text-orange-600'
-                            }>
-                              {event.status === 'paid' ? 'Bezahlt' :
-                               event.status === 'open' ? 'Offen' : 'Verschoben'}
+                      <div className="text-right">
+                        {event.amount ? (
+                          <>
+                            <p className="font-bold">{formatAmount(event.amount)}</p>
+                            {event.status && (
+                              <Badge variant="outline" className={
+                                event.status === 'paid' ? 'text-green-600 border-green-600' :
+                                event.status === 'open' ? 'text-orange-600 border-orange-600' : 'text-yellow-600 border-yellow-600'
+                              }>
+                                {event.status === 'paid' ? 'Bezahlt' :
+                                 event.status === 'open' ? 'Offen' : 'Verschoben'}
+                              </Badge>
+                            )}
+                          </>
+                        ) : (
+                          event.completed !== undefined && (
+                            <Badge variant="outline" className={event.completed ? 'text-green-600 border-green-600' : 'text-muted-foreground'}>
+                              {event.completed ? 'Erledigt' : 'Ausstehend'}
                             </Badge>
-                          )}
-                        </div>
-                      )}
+                          )
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -784,101 +900,138 @@ export default function Calendar() {
 
       {/* Event Detail Dialog */}
       <Dialog open={showEventDialog} onOpenChange={setShowEventDialog}>
-        <DialogContent className="sm:max-w-[450px]">
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-3">
               {selectedEvent && (
                 <>
-                  <div className={`p-2 rounded-full ${getEventColor(selectedEvent)}`}>
+                  <div className={`p-2.5 rounded-full ${getEventColor(selectedEvent)}`}>
                     {getEventIcon(selectedEvent)}
                   </div>
-                  {selectedEvent.title}
+                  <div>
+                    <span className="block">{selectedEvent.title}</span>
+                    <span className="text-sm font-normal text-muted-foreground">
+                      {getEventTypeLabel(selectedEvent)}
+                    </span>
+                  </div>
                 </>
               )}
             </DialogTitle>
           </DialogHeader>
           {selectedEvent && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-4 mt-2">
+              {/* Überfällig-Warnung */}
+              {selectedEvent.isOverdue && (
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-300 flex items-center gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-600" />
+                  <div>
+                    <p className="text-red-600 font-medium">Diese Rechnung ist überfällig!</p>
+                    <p className="text-sm text-red-500">Bitte so schnell wie möglich bearbeiten.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Hauptinformationen */}
+              <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
                 <div>
                   <p className="text-sm text-muted-foreground">Datum</p>
                   <p className="font-medium">{formatDate(selectedEvent.date)}</p>
+                  {selectedEvent.time && (
+                    <p className="text-sm text-muted-foreground">{selectedEvent.time} Uhr</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Typ</p>
                   <Badge className={getEventColor(selectedEvent)}>
-                    {selectedEvent.type === 'due' ? 'Fälligkeit' :
-                     selectedEvent.type === 'reminder' ? 'Erinnerung' : 'Termin'}
+                    {getEventTypeLabel(selectedEvent)}
                   </Badge>
                 </div>
               </div>
 
+              {/* Person */}
               {selectedEvent.personName && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Person</p>
-                  <p className="font-medium">{selectedEvent.personName}</p>
+                <div className="flex items-center justify-between p-3 border rounded-lg">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Person</p>
+                    <p className="font-medium">{selectedEvent.personName}</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => {
+                    setShowEventDialog(false);
+                    setLocation('/people');
+                  }}>
+                    Zur Person
+                  </Button>
                 </div>
               )}
 
+              {/* Betrag und Status */}
               {selectedEvent.amount && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Betrag</p>
-                  <p className="text-xl font-bold">{formatAmount(selectedEvent.amount)}</p>
-                </div>
-              )}
-
-              {selectedEvent.status && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
-                  <Badge variant="outline" className={
-                    selectedEvent.status === 'paid' ? 'text-green-600' :
-                    selectedEvent.status === 'open' ? 'text-red-600' : 'text-orange-600'
-                  }>
-                    {selectedEvent.status === 'paid' ? 'Bezahlt' :
-                     selectedEvent.status === 'open' ? 'Offen' : 'Verschoben'}
-                  </Badge>
-                </div>
-              )}
-
-              {selectedEvent.direction && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Richtung</p>
-                  <Badge variant="outline">
-                    {selectedEvent.direction === 'incoming' ? (
-                      <span className="flex items-center gap-1 text-green-600">
-                        <ArrowDownLeft className="w-3 h-3" /> Forderung
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-red-600">
-                        <ArrowUpRight className="w-3 h-3" /> Verbindlichkeit
-                      </span>
+                <div className="p-4 border rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Betrag</p>
+                      <p className="text-2xl font-bold">{formatAmount(selectedEvent.amount)}</p>
+                    </div>
+                    {selectedEvent.status && (
+                      <Badge 
+                        variant="outline" 
+                        className={`text-base px-3 py-1 ${
+                          selectedEvent.status === 'paid' ? 'text-green-600 border-green-600 bg-green-50' :
+                          selectedEvent.status === 'open' ? 'text-orange-600 border-orange-600 bg-orange-50' : 
+                          'text-yellow-600 border-yellow-600 bg-yellow-50'
+                        }`}
+                      >
+                        {selectedEvent.status === 'paid' ? 'Bezahlt' :
+                         selectedEvent.status === 'open' ? 'Offen' : 'Verschoben'}
+                      </Badge>
                     )}
-                  </Badge>
+                  </div>
+                  
+                  {selectedEvent.direction && (
+                    <div className="mt-3 pt-3 border-t">
+                      <p className="text-sm text-muted-foreground mb-1">Richtung</p>
+                      {selectedEvent.direction === 'incoming' ? (
+                        <span className="flex items-center gap-2 text-green-600">
+                          <ArrowDownLeft className="w-4 h-4" /> 
+                          <span>Forderung (Person schuldet mir)</span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2 text-red-600">
+                          <ArrowUpRight className="w-4 h-4" /> 
+                          <span>Verbindlichkeit (Ich schulde Person)</span>
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
+              {/* Beschreibung */}
               {selectedEvent.description && (
                 <div>
-                  <p className="text-sm text-muted-foreground">Beschreibung</p>
-                  <p>{selectedEvent.description}</p>
+                  <p className="text-sm text-muted-foreground mb-1">Beschreibung</p>
+                  <p className="text-sm bg-muted/50 p-3 rounded-lg">{selectedEvent.description}</p>
                 </div>
               )}
 
-              {selectedEvent.isOverdue && (
-                <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200">
-                  <p className="text-red-600 font-medium flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4" />
-                    Diese Rechnung ist überfällig!
-                  </p>
+              {/* Status für Termine */}
+              {selectedEvent.type === 'appointment' && selectedEvent.completed !== undefined && (
+                <div className="flex items-center justify-between p-3 border rounded-lg">
+                  <span>Status</span>
+                  <Badge variant="outline" className={selectedEvent.completed ? 'text-green-600 border-green-600' : 'text-muted-foreground'}>
+                    {selectedEvent.completed ? 'Erledigt' : 'Ausstehend'}
+                  </Badge>
                 </div>
               )}
             </div>
           )}
-          <DialogFooter className="mt-4">
-            <Button variant="outline" onClick={() => setShowEventDialog(false)}>Schliessen</Button>
-            <Button onClick={() => navigateToEvent(selectedEvent!)}>
+          <DialogFooter className="mt-4 flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setShowEventDialog(false)} className="w-full sm:w-auto">
+              Schliessen
+            </Button>
+            <Button onClick={() => navigateToEvent(selectedEvent!)} className="w-full sm:w-auto">
               <Eye className="w-4 h-4 mr-2" />
-              Details anzeigen
+              Details bearbeiten
             </Button>
           </DialogFooter>
         </DialogContent>

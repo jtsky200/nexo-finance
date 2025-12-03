@@ -271,7 +271,7 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[800px] w-[95vw] max-h-[90vh] overflow-y-auto p-0">
+      <DialogContent className="max-w-[950px] w-[95vw] max-h-[90vh] overflow-y-auto p-0">
         <DialogHeader className="p-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Briefcase className="w-6 h-6" />
@@ -369,25 +369,31 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
             </div>
 
             {/* Quick Select Buttons */}
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/30 rounded-lg">
+              <span className="text-sm font-medium mr-1">Schnellauswahl:</span>
               <Button variant="outline" size="sm" onClick={selectWorkWeek}>
-                Mo-Fr auswählen
+                Mo-Fr
               </Button>
+              <span className="text-muted-foreground">|</span>
               {[1, 2, 3, 4, 5, 6, 0].map(dow => (
                 <Button 
                   key={dow} 
                   variant="ghost" 
                   size="sm"
+                  className="px-2"
                   onClick={() => selectAllWeekdays(dow)}
                 >
-                  Alle {FULL_DAY_NAMES[dow]}e
+                  {DAY_NAMES[dow]}
                 </Button>
               ))}
               {selectedDates.size > 0 && (
-                <Button variant="ghost" size="sm" onClick={clearSelection}>
-                  <Trash2 className="w-4 h-4 mr-1" />
-                  Auswahl löschen ({selectedDates.size})
-                </Button>
+                <>
+                  <span className="text-muted-foreground">|</span>
+                  <Button variant="destructive" size="sm" onClick={clearSelection}>
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Löschen ({selectedDates.size})
+                  </Button>
+                </>
               )}
             </div>
 
@@ -395,8 +401,8 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
             <div className="border rounded-lg overflow-hidden">
               {/* Day Headers */}
               <div className="grid grid-cols-7 bg-muted">
-                {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(day => (
-                  <div key={day} className="p-2 text-center text-sm font-medium border-b">
+                {['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'].map(day => (
+                  <div key={day} className="p-3 text-center text-sm font-semibold border-b">
                     {day}
                   </div>
                 ))}
@@ -415,7 +421,7 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
                       key={index}
                       onClick={() => day.isCurrentMonth && handleDateClick(day.date)}
                       className={`
-                        min-h-[60px] p-1 border-b border-r cursor-pointer transition-all relative
+                        min-h-[70px] p-2 border-b border-r cursor-pointer transition-all relative
                         ${day.isCurrentMonth ? 'bg-background hover:bg-accent/50' : 'bg-muted/30'}
                         ${isToday(day.date) ? 'ring-2 ring-primary ring-inset' : ''}
                         ${isSelected ? 'bg-primary/20' : ''}

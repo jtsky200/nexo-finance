@@ -809,80 +809,155 @@ export default function Calendar() {
 
       {/* Day Detail Dialog */}
       <Dialog open={showDayDialog} onOpenChange={setShowDayDialog}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[550px]">
           <DialogHeader>
-            <DialogTitle>{selectedDate && formatFullDate(selectedDate)}</DialogTitle>
+            <DialogTitle className="text-xl">{selectedDate && formatFullDate(selectedDate)}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-5">
             {selectedDate && (() => {
               const dayEvents = events.filter(event => {
                 const eventDate = new Date(event.date);
                 return eventDate.toDateString() === selectedDate.toDateString();
               });
 
-              if (dayEvents.length === 0) {
-                return (
-                  <div className="text-center py-8">
-                    <CalendarIcon className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                    <p className="text-muted-foreground mb-4">Keine Events an diesem Tag</p>
-                    <Button onClick={() => {
-                      setNewEvent({ ...newEvent, date: selectedDate.toISOString().split('T')[0] });
-                      setShowDayDialog(false);
-                      setShowAddDialog(true);
-                    }}>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Termin erstellen
-                    </Button>
-                  </div>
-                );
-              }
-
               return (
-                <div className="space-y-3">
-                  {dayEvents.map(event => (
-                    <div
-                      key={event.id}
-                      className={`p-4 rounded-lg border cursor-pointer hover:bg-accent transition-colors ${
-                        event.isOverdue ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : ''
-                      }`}
-                      onClick={() => {
-                        setShowDayDialog(false);
-                        setSelectedEvent(event);
-                        setShowEventDialog(true);
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={`p-2 rounded-full ${getEventColor(event)}`}>
-                            {getEventIcon(event)}
-                          </div>
-                          <div>
-                            <h4 className="font-medium">{event.title}</h4>
-                            {event.personName && (
-                              <p className="text-sm text-muted-foreground">{event.personName}</p>
+                <>
+                  {/* Events Section */}
+                  {dayEvents.length === 0 ? (
+                    <div className="text-center py-4 bg-muted/30 rounded-lg">
+                      <CalendarIcon className="w-10 h-10 mx-auto text-muted-foreground/50 mb-2" />
+                      <p className="text-muted-foreground text-sm">Keine Events an diesem Tag</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-muted-foreground">{dayEvents.length} {dayEvents.length === 1 ? 'Event' : 'Events'}</p>
+                      {dayEvents.map(event => (
+                        <div
+                          key={event.id}
+                          className={`p-3 rounded-lg border cursor-pointer hover:bg-accent transition-colors ${
+                            event.isOverdue ? 'border-red-300 bg-red-50 dark:bg-red-900/20' : ''
+                          }`}
+                          onClick={() => {
+                            setShowDayDialog(false);
+                            setSelectedEvent(event);
+                            setShowEventDialog(true);
+                          }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2 rounded-full ${getEventColor(event)}`}>
+                                {getEventIcon(event)}
+                              </div>
+                              <div>
+                                <h4 className="font-medium text-sm">{event.title}</h4>
+                                <p className="text-xs text-muted-foreground">
+                                  {getEventTypeLabel(event)}
+                                  {event.personName && ` • ${event.personName}`}
+                                </p>
+                              </div>
+                            </div>
+                            {event.amount && (
+                              <p className="font-semibold text-sm">{formatAmount(event.amount)}</p>
                             )}
                           </div>
                         </div>
-                        {event.amount && (
-                          <p className="font-bold">{formatAmount(event.amount)}</p>
-                        )}
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                  
-                  <Button 
-                    variant="outline" 
-                    className="w-full"
-                    onClick={() => {
-                      setNewEvent({ ...newEvent, date: selectedDate.toISOString().split('T')[0] });
-                      setShowDayDialog(false);
-                      setShowAddDialog(true);
-                    }}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Weiteren Termin hinzufügen
-                  </Button>
-                </div>
+                  )}
+
+                  {/* Quick Actions */}
+                  <div className="border-t pt-4">
+                    <p className="text-sm font-medium text-muted-foreground mb-3">Schnellaktionen</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button 
+                        variant="outline" 
+                        className="h-auto py-3 flex-col gap-1"
+                        onClick={() => {
+                          setNewEvent({ ...newEvent, date: selectedDate.toISOString().split('T')[0] });
+                          setShowDayDialog(false);
+                          setShowAddDialog(true);
+                        }}
+                      >
+                        <CalendarIcon className="w-4 h-4" />
+                        <span className="text-xs">Termin erstellen</span>
+                      </Button>
+                      
+                      <Button 
+                        variant="outline" 
+                        className="h-auto py-3 flex-col gap-1"
+                        onClick={() => {
+                          setShowDayDialog(false);
+                          setLocation('/people');
+                          toast.info('Wähle eine Person und füge eine Rechnung hinzu');
+                        }}
+                      >
+                        <FileText className="w-4 h-4" />
+                        <span className="text-xs">Rechnung hinzufügen</span>
+                      </Button>
+                      
+                      <Button 
+                        variant="outline" 
+                        className="h-auto py-3 flex-col gap-1"
+                        onClick={() => {
+                          setShowDayDialog(false);
+                          setLocation('/finance');
+                          toast.info('Erfasse eine neue Ausgabe oder Einnahme');
+                        }}
+                      >
+                        <ArrowDownLeft className="w-4 h-4" />
+                        <span className="text-xs">Ausgabe erfassen</span>
+                      </Button>
+                      
+                      <Button 
+                        variant="outline" 
+                        className="h-auto py-3 flex-col gap-1"
+                        onClick={() => {
+                          setShowDayDialog(false);
+                          setLocation('/reminders');
+                          toast.info('Erstelle eine neue Erinnerung');
+                        }}
+                      >
+                        <Bell className="w-4 h-4" />
+                        <span className="text-xs">Erinnerung</span>
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Quick Navigation */}
+                  <div className="border-t pt-4">
+                    <p className="text-sm font-medium text-muted-foreground mb-3">Navigation</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => { setShowDayDialog(false); setLocation('/bills'); }}
+                      >
+                        Rechnungen
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => { setShowDayDialog(false); setLocation('/people'); }}
+                      >
+                        Personen
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => { setShowDayDialog(false); setLocation('/finance'); }}
+                      >
+                        Finanzen
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => { setShowDayDialog(false); setLocation('/reminders'); }}
+                      >
+                        Erinnerungen
+                      </Button>
+                    </div>
+                  </div>
+                </>
               );
             })()}
           </div>
@@ -1014,15 +1089,109 @@ export default function Calendar() {
                   </Badge>
                 </div>
               )}
+
+              {/* Quick Actions */}
+              <div className="border-t pt-4 mt-4">
+                <p className="text-sm font-medium text-muted-foreground mb-3">Schnellaktionen</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {selectedEvent.type === 'due' && selectedEvent.personId && (
+                    <>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="w-full"
+                        onClick={() => {
+                          setShowEventDialog(false);
+                          setLocation('/people');
+                          toast.info('Öffne Person um Rechnung zu bearbeiten');
+                        }}
+                      >
+                        <Edit2 className="w-4 h-4 mr-2" />
+                        Rechnung bearbeiten
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="w-full"
+                        onClick={() => {
+                          setShowEventDialog(false);
+                          setLocation('/finance');
+                          toast.info('Erfasse die Zahlung als Ausgabe');
+                        }}
+                      >
+                        <ArrowUpRight className="w-4 h-4 mr-2" />
+                        Als Ausgabe erfassen
+                      </Button>
+                    </>
+                  )}
+                  {selectedEvent.type === 'appointment' && (
+                    <>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="w-full"
+                        onClick={() => {
+                          setShowEventDialog(false);
+                          setLocation('/reminders');
+                          toast.info('Öffne Erinnerungen zum Bearbeiten');
+                        }}
+                      >
+                        <Edit2 className="w-4 h-4 mr-2" />
+                        Bearbeiten
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="w-full"
+                        onClick={async () => {
+                          try {
+                            const reminderId = selectedEvent.id.replace('appointment-', '');
+                            await updateReminder(reminderId, { status: selectedEvent.completed ? 'ausstehend' : 'erledigt' });
+                            toast.success(selectedEvent.completed ? 'Als ausstehend markiert' : 'Als erledigt markiert');
+                            setShowEventDialog(false);
+                            fetchEvents();
+                          } catch (error) {
+                            toast.error('Fehler beim Aktualisieren');
+                          }
+                        }}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        {selectedEvent.completed ? 'Als ausstehend' : 'Als erledigt'}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Navigation Links */}
+              <div className="flex flex-wrap gap-2 pt-2">
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => { setShowEventDialog(false); setLocation('/bills'); }}
+                >
+                  Alle Rechnungen
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => { setShowEventDialog(false); setLocation('/people'); }}
+                >
+                  Personen
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => { setShowEventDialog(false); setLocation('/finance'); }}
+                >
+                  Finanzen
+                </Button>
+              </div>
             </div>
           )}
-          <DialogFooter className="mt-4 flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => setShowEventDialog(false)} className="w-full sm:w-auto">
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setShowEventDialog(false)}>
               Schliessen
-            </Button>
-            <Button onClick={() => navigateToEvent(selectedEvent!)} className="w-full sm:w-auto">
-              <Eye className="w-4 h-4 mr-2" />
-              Details bearbeiten
             </Button>
           </DialogFooter>
         </DialogContent>

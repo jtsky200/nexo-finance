@@ -767,11 +767,11 @@ export default function Calendar() {
 
       {/* Add Event Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="sm:max-w-[450px]">
+        <DialogContent className="sm:max-w-[550px]">
           <DialogHeader>
-            <DialogTitle>Neuer Termin</DialogTitle>
+            <DialogTitle className="text-xl">Neuer Termin</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-5">
             <div>
               <Label>Titel *</Label>
               <Input
@@ -854,7 +854,7 @@ export default function Calendar() {
 
       {/* Day Detail Dialog */}
       <Dialog open={showDayDialog} onOpenChange={setShowDayDialog}>
-        <DialogContent className="sm:max-w-[550px]">
+        <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle className="text-xl">{selectedDate && formatFullDate(selectedDate)}</DialogTitle>
           </DialogHeader>
@@ -1011,7 +1011,7 @@ export default function Calendar() {
 
       {/* Event Detail Dialog */}
       <Dialog open={showEventDialog} onOpenChange={setShowEventDialog}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
               {selectedEvent && (

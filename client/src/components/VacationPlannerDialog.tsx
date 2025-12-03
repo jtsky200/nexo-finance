@@ -250,16 +250,17 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-[900px] w-[95vw] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-[1100px] w-[95vw] max-h-[90vh] overflow-y-auto p-0">
+          <DialogHeader className="p-6 pb-4 border-b">
             <DialogTitle className="flex items-center gap-2 text-xl">
               <Palmtree className="w-6 h-6" />
               Ferienplaner
             </DialogTitle>
           </DialogHeader>
 
+          <div className="p-6 space-y-5">
           {/* Month Navigation */}
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between">
             <Button variant="outline" size="icon" onClick={goToPreviousMonth}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
@@ -273,7 +274,7 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
 
           {/* Statistics Cards */}
           {householdMembers.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {householdMembers.slice(0, 4).map(person => {
                 const stats = getVacationStats(person.id);
                 return (
@@ -295,7 +296,7 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
           )}
 
           {/* Add Button */}
-          <Button onClick={openAddDialog} className="w-full mb-4">
+          <Button onClick={openAddDialog} className="w-full" size="lg">
             <Plus className="w-4 h-4 mr-2" />
             Ferien / Abwesenheit eintragen
           </Button>
@@ -363,7 +364,7 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
           )}
 
           {/* Legend */}
-          <div className="mt-4 pt-4 border-t">
+          <div className="pt-4 border-t">
             <p className="text-sm font-medium text-muted-foreground mb-2">Legende</p>
             <div className="flex flex-wrap gap-2">
               {VACATION_TYPES.map(type => {
@@ -377,12 +378,13 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
               })}
             </div>
           </div>
+          </div>
         </DialogContent>
       </Dialog>
 
       {/* Add/Edit Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="sm:max-w-[450px]">
+        <DialogContent className="sm:max-w-[550px]">
           <DialogHeader>
             <DialogTitle>
               {editingVacation ? 'Eintrag bearbeiten' : 'Ferien / Abwesenheit eintragen'}

@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { 
   ChevronLeft, ChevronRight, Briefcase, Coffee, Moon, Sun, 
   Trash2, Users, Check
@@ -28,10 +27,10 @@ interface WorkScheduleDialogProps {
 }
 
 const SCHEDULE_TYPES = [
-  { value: 'full', label: 'Vollzeit', icon: Briefcase, color: 'bg-blue-600 hover:bg-blue-700', lightColor: 'bg-blue-100 text-blue-700' },
-  { value: 'half-am', label: 'Morgen', icon: Sun, color: 'bg-amber-500 hover:bg-amber-600', lightColor: 'bg-amber-100 text-amber-700' },
-  { value: 'half-pm', label: 'Nachmittag', icon: Moon, color: 'bg-purple-600 hover:bg-purple-700', lightColor: 'bg-purple-100 text-purple-700' },
-  { value: 'off', label: 'Frei', icon: Coffee, color: 'bg-green-600 hover:bg-green-700', lightColor: 'bg-green-100 text-green-700' },
+  { value: 'full', label: 'Vollzeit', icon: Briefcase, lightColor: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
+  { value: 'half-am', label: 'Morgen', icon: Sun, lightColor: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
+  { value: 'half-pm', label: 'Nachmittag', icon: Moon, lightColor: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
+  { value: 'off', label: 'Frei', icon: Coffee, lightColor: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
 ];
 
 export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }: WorkScheduleDialogProps) {
@@ -214,9 +213,9 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl w-full max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="pb-4 border-b">
-          <DialogTitle className="flex items-center gap-2 text-xl">
+      <DialogContent className="max-w-6xl w-[95vw] max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="pb-4">
+          <DialogTitle className="flex items-center gap-2 text-lg">
             <Briefcase className="w-5 h-5" />
             Arbeitszeiten planen
           </DialogTitle>
@@ -230,100 +229,86 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
           <div className="text-center py-12">
             <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
             <p className="text-muted-foreground">Keine Haushaltsmitglieder gefunden</p>
-            <p className="text-sm text-muted-foreground mt-1">Füge Personen auf der Personen-Seite hinzu.</p>
           </div>
         ) : (
-          <div className="space-y-6 pt-4">
-            {/* Top Section: Person + Stats */}
-            <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-5">
+            {/* Person + Stats Row */}
+            <div className="flex flex-wrap items-center gap-6">
               <div className="flex items-center gap-3">
-                <span className="text-sm font-medium text-muted-foreground">Person:</span>
-                <div className="flex gap-2">
-                  {householdMembers.map(person => (
-                    <Button
-                      key={person.id}
-                      variant={selectedPerson === person.id ? 'default' : 'outline'}
-                      onClick={() => setSelectedPerson(person.id)}
-                    >
-                      {person.name}
-                    </Button>
-                  ))}
-                </div>
+                <span className="text-sm text-muted-foreground">Person:</span>
+                {householdMembers.map(person => (
+                  <Button
+                    key={person.id}
+                    variant={selectedPerson === person.id ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedPerson(person.id)}
+                  >
+                    {person.name}
+                  </Button>
+                ))}
               </div>
               
-              <div className="flex gap-3">
-                <div className="px-4 py-2 bg-blue-50 dark:bg-blue-950 rounded-lg text-center">
-                  <span className="text-2xl font-bold text-blue-600">{stats.workDays}</span>
-                  <span className="text-xs text-muted-foreground ml-1">Tage</span>
-                </div>
-                <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950 rounded-lg text-center">
-                  <span className="text-2xl font-bold text-amber-600">{stats.hours}h</span>
-                </div>
-                <div className="px-4 py-2 bg-green-50 dark:bg-green-950 rounded-lg text-center">
-                  <span className="text-2xl font-bold text-green-600">{stats.freeDays}</span>
-                  <span className="text-xs text-muted-foreground ml-1">Frei</span>
-                </div>
+              <div className="flex items-center gap-4 ml-auto text-sm">
+                <span><strong>{stats.workDays}</strong> Arbeitstage</span>
+                <span><strong>{stats.hours}</strong> Stunden</span>
+                <span><strong>{stats.freeDays}</strong> Frei</span>
               </div>
             </div>
 
-            {/* Month Navigation + Type Selection */}
-            <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-muted/30 rounded-lg">
-              <div className="flex items-center gap-3">
-                <Button variant="outline" size="icon" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}>
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <span className="font-semibold text-lg min-w-[160px] text-center">
-                  {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
-                </span>
-                <Button variant="outline" size="icon" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}>
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
-              
-              <div className="flex gap-2">
-                {SCHEDULE_TYPES.map(type => {
-                  const Icon = type.icon;
-                  return (
-                    <Button
-                      key={type.value}
-                      variant={selectedType === type.value ? 'default' : 'outline'}
-                      onClick={() => setSelectedType(type.value)}
-                      className={selectedType === type.value ? type.color + ' text-white' : ''}
-                    >
-                      <Icon className="w-4 h-4 mr-2" />
-                      {type.label}
-                    </Button>
-                  );
-                })}
-              </div>
+            {/* Month Navigation */}
+            <div className="flex items-center gap-4">
+              <Button variant="outline" size="sm" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}>
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="font-medium min-w-[150px] text-center">
+                {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+              </span>
+              <Button variant="outline" size="sm" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Type Selection */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted-foreground mr-2">Typ:</span>
+              {SCHEDULE_TYPES.map(type => {
+                const Icon = type.icon;
+                return (
+                  <Button
+                    key={type.value}
+                    variant={selectedType === type.value ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedType(type.value)}
+                  >
+                    <Icon className="w-4 h-4 mr-1" />
+                    {type.label}
+                  </Button>
+                );
+              })}
             </div>
 
             {/* Quick Select */}
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm font-medium text-muted-foreground">Schnellauswahl:</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted-foreground mr-2">Schnell:</span>
               <Button variant="outline" size="sm" onClick={selectWorkWeek}>Mo-Fr</Button>
-              <div className="h-5 w-px bg-border" />
               {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((day, idx) => (
                 <Button key={day} variant="ghost" size="sm" onClick={() => selectAllWeekdays(idx === 6 ? 0 : idx + 1)}>
                   {day}
                 </Button>
               ))}
               {selectedDates.size > 0 && (
-                <>
-                  <div className="h-5 w-px bg-border" />
-                  <Button variant="destructive" size="sm" onClick={clearSelection}>
-                    <Trash2 className="w-4 h-4 mr-1" />
-                    Auswahl löschen ({selectedDates.size})
-                  </Button>
-                </>
+                <Button variant="outline" size="sm" onClick={clearSelection} className="ml-2">
+                  <Trash2 className="w-3 h-3 mr-1" />
+                  Auswahl löschen ({selectedDates.size})
+                </Button>
               )}
             </div>
 
             {/* Calendar */}
             <div className="border rounded-lg overflow-hidden">
-              <div className="grid grid-cols-7 bg-muted">
+              <div className="grid grid-cols-7 border-b">
                 {['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'].map(day => (
-                  <div key={day} className="p-3 text-center text-sm font-medium border-b">{day}</div>
+                  <div key={day} className="p-3 text-center text-sm font-medium bg-muted/50">{day}</div>
                 ))}
               </div>
               <div className="grid grid-cols-7">
@@ -338,31 +323,26 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
                       key={index}
                       onClick={() => day.isCurrentMonth && handleDateClick(day.date)}
                       className={`
-                        min-h-[80px] p-2 border-b border-r cursor-pointer transition-colors relative
-                        ${day.isCurrentMonth ? 'bg-background hover:bg-accent/50' : 'bg-muted/40 text-muted-foreground'}
-                        ${isToday(day.date) ? 'ring-2 ring-primary ring-inset' : ''}
-                        ${isSelected ? 'bg-primary/10' : ''}
+                        min-h-[90px] p-2 border-b border-r cursor-pointer transition-colors
+                        ${day.isCurrentMonth ? 'bg-background hover:bg-muted/50' : 'bg-muted/30 text-muted-foreground'}
+                        ${isToday(day.date) ? 'ring-2 ring-inset ring-primary' : ''}
+                        ${isSelected ? 'bg-accent' : ''}
                       `}
                     >
-                      <span className={`text-sm font-medium ${isToday(day.date) ? 'text-primary' : ''}`}>
-                        {day.date.getDate()}
-                      </span>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">{day.date.getDate()}</span>
+                        {isSelected && !schedule && <Check className="w-4 h-4 text-primary" />}
+                      </div>
                       
                       {schedule && typeInfo && (
-                        <div className={`mt-2 text-xs px-2 py-1.5 rounded-md ${typeInfo.lightColor} font-medium flex items-center justify-between group`}>
-                          <span>{typeInfo.label}</span>
+                        <div className={`mt-2 text-xs px-2 py-1.5 rounded ${typeInfo.lightColor} flex items-center justify-between group`}>
+                          <span className="font-medium">{typeInfo.label}</span>
                           <button
                             onClick={(e) => { e.stopPropagation(); if (schedule.id) deleteSchedule(schedule.id); }}
                             className="opacity-0 group-hover:opacity-100 transition-opacity"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
-                        </div>
-                      )}
-
-                      {isSelected && !schedule && (
-                        <div className="absolute top-1 right-1">
-                          <Check className="w-4 h-4 text-primary" />
                         </div>
                       )}
                     </div>
@@ -373,24 +353,11 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
 
             {/* Apply Button */}
             {selectedDates.size > 0 && (
-              <Button onClick={applyToSelected} size="lg" className="w-full">
-                <Check className="w-5 h-5 mr-2" />
+              <Button onClick={applyToSelected} className="w-full">
+                <Check className="w-4 h-4 mr-2" />
                 {getTypeInfo(selectedType).label} auf {selectedDates.size} Tage anwenden
               </Button>
             )}
-
-            {/* Legend */}
-            <div className="flex items-center justify-center gap-4 pt-2">
-              {SCHEDULE_TYPES.map(type => {
-                const Icon = type.icon;
-                return (
-                  <Badge key={type.value} variant="outline" className={`${type.lightColor} px-3 py-1`}>
-                    <Icon className="w-3 h-3 mr-1.5" />
-                    {type.label}
-                  </Badge>
-                );
-              })}
-            </div>
           </div>
         )}
       </DialogContent>

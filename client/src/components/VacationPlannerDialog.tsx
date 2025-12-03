@@ -5,9 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent } from '@/components/ui/card';
 import { 
   Palmtree, Thermometer, Calendar, Plus, Edit2, Trash2, 
   ChevronLeft, ChevronRight, Users, Heart, Star
@@ -36,11 +34,11 @@ interface VacationPlannerDialogProps {
 }
 
 const VACATION_TYPES = [
-  { value: 'vacation', label: 'Ferien', icon: Palmtree, color: 'bg-cyan-100 text-cyan-700' },
-  { value: 'sick', label: 'Krankheit', icon: Thermometer, color: 'bg-red-100 text-red-700' },
-  { value: 'personal', label: 'Persönlich', icon: Heart, color: 'bg-pink-100 text-pink-700' },
-  { value: 'holiday', label: 'Feiertag', icon: Star, color: 'bg-amber-100 text-amber-700' },
-  { value: 'other', label: 'Sonstiges', icon: Calendar, color: 'bg-gray-100 text-gray-700' },
+  { value: 'vacation', label: 'Ferien', icon: Palmtree },
+  { value: 'sick', label: 'Krankheit', icon: Thermometer },
+  { value: 'personal', label: 'Persönlich', icon: Heart },
+  { value: 'holiday', label: 'Feiertag', icon: Star },
+  { value: 'other', label: 'Sonstiges', icon: Calendar },
 ];
 
 const monthNames = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
@@ -168,7 +166,7 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
 
   const getTypeInfo = (type: string) => VACATION_TYPES.find(t => t.value === type) || VACATION_TYPES[0];
 
-  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' });
+  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   const getMonthVacations = () => {
     const year = currentMonth.getFullYear();
@@ -189,12 +187,14 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
     return { days: total, count: personVacations.length };
   };
 
+  const totalDays = vacations.reduce((sum, v) => sum + calculateDays(v.startDate, v.endDate), 0);
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-          <DialogHeader className="pb-4 border-b">
-            <DialogTitle className="flex items-center gap-2 text-xl">
+        <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="flex items-center gap-2 text-lg">
               <Palmtree className="w-5 h-5" />
               Ferienplaner
             </DialogTitle>
@@ -210,43 +210,38 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
               <p className="text-muted-foreground">Keine Haushaltsmitglieder gefunden</p>
             </div>
           ) : (
-            <div className="space-y-6 pt-4">
-              {/* Stats Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {householdMembers.slice(0, 4).map(person => {
-                  const stats = getPersonStats(person.id);
-                  return (
-                    <Card key={person.id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-medium">
-                            {person.name.charAt(0)}
-                          </div>
-                          <span className="font-medium truncate">{person.name}</span>
-                        </div>
-                        <div className="text-2xl font-bold">{stats.days} Tage</div>
-                        <div className="text-xs text-muted-foreground">{stats.count} Einträge</div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+            <div className="space-y-5">
+              {/* Stats Row */}
+              <div className="flex flex-wrap items-center gap-6">
+                <div className="flex items-center gap-4 text-sm">
+                  {householdMembers.slice(0, 4).map(person => {
+                    const stats = getPersonStats(person.id);
+                    return (
+                      <span key={person.id}>
+                        <strong>{person.name}:</strong> {stats.days} Tage
+                      </span>
+                    );
+                  })}
+                </div>
+                <div className="ml-auto text-sm">
+                  <strong>{totalDays}</strong> Tage gesamt
+                </div>
               </div>
 
               {/* Month Navigation + Add Button */}
-              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Button variant="outline" size="icon" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}>
-                    <ChevronLeft className="w-4 h-4" />
-                  </Button>
-                  <span className="font-semibold text-lg min-w-[160px] text-center">
-                    {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
-                  </span>
-                  <Button variant="outline" size="icon" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}>
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </div>
-                <Button onClick={openAddDialog}>
-                  <Plus className="w-4 h-4 mr-2" />
+              <div className="flex items-center gap-4">
+                <Button variant="outline" size="sm" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="font-medium min-w-[150px] text-center">
+                  {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+                </span>
+                <Button variant="outline" size="sm" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+                <div className="flex-1" />
+                <Button size="sm" onClick={openAddDialog}>
+                  <Plus className="w-4 h-4 mr-1" />
                   Hinzufügen
                 </Button>
               </div>
@@ -257,32 +252,29 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto" />
                 </div>
               ) : getMonthVacations().length === 0 ? (
-                <div className="text-center py-12 bg-muted/30 rounded-lg">
+                <div className="text-center py-12 border rounded-lg">
                   <Palmtree className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
                   <p className="text-muted-foreground">Keine Einträge für diesen Monat</p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="border rounded-lg divide-y">
                   {getMonthVacations().map(vacation => {
                     const typeInfo = getTypeInfo(vacation.type);
                     const TypeIcon = typeInfo.icon;
                     const days = calculateDays(vacation.startDate, vacation.endDate);
 
                     return (
-                      <div key={vacation.id} className="flex items-center gap-4 p-4 rounded-lg border hover:bg-muted/30 transition-colors">
-                        <div className={`p-2.5 rounded-lg ${typeInfo.color}`}>
-                          <TypeIcon className="w-5 h-5" />
-                        </div>
+                      <div key={vacation.id} className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors">
+                        <TypeIcon className="w-5 h-5 text-muted-foreground shrink-0" />
                         <div className="flex-1 min-w-0">
                           <div className="font-medium">{vacation.title}</div>
                           <div className="text-sm text-muted-foreground">
-                            {vacation.personName} • {formatDate(vacation.startDate)} - {formatDate(vacation.endDate)}
+                            {vacation.personName} · {formatDate(vacation.startDate)} – {formatDate(vacation.endDate)} · {days} {days === 1 ? 'Tag' : 'Tage'}
                           </div>
                           {vacation.notes && (
-                            <div className="text-sm text-muted-foreground mt-1 truncate">{vacation.notes}</div>
+                            <div className="text-sm text-muted-foreground mt-1">{vacation.notes}</div>
                           )}
                         </div>
-                        <Badge variant="secondary" className="shrink-0">{days} {days === 1 ? 'Tag' : 'Tage'}</Badge>
                         <Button variant="ghost" size="icon" onClick={() => openEditDialog(vacation)}>
                           <Edit2 className="w-4 h-4" />
                         </Button>
@@ -294,19 +286,6 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
                   })}
                 </div>
               )}
-
-              {/* Legend */}
-              <div className="flex items-center justify-center gap-4 pt-2">
-                {VACATION_TYPES.map(type => {
-                  const TypeIcon = type.icon;
-                  return (
-                    <Badge key={type.value} variant="outline" className={`${type.color} px-3 py-1`}>
-                      <TypeIcon className="w-3 h-3 mr-1.5" />
-                      {type.label}
-                    </Badge>
-                  );
-                })}
-              </div>
             </div>
           )}
         </DialogContent>
@@ -314,55 +293,52 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
 
       {/* Add/Edit Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{editingVacation ? 'Eintrag bearbeiten' : 'Neuer Eintrag'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Person *</Label>
-                <Select value={formData.personId} onValueChange={(v) => {
-                  const p = householdMembers.find(x => x.id === v);
-                  setFormData(prev => ({ ...prev, personId: v, personName: p?.name || '' }));
-                }}>
-                  <SelectTrigger className="mt-1.5"><SelectValue placeholder="Wählen..." /></SelectTrigger>
-                  <SelectContent>
-                    {householdMembers.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Typ *</Label>
-                <Select value={formData.type} onValueChange={(v) => setFormData(prev => ({ ...prev, type: v as Vacation['type'] }))}>
-                  <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {VACATION_TYPES.map(t => {
-                      const I = t.icon;
-                      return <SelectItem key={t.value} value={t.value}><span className="flex items-center gap-2"><I className="w-4 h-4" />{t.label}</span></SelectItem>;
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label>Person</Label>
+              <Select value={formData.personId} onValueChange={(v) => {
+                const p = householdMembers.find(x => x.id === v);
+                setFormData(prev => ({ ...prev, personId: v, personName: p?.name || '' }));
+              }}>
+                <SelectTrigger className="mt-1.5"><SelectValue placeholder="Wählen..." /></SelectTrigger>
+                <SelectContent>
+                  {householdMembers.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div>
-              <Label>Titel *</Label>
+              <Label>Typ</Label>
+              <Select value={formData.type} onValueChange={(v) => setFormData(prev => ({ ...prev, type: v as Vacation['type'] }))}>
+                <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {VACATION_TYPES.map(t => {
+                    const I = t.icon;
+                    return <SelectItem key={t.value} value={t.value}><span className="flex items-center gap-2"><I className="w-4 h-4" />{t.label}</span></SelectItem>;
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Titel</Label>
               <Input value={formData.title} onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))} placeholder="z.B. Sommerferien" className="mt-1.5" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Von *</Label>
+                <Label>Von</Label>
                 <Input type="date" value={formData.startDate} onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))} className="mt-1.5" />
               </div>
               <div>
-                <Label>Bis *</Label>
+                <Label>Bis</Label>
                 <Input type="date" value={formData.endDate} onChange={(e) => setFormData(prev => ({ ...prev, endDate: e.target.value }))} className="mt-1.5" />
               </div>
             </div>
             {formData.startDate && formData.endDate && (
-              <div className="text-center py-3 bg-muted rounded-lg">
-                <span className="text-2xl font-bold">{calculateDays(formData.startDate, formData.endDate)}</span>
-                <span className="text-muted-foreground ml-2">Tage</span>
+              <div className="text-center py-2 border rounded">
+                <strong>{calculateDays(formData.startDate, formData.endDate)}</strong> Tage
               </div>
             )}
             <div>

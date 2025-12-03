@@ -12,13 +12,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { 
   ChevronLeft, ChevronRight, Calendar as CalendarIcon, 
   AlertTriangle, Bell, Clock, CheckCircle, ArrowDownLeft, ArrowUpRight,
-  FileText, Filter, Plus, X, Edit2, Trash2, RefreshCw, Eye
+  FileText, Filter, Plus, X, Edit2, Trash2, RefreshCw, Eye,
+  Briefcase, Palmtree
 } from 'lucide-react';
 import { functions } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { useReminders, createReminder, updateReminder, deleteReminder } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
 import { useLocation } from 'wouter';
+import WorkScheduleDialog from '@/components/WorkScheduleDialog';
+import VacationPlannerDialog from '@/components/VacationPlannerDialog';
 
 interface CalendarEvent {
   id: string;
@@ -54,6 +57,9 @@ export default function Calendar() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showEventDialog, setShowEventDialog] = useState(false);
   const [showDayDialog, setShowDayDialog] = useState(false);
+  const [showWorkScheduleDialog, setShowWorkScheduleDialog] = useState(false);
+  const [showVacationDialog, setShowVacationDialog] = useState(false);
+  const [vacations, setVacations] = useState<any[]>([]);
 
   // New event form
   const [newEvent, setNewEvent] = useState({
@@ -72,23 +78,31 @@ export default function Calendar() {
     try {
       setIsLoading(true);
       const getEventsFunc = httpsCallable(functions, 'getCalendarEvents');
+      const getVacationsFunc = httpsCallable(functions, 'getVacations');
       
       // Get events for a much wider range (6 months before and after)
       const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 6, 1);
       const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 6, 0);
       
-      console.log('Fetching events from', startDate.toISOString(), 'to', endDate.toISOString());
+      // Fetch both events and vacations in parallel
+      const [eventsResult, vacationsResult] = await Promise.all([
+        getEventsFunc({ 
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString()
+        }),
+        getVacationsFunc({
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString()
+        })
+      ]);
       
-      const result = await getEventsFunc({ 
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString()
-      });
+      const eventsData = eventsResult.data as { events: CalendarEvent[] };
+      const vacationsData = vacationsResult.data as { vacations: any[] };
       
-      const data = result.data as { events: CalendarEvent[] };
-      console.log('Received events:', data.events?.length || 0);
-      setEvents(data.events || []);
+      setEvents(eventsData.events || []);
+      setVacations(vacationsData.vacations || []);
     } catch (error) {
-      console.error('Error fetching calendar events:', error);
+      console.error('Error fetching calendar data:', error);
       toast.error('Fehler beim Laden der Events');
     } finally {
       setIsLoading(false);
@@ -133,16 +147,29 @@ export default function Calendar() {
     return day === 0 ? 6 : day - 1;
   };
 
+  // Helper to check if a date is within a vacation period
+  const getVacationsForDate = useCallback((date: Date) => {
+    return vacations.filter(v => {
+      const start = new Date(v.startDate);
+      const end = new Date(v.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      const checkDate = new Date(date);
+      checkDate.setHours(12, 0, 0, 0);
+      return checkDate >= start && checkDate <= end;
+    });
+  }, [vacations]);
+
   const calendarDays = useMemo(() => {
     const daysInMonth = getDaysInMonth(currentDate);
     const firstDay = getFirstDayOfMonth(currentDate);
-    const days: { date: Date; isCurrentMonth: boolean; events: CalendarEvent[] }[] = [];
+    const days: { date: Date; isCurrentMonth: boolean; events: CalendarEvent[]; vacations: any[] }[] = [];
 
     const prevMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
     const daysInPrevMonth = getDaysInMonth(prevMonth);
     for (let i = firstDay - 1; i >= 0; i--) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, daysInPrevMonth - i);
-      days.push({ date, isCurrentMonth: false, events: [] });
+      days.push({ date, isCurrentMonth: false, events: [], vacations: getVacationsForDate(date) });
     }
 
     for (let i = 1; i <= daysInMonth; i++) {
@@ -151,17 +178,17 @@ export default function Calendar() {
         const eventDate = new Date(event.date);
         return eventDate.toDateString() === date.toDateString();
       });
-      days.push({ date, isCurrentMonth: true, events: dayEvents });
+      days.push({ date, isCurrentMonth: true, events: dayEvents, vacations: getVacationsForDate(date) });
     }
 
     const remainingDays = 42 - days.length;
     for (let i = 1; i <= remainingDays; i++) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, i);
-      days.push({ date, isCurrentMonth: false, events: [] });
+      days.push({ date, isCurrentMonth: false, events: [], vacations: getVacationsForDate(date) });
     }
 
     return days;
-  }, [currentDate, events]);
+  }, [currentDate, events, getVacationsForDate]);
 
   const filteredEvents = useMemo(() => {
     let filtered = events.filter(event => {
@@ -339,13 +366,19 @@ export default function Calendar() {
               Neuer Termin
             </Button>
 
+            <Button variant="outline" onClick={() => setShowWorkScheduleDialog(true)}>
+              <Briefcase className="w-4 h-4 mr-2" />
+              Arbeitszeiten
+            </Button>
+
+            <Button variant="outline" onClick={() => setShowVacationDialog(true)}>
+              <Palmtree className="w-4 h-4 mr-2" />
+              Ferien
+            </Button>
+
             <Button variant="outline" onClick={() => setLocation('/bills')}>
               <FileText className="w-4 h-4 mr-2" />
               Rechnungen
-            </Button>
-
-            <Button variant="outline" onClick={() => setLocation('/people')}>
-              Personen
             </Button>
             
             <Select value={view} onValueChange={(v: any) => setView(v)}>
@@ -452,7 +485,19 @@ export default function Calendar() {
                     </div>
                     
                     <div className="space-y-1">
-                      {day.events.slice(0, 3).map(event => (
+                      {/* Vacations first */}
+                      {day.vacations.slice(0, 1).map((vacation: any) => (
+                        <div
+                          key={vacation.id}
+                          className="text-xs px-1 py-0.5 rounded truncate bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-200"
+                          title={`${vacation.personName}: ${vacation.title}`}
+                        >
+                          <Palmtree className="w-3 h-3 inline mr-1" />
+                          {vacation.personName}
+                        </div>
+                      ))}
+                      {/* Events */}
+                      {day.events.slice(0, day.vacations.length > 0 ? 2 : 3).map(event => (
                         <div
                           key={event.id}
                           onClick={(e) => handleEventClick(event, e)}
@@ -462,9 +507,9 @@ export default function Calendar() {
                           {event.title}
                         </div>
                       ))}
-                      {day.events.length > 3 && (
+                      {(day.events.length + day.vacations.length) > 3 && (
                         <div className="text-xs text-muted-foreground font-medium">
-                          +{day.events.length - 3} mehr
+                          +{day.events.length + day.vacations.length - 3} mehr
                         </div>
                       )}
                     </div>
@@ -1196,6 +1241,20 @@ export default function Calendar() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Work Schedule Dialog */}
+      <WorkScheduleDialog
+        open={showWorkScheduleDialog}
+        onOpenChange={setShowWorkScheduleDialog}
+        onDataChanged={fetchEvents}
+      />
+
+      {/* Vacation Planner Dialog */}
+      <VacationPlannerDialog
+        open={showVacationDialog}
+        onOpenChange={setShowVacationDialog}
+        onDataChanged={fetchEvents}
+      />
     </Layout>
   );
 }

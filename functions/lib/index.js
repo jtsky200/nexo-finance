@@ -44,7 +44,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.getAllBills = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
+exports.deleteVacation = exports.updateVacation = exports.createVacation = exports.getVacations = exports.deleteWorkSchedule = exports.updateWorkSchedule = exports.createWorkSchedule = exports.getWorkSchedules = exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.getAllBills = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
@@ -1405,6 +1405,215 @@ exports.deleteBudget = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('not-found', 'Budget not found');
     }
     if (((_a = doc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized');
+    }
+    await docRef.delete();
+    return { success: true };
+});
+// ========== Work Schedule Functions ==========
+exports.getWorkSchedules = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { personId } = request.data || {};
+    let query = db.collection('workSchedules').where('userId', '==', userId);
+    if (personId) {
+        query = query.where('personId', '==', personId);
+    }
+    const snapshot = await query.get();
+    const schedules = snapshot.docs.map(doc => {
+        var _a, _b, _c, _d, _e, _f;
+        return (Object.assign(Object.assign({ id: doc.id }, doc.data()), { createdAt: ((_c = (_b = (_a = doc.data().createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null, updatedAt: ((_f = (_e = (_d = doc.data().updatedAt) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null }));
+    });
+    return { schedules };
+});
+exports.createWorkSchedule = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { personId, personName, dayOfWeek, type, startTime, endTime, notes } = request.data;
+    if (!personId || !personName || dayOfWeek === undefined || !type) {
+        throw new https_1.HttpsError('invalid-argument', 'Missing required fields');
+    }
+    // Check if schedule already exists for this person and day
+    const existingQuery = await db.collection('workSchedules')
+        .where('userId', '==', userId)
+        .where('personId', '==', personId)
+        .where('dayOfWeek', '==', dayOfWeek)
+        .get();
+    if (!existingQuery.empty) {
+        // Update existing schedule
+        const docRef = existingQuery.docs[0].ref;
+        await docRef.update({
+            type,
+            startTime: startTime || null,
+            endTime: endTime || null,
+            notes: notes || null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return { id: existingQuery.docs[0].id, updated: true };
+    }
+    const scheduleData = {
+        userId,
+        personId,
+        personName,
+        dayOfWeek,
+        type,
+        startTime: startTime || null,
+        endTime: endTime || null,
+        notes: notes || null,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    const docRef = await db.collection('workSchedules').add(scheduleData);
+    return { id: docRef.id, created: true };
+});
+exports.updateWorkSchedule = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { id, type, startTime, endTime, notes } = request.data;
+    if (!id) {
+        throw new https_1.HttpsError('invalid-argument', 'Missing schedule ID');
+    }
+    const docRef = db.collection('workSchedules').doc(id);
+    const doc = await docRef.get();
+    if (!doc.exists || ((_a = doc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized');
+    }
+    const updateData = {
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (type !== undefined)
+        updateData.type = type;
+    if (startTime !== undefined)
+        updateData.startTime = startTime;
+    if (endTime !== undefined)
+        updateData.endTime = endTime;
+    if (notes !== undefined)
+        updateData.notes = notes;
+    await docRef.update(updateData);
+    return { success: true };
+});
+exports.deleteWorkSchedule = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { id } = request.data;
+    const docRef = db.collection('workSchedules').doc(id);
+    const doc = await docRef.get();
+    if (!doc.exists || ((_a = doc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized');
+    }
+    await docRef.delete();
+    return { success: true };
+});
+// ========== Vacation Functions ==========
+exports.getVacations = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { personId, startDate, endDate } = request.data || {};
+    let query = db.collection('vacations').where('userId', '==', userId);
+    if (personId) {
+        query = query.where('personId', '==', personId);
+    }
+    const snapshot = await query.get();
+    let vacations = snapshot.docs.map((doc) => {
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+        const data = doc.data();
+        return Object.assign(Object.assign({ id: doc.id }, data), { startDate: ((_c = (_b = (_a = data.startDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null, endDate: ((_f = (_e = (_d = data.endDate) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null, createdAt: ((_j = (_h = (_g = data.createdAt) === null || _g === void 0 ? void 0 : _g.toDate) === null || _h === void 0 ? void 0 : _h.call(_g)) === null || _j === void 0 ? void 0 : _j.toISOString()) || null, updatedAt: ((_m = (_l = (_k = data.updatedAt) === null || _k === void 0 ? void 0 : _k.toDate) === null || _l === void 0 ? void 0 : _l.call(_k)) === null || _m === void 0 ? void 0 : _m.toISOString()) || null });
+    });
+    // Filter by date range if provided
+    if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        vacations = vacations.filter((v) => {
+            const vStart = new Date(v.startDate);
+            const vEnd = new Date(v.endDate);
+            return (vStart <= end && vEnd >= start);
+        });
+    }
+    return { vacations };
+});
+exports.createVacation = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { personId, personName, startDate, endDate, type, title, notes, color } = request.data;
+    if (!personId || !personName || !startDate || !endDate || !type || !title) {
+        throw new https_1.HttpsError('invalid-argument', 'Missing required fields');
+    }
+    const vacationData = {
+        userId,
+        personId,
+        personName,
+        startDate: admin.firestore.Timestamp.fromDate(new Date(startDate)),
+        endDate: admin.firestore.Timestamp.fromDate(new Date(endDate)),
+        type,
+        title,
+        notes: notes || null,
+        color: color || null,
+        approved: true,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    const docRef = await db.collection('vacations').add(vacationData);
+    return { id: docRef.id };
+});
+exports.updateVacation = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { id, startDate, endDate, type, title, notes, color, approved } = request.data;
+    if (!id) {
+        throw new https_1.HttpsError('invalid-argument', 'Missing vacation ID');
+    }
+    const docRef = db.collection('vacations').doc(id);
+    const doc = await docRef.get();
+    if (!doc.exists || ((_a = doc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized');
+    }
+    const updateData = {
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (startDate !== undefined)
+        updateData.startDate = admin.firestore.Timestamp.fromDate(new Date(startDate));
+    if (endDate !== undefined)
+        updateData.endDate = admin.firestore.Timestamp.fromDate(new Date(endDate));
+    if (type !== undefined)
+        updateData.type = type;
+    if (title !== undefined)
+        updateData.title = title;
+    if (notes !== undefined)
+        updateData.notes = notes;
+    if (color !== undefined)
+        updateData.color = color;
+    if (approved !== undefined)
+        updateData.approved = approved;
+    await docRef.update(updateData);
+    return { success: true };
+});
+exports.deleteVacation = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { id } = request.data;
+    const docRef = db.collection('vacations').doc(id);
+    const doc = await docRef.get();
+    if (!doc.exists || ((_a = doc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
         throw new https_1.HttpsError('permission-denied', 'Not authorized');
     }
     await docRef.delete();

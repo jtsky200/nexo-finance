@@ -915,7 +915,7 @@ exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
             if (invoiceData.status === 'paid')
                 continue;
             // Determine the date to use (dueDate > date > createdAt)
-            let eventDate = null;
+            let eventDate;
             let isOverdue = false;
             if ((_a = invoiceData.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) {
                 eventDate = invoiceData.dueDate.toDate();
@@ -927,8 +927,8 @@ exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
             else if ((_c = invoiceData.createdAt) === null || _c === void 0 ? void 0 : _c.toDate) {
                 eventDate = invoiceData.createdAt.toDate();
             }
-            // If no date found, use today
-            if (!eventDate) {
+            else {
+                // If no date found, use today
                 eventDate = new Date();
             }
             // Filter by date range if provided

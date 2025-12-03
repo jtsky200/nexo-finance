@@ -1038,7 +1038,7 @@ export const getCalendarEvents = onCall(async (request) => {
       if (invoiceData.status === 'paid') continue;
       
       // Determine the date to use (dueDate > date > createdAt)
-      let eventDate: Date | null = null;
+      let eventDate: Date;
       let isOverdue = false;
       
       if (invoiceData.dueDate?.toDate) {
@@ -1048,10 +1048,8 @@ export const getCalendarEvents = onCall(async (request) => {
         eventDate = invoiceData.date.toDate();
       } else if (invoiceData.createdAt?.toDate) {
         eventDate = invoiceData.createdAt.toDate();
-      }
-      
-      // If no date found, use today
-      if (!eventDate) {
+      } else {
+        // If no date found, use today
         eventDate = new Date();
       }
       

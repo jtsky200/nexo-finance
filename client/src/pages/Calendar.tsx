@@ -13,7 +13,8 @@ import {
   ChevronLeft, ChevronRight, Calendar as CalendarIcon, 
   AlertTriangle, Bell, Clock, CheckCircle, ArrowDownLeft, ArrowUpRight,
   FileText, Filter, Plus, X, Edit2, Trash2, RefreshCw, Eye,
-  Briefcase, Palmtree, Search, Repeat, Download, Share2, BellRing
+  Briefcase, Palmtree, Search, Repeat, Download, Share2, BellRing,
+  GraduationCap, Home, Sun
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { functions } from '@/lib/firebase';
@@ -23,10 +24,12 @@ import { toast } from 'sonner';
 import { useLocation } from 'wouter';
 import WorkScheduleDialog from '@/components/WorkScheduleDialog';
 import VacationPlannerDialog from '@/components/VacationPlannerDialog';
+import SchoolPlannerDialog from '@/components/SchoolPlannerDialog';
+import SchoolHolidayDialog from '@/components/SchoolHolidayDialog';
 
 interface CalendarEvent {
   id: string;
-  type: 'due' | 'reminder' | 'appointment' | 'work';
+  type: 'due' | 'reminder' | 'appointment' | 'work' | 'school' | 'hort' | 'school-holiday';
   title: string;
   date: string;
   time?: string;
@@ -42,6 +45,9 @@ interface CalendarEvent {
   category?: string;
   priority?: string;
   completed?: boolean;
+  schoolType?: 'full' | 'half' | 'off' | 'holiday';
+  hortType?: 'full' | 'lunch' | 'afternoon' | 'none';
+  childName?: string;
 }
 
 export default function Calendar() {
@@ -60,7 +66,11 @@ export default function Calendar() {
   const [showDayDialog, setShowDayDialog] = useState(false);
   const [showWorkScheduleDialog, setShowWorkScheduleDialog] = useState(false);
   const [showVacationDialog, setShowVacationDialog] = useState(false);
+  const [showSchoolPlannerDialog, setShowSchoolPlannerDialog] = useState(false);
+  const [showSchoolHolidayDialog, setShowSchoolHolidayDialog] = useState(false);
   const [vacations, setVacations] = useState<any[]>([]);
+  const [schoolSchedules, setSchoolSchedules] = useState<any[]>([]);
+  const [schoolHolidays, setSchoolHolidays] = useState<any[]>([]);
 
   // New event form
   const [newEvent, setNewEvent] = useState({
@@ -129,13 +139,15 @@ export default function Calendar() {
       setIsLoading(true);
       const getEventsFunc = httpsCallable(functions, 'getCalendarEvents');
       const getVacationsFunc = httpsCallable(functions, 'getVacations');
+      const getSchoolSchedulesFunc = httpsCallable(functions, 'getSchoolSchedules');
+      const getSchoolHolidaysFunc = httpsCallable(functions, 'getSchoolHolidays');
       
       // Get events for a much wider range (6 months before and after)
       const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 6, 1);
       const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 6, 0);
       
-      // Fetch both events and vacations in parallel
-      const [eventsResult, vacationsResult] = await Promise.all([
+      // Fetch all data in parallel
+      const [eventsResult, vacationsResult, schoolSchedulesResult, schoolHolidaysResult] = await Promise.all([
         getEventsFunc({ 
           startDate: startDate.toISOString(),
           endDate: endDate.toISOString()
@@ -143,14 +155,23 @@ export default function Calendar() {
         getVacationsFunc({
           startDate: startDate.toISOString(),
           endDate: endDate.toISOString()
-        })
+        }),
+        getSchoolSchedulesFunc({
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString()
+        }).catch(() => ({ data: { schedules: [] } })),
+        getSchoolHolidaysFunc({}).catch(() => ({ data: { holidays: [] } }))
       ]);
       
       const eventsData = eventsResult.data as { events: CalendarEvent[] };
       const vacationsData = vacationsResult.data as { vacations: any[] };
+      const schoolData = schoolSchedulesResult.data as { schedules: any[] };
+      const holidaysData = schoolHolidaysResult.data as { holidays: any[] };
       
       setEvents(eventsData.events || []);
       setVacations(vacationsData.vacations || []);
+      setSchoolSchedules(schoolData.schedules || []);
+      setSchoolHolidays(holidaysData.holidays || []);
     } catch (error) {
       console.error('Error fetching calendar data:', error);
       toast.error('Fehler beim Laden der Events');
@@ -210,10 +231,29 @@ export default function Calendar() {
     });
   }, [vacations]);
 
+  // Helper to get school schedules for a date
+  const getSchoolSchedulesForDate = useCallback((date: Date) => {
+    const dateStr = date.toISOString().split('T')[0];
+    return schoolSchedules.filter(s => s.date === dateStr);
+  }, [schoolSchedules]);
+
+  // Helper to check if a date is within school holiday
+  const getSchoolHolidaysForDate = useCallback((date: Date) => {
+    return schoolHolidays.filter(h => {
+      const start = new Date(h.startDate);
+      const end = new Date(h.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      const checkDate = new Date(date);
+      checkDate.setHours(12, 0, 0, 0);
+      return checkDate >= start && checkDate <= end;
+    });
+  }, [schoolHolidays]);
+
   const calendarDays = useMemo(() => {
     const daysInMonth = getDaysInMonth(currentDate);
     const firstDay = getFirstDayOfMonth(currentDate);
-    const days: { date: Date; isCurrentMonth: boolean; events: CalendarEvent[]; vacations: any[] }[] = [];
+    const days: { date: Date; isCurrentMonth: boolean; events: CalendarEvent[]; vacations: any[]; schoolEvents: CalendarEvent[] }[] = [];
 
     // Apply filter and search to events
     let filteredEvts = filterType === 'all' 
@@ -230,11 +270,58 @@ export default function Calendar() {
       );
     }
 
+    // Create school events from schedules and holidays
+    const createSchoolEvents = (date: Date): CalendarEvent[] => {
+      const schoolEvts: CalendarEvent[] = [];
+      
+      // School schedules
+      const schedules = getSchoolSchedulesForDate(date);
+      schedules.forEach(s => {
+        // Add school event
+        if (s.schoolType !== 'off') {
+          schoolEvts.push({
+            id: `school-${s.id}`,
+            type: 'school',
+            title: `${s.childName} Schule`,
+            date: s.date,
+            schoolType: s.schoolType,
+            childName: s.childName,
+          });
+        }
+        // Add hort event if applicable
+        if (s.hortType && s.hortType !== 'none') {
+          schoolEvts.push({
+            id: `hort-${s.id}`,
+            type: 'hort',
+            title: `${s.childName} Hort`,
+            date: s.date,
+            hortType: s.hortType,
+            childName: s.childName,
+          });
+        }
+      });
+      
+      // School holidays
+      const holidays = getSchoolHolidaysForDate(date);
+      holidays.forEach(h => {
+        if (!schoolEvts.find(e => e.type === 'school-holiday' && e.title === h.name)) {
+          schoolEvts.push({
+            id: `school-holiday-${h.id}`,
+            type: 'school-holiday',
+            title: h.name,
+            date: date.toISOString().split('T')[0],
+          });
+        }
+      });
+      
+      return schoolEvts;
+    };
+
     const prevMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
     const daysInPrevMonth = getDaysInMonth(prevMonth);
     for (let i = firstDay - 1; i >= 0; i--) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, daysInPrevMonth - i);
-      days.push({ date, isCurrentMonth: false, events: [], vacations: getVacationsForDate(date) });
+      days.push({ date, isCurrentMonth: false, events: [], vacations: getVacationsForDate(date), schoolEvents: createSchoolEvents(date) });
     }
 
     for (let i = 1; i <= daysInMonth; i++) {
@@ -243,17 +330,17 @@ export default function Calendar() {
         const eventDate = new Date(event.date);
         return eventDate.toDateString() === date.toDateString();
       });
-      days.push({ date, isCurrentMonth: true, events: dayEvents, vacations: getVacationsForDate(date) });
+      days.push({ date, isCurrentMonth: true, events: dayEvents, vacations: getVacationsForDate(date), schoolEvents: createSchoolEvents(date) });
     }
 
     const remainingDays = 42 - days.length;
     for (let i = 1; i <= remainingDays; i++) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, i);
-      days.push({ date, isCurrentMonth: false, events: [], vacations: getVacationsForDate(date) });
+      days.push({ date, isCurrentMonth: false, events: [], vacations: getVacationsForDate(date), schoolEvents: createSchoolEvents(date) });
     }
 
     return days;
-  }, [currentDate, events, getVacationsForDate, filterType, searchQuery]);
+  }, [currentDate, events, getVacationsForDate, getSchoolSchedulesForDate, getSchoolHolidaysForDate, filterType, searchQuery]);
 
   const filteredEvents = useMemo(() => {
     let filtered = events.filter(event => {
@@ -309,6 +396,23 @@ export default function Calendar() {
     // Überfällig - dunkelrot
     if (event.isOverdue) return 'bg-red-200 text-red-900 dark:bg-red-900/50 dark:text-red-100';
     
+    // Schule - Lila
+    if (event.type === 'school') {
+      if (event.schoolType === 'half') return 'bg-purple-300 text-purple-900 dark:bg-purple-900/50 dark:text-purple-200';
+      if (event.schoolType === 'off') return 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
+      return 'bg-purple-200 text-purple-900 dark:bg-purple-900/40 dark:text-purple-200';
+    }
+    
+    // Hort - Pink
+    if (event.type === 'hort') {
+      return 'bg-pink-200 text-pink-900 dark:bg-pink-900/40 dark:text-pink-200';
+    }
+    
+    // Schulferien - Cyan
+    if (event.type === 'school-holiday') {
+      return 'bg-cyan-200 text-cyan-900 dark:bg-cyan-900/40 dark:text-cyan-200';
+    }
+    
     // Arbeitszeiten
     if (event.type === 'work') {
       const workType = (event as any).workType;
@@ -343,6 +447,9 @@ export default function Calendar() {
 
   const getEventIcon = (event: CalendarEvent) => {
     if (event.isOverdue) return <AlertTriangle className="w-4 h-4" />;
+    if (event.type === 'school') return <GraduationCap className="w-4 h-4" />;
+    if (event.type === 'hort') return <Home className="w-4 h-4" />;
+    if (event.type === 'school-holiday') return <Sun className="w-4 h-4" />;
     if (event.type === 'work') return <Briefcase className="w-4 h-4" />;
     if (event.type === 'due') return <FileText className="w-4 h-4" />;
     if (event.type === 'reminder') return <Bell className="w-4 h-4" />;
@@ -354,6 +461,18 @@ export default function Calendar() {
   };
 
   const getEventTypeLabel = (event: CalendarEvent) => {
+    if (event.type === 'school') {
+      if (event.schoolType === 'half') return 'Halbtag';
+      if (event.schoolType === 'off') return 'Schulfrei';
+      if (event.schoolType === 'holiday') return 'Ferien';
+      return 'Schule';
+    }
+    if (event.type === 'hort') {
+      if (event.hortType === 'lunch') return 'Hort (Mittag)';
+      if (event.hortType === 'afternoon') return 'Hort (Nachmittag)';
+      return 'Hort';
+    }
+    if (event.type === 'school-holiday') return 'Schulferien';
     if (event.type === 'work') {
       const workType = (event as any).workType;
       if (workType === 'off') return 'Frei';
@@ -654,6 +773,16 @@ export default function Calendar() {
               Ferien
             </Button>
 
+            <Button variant="outline" onClick={() => setShowSchoolPlannerDialog(true)}>
+              <GraduationCap className="w-4 h-4 mr-2" />
+              Schulplaner
+            </Button>
+
+            <Button variant="outline" onClick={() => setShowSchoolHolidayDialog(true)}>
+              <Sun className="w-4 h-4 mr-2" />
+              Schulferien
+            </Button>
+
             <Button variant="outline" onClick={() => setLocation('/bills')}>
               <FileText className="w-4 h-4 mr-2" />
               Rechnungen
@@ -680,6 +809,7 @@ export default function Calendar() {
                 <SelectItem value="due">Rechnungen</SelectItem>
                 <SelectItem value="appointment">Termine</SelectItem>
                 <SelectItem value="work">Arbeitszeiten</SelectItem>
+                <SelectItem value="school">Schule</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -790,6 +920,14 @@ export default function Calendar() {
             <div className="w-3 h-3 rounded bg-cyan-300" />
             <span>Ferien</span>
           </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-purple-400" />
+            <span>Schule</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-pink-400" />
+            <span>Hort</span>
+          </div>
         </div>
 
         {/* Calendar View */}
@@ -824,8 +962,22 @@ export default function Calendar() {
                     </div>
                     
                     <div className="space-y-1">
-                      {/* Vacations first */}
-                      {day.vacations.slice(0, 1).map((vacation: any) => (
+                      {/* School Events first */}
+                      {day.schoolEvents && day.schoolEvents.slice(0, 1).map(event => (
+                        <div
+                          key={event.id}
+                          onClick={(e) => handleEventClick(event, e)}
+                          className={`text-xs px-1 py-0.5 rounded truncate cursor-pointer hover:opacity-80 ${getEventColor(event)}`}
+                          title={event.title}
+                        >
+                          {event.type === 'school' && <GraduationCap className="w-3 h-3 inline mr-1" />}
+                          {event.type === 'hort' && <Home className="w-3 h-3 inline mr-1" />}
+                          {event.type === 'school-holiday' && <Sun className="w-3 h-3 inline mr-1" />}
+                          {event.childName || event.title}
+                        </div>
+                      ))}
+                      {/* Vacations */}
+                      {day.vacations.slice(0, day.schoolEvents?.length > 0 ? 0 : 1).map((vacation: any) => (
                         <div
                           key={vacation.id}
                           className="text-xs px-1 py-0.5 rounded truncate bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-200"
@@ -836,7 +988,7 @@ export default function Calendar() {
                         </div>
                       ))}
                       {/* Events - with drag support for appointments */}
-                      {day.events.slice(0, day.vacations.length > 0 ? 2 : 3).map(event => (
+                      {day.events.slice(0, Math.max(0, 3 - (day.schoolEvents?.length || 0) - (day.vacations?.length || 0))).map(event => (
                         <div
                           key={event.id}
                           draggable={event.type === 'appointment'}
@@ -851,9 +1003,9 @@ export default function Calendar() {
                           {event.title}
                         </div>
                       ))}
-                      {(day.events.length + day.vacations.length) > 3 && (
+                      {(day.events.length + day.vacations.length + (day.schoolEvents?.length || 0)) > 3 && (
                         <div className="text-xs text-muted-foreground font-medium">
-                          +{day.events.length + day.vacations.length - 3} mehr
+                          +{day.events.length + day.vacations.length + (day.schoolEvents?.length || 0) - 3} mehr
                         </div>
                       )}
                     </div>
@@ -1754,6 +1906,20 @@ export default function Calendar() {
       <VacationPlannerDialog
         open={showVacationDialog}
         onOpenChange={setShowVacationDialog}
+        onDataChanged={fetchEvents}
+      />
+
+      {/* School Planner Dialog */}
+      <SchoolPlannerDialog
+        open={showSchoolPlannerDialog}
+        onOpenChange={setShowSchoolPlannerDialog}
+        onDataChanged={fetchEvents}
+      />
+
+      {/* School Holiday Dialog */}
+      <SchoolHolidayDialog
+        open={showSchoolHolidayDialog}
+        onOpenChange={setShowSchoolHolidayDialog}
         onDataChanged={fetchEvents}
       />
     </Layout>

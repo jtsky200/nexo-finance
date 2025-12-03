@@ -1918,3 +1918,201 @@ export const deleteVacation = onCall(async (request) => {
   await docRef.delete();
   return { success: true };
 });
+
+// ========== School Planner Functions ==========
+
+// Get all children (from people with type 'child')
+export const getChildren = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  
+  // Get people marked as children
+  const snapshot = await db.collection('people')
+    .where('userId', '==', userId)
+    .where('type', '==', 'child')
+    .get();
+
+  const children = snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }));
+
+  return { children };
+});
+
+// Create/Update School Schedule
+export const createSchoolSchedule = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { childId, childName, date, schoolType, hortType, startTime, endTime, notes } = request.data;
+
+  if (!childId || !childName || !date || !schoolType) {
+    throw new HttpsError('invalid-argument', 'Missing required fields');
+  }
+
+  // Check if schedule already exists for this child and date
+  const existingQuery = await db.collection('schoolSchedules')
+    .where('userId', '==', userId)
+    .where('childId', '==', childId)
+    .where('date', '==', date)
+    .get();
+
+  if (!existingQuery.empty) {
+    // Update existing schedule
+    const docRef = existingQuery.docs[0].ref;
+    await docRef.update({
+      schoolType,
+      hortType: hortType || 'none',
+      startTime: startTime || null,
+      endTime: endTime || null,
+      notes: notes || null,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { id: existingQuery.docs[0].id, updated: true };
+  }
+
+  const scheduleData = {
+    userId,
+    childId,
+    childName,
+    date,
+    schoolType,
+    hortType: hortType || 'none',
+    startTime: startTime || null,
+    endTime: endTime || null,
+    notes: notes || null,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  const docRef = await db.collection('schoolSchedules').add(scheduleData);
+  return { id: docRef.id, created: true };
+});
+
+// Get School Schedules
+export const getSchoolSchedules = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { childId, startDate, endDate } = request.data || {};
+
+  let query: admin.firestore.Query = db.collection('schoolSchedules').where('userId', '==', userId);
+  
+  if (childId) {
+    query = query.where('childId', '==', childId);
+  }
+
+  const snapshot = await query.get();
+  
+  let schedules = snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }));
+
+  // Filter by date range if provided
+  if (startDate && endDate) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    schedules = schedules.filter(s => {
+      const d = new Date((s as any).date);
+      return d >= start && d <= end;
+    });
+  }
+
+  return { schedules };
+});
+
+// Delete School Schedule
+export const deleteSchoolSchedule = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { id } = request.data;
+
+  const docRef = db.collection('schoolSchedules').doc(id);
+  const doc = await docRef.get();
+
+  if (!doc.exists || doc.data()?.userId !== userId) {
+    throw new HttpsError('permission-denied', 'Not authorized');
+  }
+
+  await docRef.delete();
+  return { success: true };
+});
+
+// Create School Holiday
+export const createSchoolHoliday = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { name, startDate, endDate, type, canton } = request.data;
+
+  if (!name || !startDate || !endDate) {
+    throw new HttpsError('invalid-argument', 'Missing required fields');
+  }
+
+  const holidayData = {
+    userId,
+    name,
+    startDate,
+    endDate,
+    type: type || 'school',
+    canton: canton || null,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  const docRef = await db.collection('schoolHolidays').add(holidayData);
+  return { id: docRef.id };
+});
+
+// Get School Holidays
+export const getSchoolHolidays = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  
+  const snapshot = await db.collection('schoolHolidays')
+    .where('userId', '==', userId)
+    .get();
+
+  const holidays = snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }));
+
+  return { holidays };
+});
+
+// Delete School Holiday
+export const deleteSchoolHoliday = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { id } = request.data;
+
+  const docRef = db.collection('schoolHolidays').doc(id);
+  const doc = await docRef.get();
+
+  if (!doc.exists || doc.data()?.userId !== userId) {
+    throw new HttpsError('permission-denied', 'Not authorized');
+  }
+
+  await docRef.delete();
+  return { success: true };
+});

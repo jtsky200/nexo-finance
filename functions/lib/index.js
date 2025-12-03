@@ -44,7 +44,8 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteVacation = exports.updateVacation = exports.createVacation = exports.getVacations = exports.deleteWorkSchedule = exports.updateWorkSchedule = exports.createWorkSchedule = exports.getWorkSchedules = exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.getAllBills = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
+exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = exports.createSchoolSchedule = exports.getChildren = exports.deleteVacation = exports.updateVacation = exports.createVacation = exports.getVacations = exports.deleteWorkSchedule = exports.updateWorkSchedule = exports.createWorkSchedule = exports.getWorkSchedules = exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.getAllBills = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
+exports.deleteSchoolHoliday = exports.getSchoolHolidays = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
@@ -1659,6 +1660,156 @@ exports.deleteVacation = (0, https_1.onCall)(async (request) => {
     const userId = request.auth.uid;
     const { id } = request.data;
     const docRef = db.collection('vacations').doc(id);
+    const doc = await docRef.get();
+    if (!doc.exists || ((_a = doc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized');
+    }
+    await docRef.delete();
+    return { success: true };
+});
+// ========== School Planner Functions ==========
+// Get all children (from people with type 'child')
+exports.getChildren = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    // Get people marked as children
+    const snapshot = await db.collection('people')
+        .where('userId', '==', userId)
+        .where('type', '==', 'child')
+        .get();
+    const children = snapshot.docs.map(doc => (Object.assign({ id: doc.id }, doc.data())));
+    return { children };
+});
+// Create/Update School Schedule
+exports.createSchoolSchedule = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { childId, childName, date, schoolType, hortType, startTime, endTime, notes } = request.data;
+    if (!childId || !childName || !date || !schoolType) {
+        throw new https_1.HttpsError('invalid-argument', 'Missing required fields');
+    }
+    // Check if schedule already exists for this child and date
+    const existingQuery = await db.collection('schoolSchedules')
+        .where('userId', '==', userId)
+        .where('childId', '==', childId)
+        .where('date', '==', date)
+        .get();
+    if (!existingQuery.empty) {
+        // Update existing schedule
+        const docRef = existingQuery.docs[0].ref;
+        await docRef.update({
+            schoolType,
+            hortType: hortType || 'none',
+            startTime: startTime || null,
+            endTime: endTime || null,
+            notes: notes || null,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return { id: existingQuery.docs[0].id, updated: true };
+    }
+    const scheduleData = {
+        userId,
+        childId,
+        childName,
+        date,
+        schoolType,
+        hortType: hortType || 'none',
+        startTime: startTime || null,
+        endTime: endTime || null,
+        notes: notes || null,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    const docRef = await db.collection('schoolSchedules').add(scheduleData);
+    return { id: docRef.id, created: true };
+});
+// Get School Schedules
+exports.getSchoolSchedules = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { childId, startDate, endDate } = request.data || {};
+    let query = db.collection('schoolSchedules').where('userId', '==', userId);
+    if (childId) {
+        query = query.where('childId', '==', childId);
+    }
+    const snapshot = await query.get();
+    let schedules = snapshot.docs.map(doc => (Object.assign({ id: doc.id }, doc.data())));
+    // Filter by date range if provided
+    if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        schedules = schedules.filter(s => {
+            const d = new Date(s.date);
+            return d >= start && d <= end;
+        });
+    }
+    return { schedules };
+});
+// Delete School Schedule
+exports.deleteSchoolSchedule = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { id } = request.data;
+    const docRef = db.collection('schoolSchedules').doc(id);
+    const doc = await docRef.get();
+    if (!doc.exists || ((_a = doc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized');
+    }
+    await docRef.delete();
+    return { success: true };
+});
+// Create School Holiday
+exports.createSchoolHoliday = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { name, startDate, endDate, type, canton } = request.data;
+    if (!name || !startDate || !endDate) {
+        throw new https_1.HttpsError('invalid-argument', 'Missing required fields');
+    }
+    const holidayData = {
+        userId,
+        name,
+        startDate,
+        endDate,
+        type: type || 'school',
+        canton: canton || null,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    const docRef = await db.collection('schoolHolidays').add(holidayData);
+    return { id: docRef.id };
+});
+// Get School Holidays
+exports.getSchoolHolidays = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const snapshot = await db.collection('schoolHolidays')
+        .where('userId', '==', userId)
+        .get();
+    const holidays = snapshot.docs.map(doc => (Object.assign({ id: doc.id }, doc.data())));
+    return { holidays };
+});
+// Delete School Holiday
+exports.deleteSchoolHoliday = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { id } = request.data;
+    const docRef = db.collection('schoolHolidays').doc(id);
     const doc = await docRef.get();
     if (!doc.exists || ((_a = doc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
         throw new https_1.HttpsError('permission-denied', 'Not authorized');

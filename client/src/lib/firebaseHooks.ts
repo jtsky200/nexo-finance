@@ -71,6 +71,85 @@ export function useReminders(filters?: { startDate?: Date; endDate?: Date; statu
   return { data: reminders, isLoading, error, refetch };
 }
 
+// ========== All Bills Hook (combines person invoices + payment reminders) ==========
+export interface Bill {
+  id: string;
+  source: 'person' | 'reminder';
+  personId: string | null;
+  personName: string | null;
+  title: string;
+  description: string;
+  amount: number;
+  currency: string;
+  status: 'open' | 'paid' | 'postponed';
+  direction: 'incoming' | 'outgoing';
+  dueDate: Date | null;
+  reminderDate: Date | null;
+  reminderEnabled: boolean;
+  isRecurring: boolean;
+  recurringInterval: string | null;
+  notes: string | null;
+  iban?: string;
+  reference?: string;
+  creditorName?: string;
+  creditorAddress?: string;
+  date: Date | null;
+  createdAt: Date | null;
+  isOverdue: boolean;
+}
+
+export interface BillStats {
+  total: number;
+  open: number;
+  openAmount: number;
+  overdue: number;
+  overdueAmount: number;
+  paid: number;
+  paidAmount: number;
+}
+
+export function useAllBills() {
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [stats, setStats] = useState<BillStats>({ total: 0, open: 0, openAmount: 0, overdue: 0, overdueAmount: 0, paid: 0, paidAmount: 0 });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const fetchBills = async () => {
+      try {
+        setIsLoading(true);
+        const getAllBillsFunc = httpsCallable(functions, 'getAllBills');
+        const result = await getAllBillsFunc({});
+        const data = result.data as { bills: any[]; stats: BillStats };
+        
+        const mappedBills = data.bills.map((b: any) => ({
+          ...b,
+          dueDate: b.dueDate ? new Date(b.dueDate) : null,
+          reminderDate: b.reminderDate ? new Date(b.reminderDate) : null,
+          date: b.date ? new Date(b.date) : null,
+          createdAt: b.createdAt ? new Date(b.createdAt) : null,
+        }));
+        
+        setBills(mappedBills);
+        setStats(data.stats);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching bills:', err);
+        setError(err as Error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchBills();
+  }, [refreshKey]);
+
+  const refetch = () => setRefreshKey(prev => prev + 1);
+
+  return { data: bills, stats, isLoading, error, refetch };
+}
+
 export async function createReminder(data: Omit<Reminder, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'status'>) {
   const createReminderFunc = httpsCallable(functions, 'createReminder');
   const result = await createReminderFunc(data);

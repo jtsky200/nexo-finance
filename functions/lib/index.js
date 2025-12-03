@@ -44,7 +44,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
+exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.getAllBills = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
@@ -801,6 +801,97 @@ exports.deleteInvoice = (0, https_1.onCall)(async (request) => {
     // Delete the invoice
     await invoiceRef.delete();
     return { success: true };
+});
+// ========== Bills Functions (All Invoices) ==========
+exports.getAllBills = (0, https_1.onCall)(async (request) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const bills = [];
+    // 1. Get invoices from people subcollections
+    const peopleSnapshot = await db.collection('people').where('userId', '==', userId).get();
+    for (const personDoc of peopleSnapshot.docs) {
+        const personData = personDoc.data();
+        const invoicesSnapshot = await personDoc.ref.collection('invoices').get();
+        for (const invoiceDoc of invoicesSnapshot.docs) {
+            const invoiceData = invoiceDoc.data();
+            bills.push({
+                id: invoiceDoc.id,
+                source: 'person',
+                personId: personDoc.id,
+                personName: personData.name,
+                title: invoiceData.description,
+                description: invoiceData.description,
+                amount: invoiceData.amount,
+                currency: personData.currency || 'CHF',
+                status: invoiceData.status,
+                direction: invoiceData.direction || 'incoming',
+                dueDate: ((_a = invoiceData.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) ? invoiceData.dueDate.toDate().toISOString() : null,
+                reminderDate: ((_b = invoiceData.reminderDate) === null || _b === void 0 ? void 0 : _b.toDate) ? invoiceData.reminderDate.toDate().toISOString() : null,
+                reminderEnabled: invoiceData.reminderEnabled || false,
+                isRecurring: invoiceData.isRecurring || false,
+                recurringInterval: invoiceData.recurringInterval,
+                notes: invoiceData.notes,
+                date: ((_c = invoiceData.date) === null || _c === void 0 ? void 0 : _c.toDate) ? invoiceData.date.toDate().toISOString() : null,
+                createdAt: ((_d = invoiceData.createdAt) === null || _d === void 0 ? void 0 : _d.toDate) ? invoiceData.createdAt.toDate().toISOString() : null,
+                isOverdue: ((_e = invoiceData.dueDate) === null || _e === void 0 ? void 0 : _e.toDate) && invoiceData.dueDate.toDate() < new Date() && invoiceData.status !== 'paid',
+            });
+        }
+    }
+    // 2. Get payment reminders from reminders collection
+    const remindersSnapshot = await db.collection('reminders')
+        .where('userId', '==', userId)
+        .where('type', '==', 'zahlung')
+        .get();
+    for (const reminderDoc of remindersSnapshot.docs) {
+        const reminderData = reminderDoc.data();
+        bills.push({
+            id: reminderDoc.id,
+            source: 'reminder',
+            personId: null,
+            personName: reminderData.creditorName || null,
+            title: reminderData.title,
+            description: reminderData.notes || reminderData.title,
+            amount: reminderData.amount,
+            currency: reminderData.currency || 'CHF',
+            status: reminderData.status === 'erledigt' ? 'paid' : 'open',
+            direction: 'outgoing',
+            dueDate: ((_f = reminderData.dueDate) === null || _f === void 0 ? void 0 : _f.toDate) ? reminderData.dueDate.toDate().toISOString() : null,
+            reminderDate: null,
+            reminderEnabled: false,
+            isRecurring: !!reminderData.recurrenceRule,
+            recurringInterval: reminderData.recurrenceRule,
+            notes: reminderData.notes,
+            iban: reminderData.iban,
+            reference: reminderData.reference,
+            creditorName: reminderData.creditorName,
+            creditorAddress: reminderData.creditorAddress,
+            date: ((_g = reminderData.dueDate) === null || _g === void 0 ? void 0 : _g.toDate) ? reminderData.dueDate.toDate().toISOString() : null,
+            createdAt: ((_h = reminderData.createdAt) === null || _h === void 0 ? void 0 : _h.toDate) ? reminderData.createdAt.toDate().toISOString() : null,
+            isOverdue: ((_j = reminderData.dueDate) === null || _j === void 0 ? void 0 : _j.toDate) && reminderData.dueDate.toDate() < new Date() && reminderData.status !== 'erledigt',
+        });
+    }
+    // Sort by due date (most urgent first)
+    bills.sort((a, b) => {
+        if (!a.dueDate)
+            return 1;
+        if (!b.dueDate)
+            return -1;
+        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    });
+    // Calculate statistics
+    const stats = {
+        total: bills.length,
+        open: bills.filter(b => b.status === 'open').length,
+        openAmount: bills.filter(b => b.status === 'open').reduce((sum, b) => sum + (b.amount || 0), 0),
+        overdue: bills.filter(b => b.isOverdue).length,
+        overdueAmount: bills.filter(b => b.isOverdue).reduce((sum, b) => sum + (b.amount || 0), 0),
+        paid: bills.filter(b => b.status === 'paid').length,
+        paidAmount: bills.filter(b => b.status === 'paid').reduce((sum, b) => sum + (b.amount || 0), 0),
+    };
+    return { bills, stats };
 });
 // ========== Calendar Functions ==========
 exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {

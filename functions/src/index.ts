@@ -906,6 +906,107 @@ export const deleteInvoice = onCall(async (request) => {
   return { success: true };
 });
 
+// ========== Bills Functions (All Invoices) ==========
+
+export const getAllBills = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const bills: any[] = [];
+
+  // 1. Get invoices from people subcollections
+  const peopleSnapshot = await db.collection('people').where('userId', '==', userId).get();
+  
+  for (const personDoc of peopleSnapshot.docs) {
+    const personData = personDoc.data();
+    const invoicesSnapshot = await personDoc.ref.collection('invoices').get();
+    
+    for (const invoiceDoc of invoicesSnapshot.docs) {
+      const invoiceData = invoiceDoc.data();
+      
+      bills.push({
+        id: invoiceDoc.id,
+        source: 'person',
+        personId: personDoc.id,
+        personName: personData.name,
+        title: invoiceData.description,
+        description: invoiceData.description,
+        amount: invoiceData.amount,
+        currency: personData.currency || 'CHF',
+        status: invoiceData.status,
+        direction: invoiceData.direction || 'incoming',
+        dueDate: invoiceData.dueDate?.toDate ? invoiceData.dueDate.toDate().toISOString() : null,
+        reminderDate: invoiceData.reminderDate?.toDate ? invoiceData.reminderDate.toDate().toISOString() : null,
+        reminderEnabled: invoiceData.reminderEnabled || false,
+        isRecurring: invoiceData.isRecurring || false,
+        recurringInterval: invoiceData.recurringInterval,
+        notes: invoiceData.notes,
+        date: invoiceData.date?.toDate ? invoiceData.date.toDate().toISOString() : null,
+        createdAt: invoiceData.createdAt?.toDate ? invoiceData.createdAt.toDate().toISOString() : null,
+        isOverdue: invoiceData.dueDate?.toDate && invoiceData.dueDate.toDate() < new Date() && invoiceData.status !== 'paid',
+      });
+    }
+  }
+
+  // 2. Get payment reminders from reminders collection
+  const remindersSnapshot = await db.collection('reminders')
+    .where('userId', '==', userId)
+    .where('type', '==', 'zahlung')
+    .get();
+  
+  for (const reminderDoc of remindersSnapshot.docs) {
+    const reminderData = reminderDoc.data();
+    
+    bills.push({
+      id: reminderDoc.id,
+      source: 'reminder',
+      personId: null,
+      personName: reminderData.creditorName || null,
+      title: reminderData.title,
+      description: reminderData.notes || reminderData.title,
+      amount: reminderData.amount,
+      currency: reminderData.currency || 'CHF',
+      status: reminderData.status === 'erledigt' ? 'paid' : 'open',
+      direction: 'outgoing',
+      dueDate: reminderData.dueDate?.toDate ? reminderData.dueDate.toDate().toISOString() : null,
+      reminderDate: null,
+      reminderEnabled: false,
+      isRecurring: !!reminderData.recurrenceRule,
+      recurringInterval: reminderData.recurrenceRule,
+      notes: reminderData.notes,
+      iban: reminderData.iban,
+      reference: reminderData.reference,
+      creditorName: reminderData.creditorName,
+      creditorAddress: reminderData.creditorAddress,
+      date: reminderData.dueDate?.toDate ? reminderData.dueDate.toDate().toISOString() : null,
+      createdAt: reminderData.createdAt?.toDate ? reminderData.createdAt.toDate().toISOString() : null,
+      isOverdue: reminderData.dueDate?.toDate && reminderData.dueDate.toDate() < new Date() && reminderData.status !== 'erledigt',
+    });
+  }
+
+  // Sort by due date (most urgent first)
+  bills.sort((a, b) => {
+    if (!a.dueDate) return 1;
+    if (!b.dueDate) return -1;
+    return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+  });
+
+  // Calculate statistics
+  const stats = {
+    total: bills.length,
+    open: bills.filter(b => b.status === 'open').length,
+    openAmount: bills.filter(b => b.status === 'open').reduce((sum, b) => sum + (b.amount || 0), 0),
+    overdue: bills.filter(b => b.isOverdue).length,
+    overdueAmount: bills.filter(b => b.isOverdue).reduce((sum, b) => sum + (b.amount || 0), 0),
+    paid: bills.filter(b => b.status === 'paid').length,
+    paidAmount: bills.filter(b => b.status === 'paid').reduce((sum, b) => sum + (b.amount || 0), 0),
+  };
+
+  return { bills, stats };
+});
+
 // ========== Calendar Functions ==========
 
 export const getCalendarEvents = onCall(async (request) => {

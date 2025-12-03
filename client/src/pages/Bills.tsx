@@ -18,13 +18,15 @@ import {
   MoreVertical, Camera, Copy, Building2, Banknote,
   ClipboardList, CalendarClock
 } from 'lucide-react';
-import { useReminders, createReminder, updateReminder, deleteReminder, useFinanceEntries, createFinanceEntry, Reminder } from '@/lib/firebaseHooks';
+import { useReminders, createReminder, updateReminder, deleteReminder, useFinanceEntries, createFinanceEntry, Reminder, useAllBills, Bill, updateInvoiceStatus } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import InvoiceScanner, { ScannedInvoiceData } from '@/components/InvoiceScanner';
+import { useLocation } from 'wouter';
 
 export default function Bills() {
   const { t } = useTranslation();
+  const [, setLocation] = useLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<Reminder | null>(null);
@@ -33,13 +35,11 @@ export default function Bills() {
   const [activeTab, setActiveTab] = useState('pending');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  // Fetch all payment reminders
-  const { data: allReminders = [], isLoading, refetch } = useReminders({});
+  // Fetch ALL bills (from people/invoices AND payment reminders)
+  const { data: allBills = [], stats, isLoading, refetch } = useAllBills();
   
-  // Filter only payment type reminders
-  const bills = useMemo(() => {
-    return allReminders.filter(r => r.type === 'zahlung');
-  }, [allReminders]);
+  // For backward compatibility with existing code, map bills
+  const bills = allBills;
 
   // Fetch finance entries to link paid bills
   const { data: financeEntries = [] } = useFinanceEntries({});
@@ -103,10 +103,12 @@ export default function Bills() {
     return diffDays;
   };
 
-  const getStatusInfo = (bill: Reminder) => {
-    const daysUntil = getDaysUntilDue(bill.dueDate);
+  const getStatusInfo = (bill: Bill | Reminder) => {
+    const dueDate = 'dueDate' in bill ? bill.dueDate : null;
+    const daysUntil = dueDate ? getDaysUntilDue(dueDate) : 999;
+    const status = 'status' in bill ? bill.status : 'open';
     
-    if (bill.status === 'erledigt') {
+    if (status === 'paid' || status === 'erledigt') {
       return {
         label: t('bills.status.paid', 'Bezahlt'),
         color: 'bg-green-100 text-green-700 border-green-200',
@@ -145,27 +147,26 @@ export default function Bills() {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(b => 
-        b.title.toLowerCase().includes(query) ||
+        b.title?.toLowerCase().includes(query) ||
+        b.description?.toLowerCase().includes(query) ||
+        b.personName?.toLowerCase().includes(query) ||
         b.notes?.toLowerCase().includes(query)
       );
     }
 
     // Status filter
     if (filterStatus === 'open') {
-      result = result.filter(b => b.status === 'offen');
+      result = result.filter(b => b.status === 'open');
     } else if (filterStatus === 'paid') {
-      result = result.filter(b => b.status === 'erledigt');
+      result = result.filter(b => b.status === 'paid');
     } else if (filterStatus === 'overdue') {
-      result = result.filter(b => {
-        const daysUntil = getDaysUntilDue(b.dueDate);
-        return daysUntil < 0 && b.status === 'offen';
-      });
+      result = result.filter(b => b.isOverdue);
     }
 
     // Sort by due date
     result.sort((a, b) => {
-      const dateA = new Date(a.dueDate).getTime();
-      const dateB = new Date(b.dueDate).getTime();
+      const dateA = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+      const dateB = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
       return dateA - dateB;
     });
 
@@ -173,27 +174,8 @@ export default function Bills() {
   }, [bills, searchQuery, filterStatus]);
 
   // Split into pending and paid
-  const pendingBills = filteredBills.filter(b => b.status === 'offen');
-  const paidBills = filteredBills.filter(b => b.status === 'erledigt');
-
-  // Statistics
-  const stats = useMemo(() => {
-    const total = bills.length;
-    const open = bills.filter(b => b.status === 'offen').length;
-    const paid = bills.filter(b => b.status === 'erledigt').length;
-    const overdue = bills.filter(b => {
-      const daysUntil = getDaysUntilDue(b.dueDate);
-      return daysUntil < 0 && b.status === 'offen';
-    }).length;
-    const totalPending = bills
-      .filter(b => b.status === 'offen')
-      .reduce((sum, b) => sum + (b.amount || 0), 0);
-    const totalPaid = bills
-      .filter(b => b.status === 'erledigt')
-      .reduce((sum, b) => sum + (b.amount || 0), 0);
-
-    return { total, open, paid, overdue, totalPending, totalPaid };
-  }, [bills]);
+  const pendingBills = filteredBills.filter(b => b.status !== 'paid');
+  const paidBills = filteredBills.filter(b => b.status === 'paid');
 
   // Open dialog for new bill
   const openNewDialog = () => {
@@ -274,33 +256,6 @@ export default function Bills() {
     }
   };
 
-  // Handle mark as paid
-  const handleMarkAsPaid = async (bill: Reminder) => {
-    try {
-      // Update reminder status
-      await updateReminder(bill.id, { status: 'erledigt' as any });
-      
-      // Create expense entry in finance
-      if (bill.amount) {
-        await createFinanceEntry({
-          date: new Date().toISOString(),
-          type: 'ausgabe',
-          category: 'Rechnung',
-          amount: bill.amount,
-          currency: bill.currency || 'CHF',
-          notes: `Bezahlt: ${bill.title}`,
-          paymentMethod: 'Überweisung',
-          isRecurring: false,
-        });
-      }
-      
-      toast.success(t('bills.markedAsPaid', 'Als bezahlt markiert und Ausgabe erstellt'));
-      refetch();
-    } catch (error: any) {
-      toast.error(t('common.error') + ': ' + error.message);
-    }
-  };
-
   // Handle delete
   const handleDelete = async () => {
     if (!deleteConfirmId) return;
@@ -338,37 +293,45 @@ export default function Bills() {
     toast.success(`${label} kopiert!`);
   };
 
-  // Render bill card
-  const renderBillCard = (bill: Reminder) => {
+  // Render bill card (works for both Bill and Reminder types)
+  const renderBillCard = (bill: Bill) => {
     const statusInfo = getStatusInfo(bill);
-    const daysUntil = getDaysUntilDue(bill.dueDate);
-    
-    // Parse IBAN from notes
-    const notes = bill.notes || '';
-    const ibanMatch = notes.match(/IBAN:\s*([A-Z0-9]+)/i);
+    const daysUntil = bill.dueDate ? getDaysUntilDue(bill.dueDate) : 999;
 
     return (
       <Card key={bill.id} className="transition-all hover:shadow-md">
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 flex-1 min-w-0">
-              <div className="p-2 rounded-lg bg-green-100 text-green-600">
+              <div className="p-2 rounded-lg bg-muted">
                 <ClipboardList className="w-5 h-5" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <h3 className="font-semibold text-foreground truncate">{bill.title}</h3>
+                  {bill.personName && (
+                    <Badge variant="secondary" className="text-xs">
+                      {bill.personName}
+                    </Badge>
+                  )}
                   <Badge variant="outline" className={`flex items-center gap-1 ${statusInfo.color}`}>
                     {statusInfo.icon}
                     {statusInfo.label}
                   </Badge>
+                  {bill.source === 'person' && (
+                    <Badge variant="outline" className="text-xs">
+                      Person
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    {formatDate(bill.dueDate)}
-                  </span>
-                  {bill.status === 'offen' && (
+                  {bill.dueDate && (
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {formatDate(bill.dueDate)}
+                    </span>
+                  )}
+                  {bill.status !== 'paid' && bill.dueDate && (
                     <span className={`${daysUntil < 0 ? 'text-red-600' : daysUntil <= 7 ? 'text-orange-600' : ''}`}>
                       {daysUntil < 0 
                         ? `${Math.abs(daysUntil)} Tage überfällig`
@@ -378,15 +341,20 @@ export default function Bills() {
                       }
                     </span>
                   )}
+                  {bill.direction && (
+                    <span className={bill.direction === 'incoming' ? 'text-green-600' : 'text-red-600'}>
+                      {bill.direction === 'incoming' ? 'Forderung' : 'Verbindlichkeit'}
+                    </span>
+                  )}
                 </div>
-                {ibanMatch && (
+                {bill.iban && (
                   <div className="flex items-center gap-2 mt-2">
-                    <span className="text-xs text-muted-foreground font-mono">{ibanMatch[1]}</span>
+                    <span className="text-xs text-muted-foreground font-mono">{bill.iban}</span>
                     <Button 
                       variant="ghost" 
                       size="sm" 
                       className="h-6 w-6 p-0"
-                      onClick={() => copyToClipboard(ibanMatch[1], 'IBAN')}
+                      onClick={() => copyToClipboard(bill.iban!, 'IBAN')}
                     >
                       <Copy className="w-3 h-3" />
                     </Button>
@@ -411,19 +379,27 @@ export default function Bills() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {bill.status === 'offen' && (
-                    <DropdownMenuItem onClick={() => handleMarkAsPaid(bill)}>
+                  {bill.status !== 'paid' && (
+                    <DropdownMenuItem onClick={() => handleMarkBillAsPaid(bill)}>
                       <CheckCircle2 className="w-4 h-4 mr-2 text-green-600" />
                       {t('bills.markAsPaid', 'Als bezahlt markieren')}
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem onClick={() => openEditDialog(bill)}>
-                    <Edit2 className="w-4 h-4 mr-2" />
-                    {t('common.edit', 'Bearbeiten')}
-                  </DropdownMenuItem>
+                  {bill.source === 'person' && bill.personId && (
+                    <DropdownMenuItem onClick={() => setLocation('/people')}>
+                      <FileText className="w-4 h-4 mr-2" />
+                      Zur Person
+                    </DropdownMenuItem>
+                  )}
+                  {bill.source === 'reminder' && (
+                    <DropdownMenuItem onClick={() => openEditDialogFromBill(bill)}>
+                      <Edit2 className="w-4 h-4 mr-2" />
+                      {t('common.edit', 'Bearbeiten')}
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem 
-                    onClick={() => setDeleteConfirmId(bill.id)}
+                    onClick={() => handleDeleteBill(bill)}
                     className="text-red-600 focus:text-red-600"
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
@@ -436,6 +412,69 @@ export default function Bills() {
         </CardContent>
       </Card>
     );
+  };
+
+  // Handle mark bill as paid (works for both sources)
+  const handleMarkBillAsPaid = async (bill: Bill) => {
+    try {
+      if (bill.source === 'person' && bill.personId) {
+        // Update invoice status in people collection
+        await updateInvoiceStatus(bill.personId, bill.id, 'paid');
+      } else if (bill.source === 'reminder') {
+        // Update reminder status
+        await updateReminder(bill.id, { status: 'erledigt' as any });
+        
+        // Create expense entry in finance
+        if (bill.amount) {
+          await createFinanceEntry({
+            date: new Date().toISOString(),
+            type: 'ausgabe',
+            category: 'Rechnung',
+            amount: bill.amount,
+            currency: bill.currency || 'CHF',
+            notes: `Bezahlt: ${bill.title}`,
+            paymentMethod: 'Überweisung',
+            isRecurring: false,
+          });
+        }
+      }
+      
+      toast.success(t('bills.markedAsPaid', 'Als bezahlt markiert'));
+      refetch();
+    } catch (error: any) {
+      toast.error(t('common.error') + ': ' + error.message);
+    }
+  };
+
+  // Handle delete bill
+  const handleDeleteBill = async (bill: Bill) => {
+    if (bill.source === 'person') {
+      toast.error('Rechnungen von Personen können nur auf der Personen-Seite gelöscht werden.');
+      return;
+    }
+    setDeleteConfirmId(bill.id);
+  };
+
+  // Open edit dialog from Bill type
+  const openEditDialogFromBill = (bill: Bill) => {
+    // Only works for reminder-type bills
+    if (bill.source !== 'reminder') return;
+    
+    setFormData({
+      title: bill.title,
+      dueDate: bill.dueDate ? new Date(bill.dueDate).toISOString().slice(0, 10) : '',
+      amount: bill.amount ? (bill.amount / 100).toString() : '',
+      currency: bill.currency || 'CHF',
+      notes: bill.notes || '',
+      iban: bill.iban || '',
+      reference: bill.reference || '',
+      creditorName: bill.creditorName || '',
+      creditorAddress: bill.creditorAddress || '',
+      recurrenceRule: bill.recurringInterval || '',
+    });
+    // Create a mock Reminder for editing
+    setEditingBill({ id: bill.id } as any);
+    setDialogOpen(true);
   };
 
   return (
@@ -472,43 +511,46 @@ export default function Bills() {
           <Card>
             <CardContent className="pt-4">
               <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-blue-500" />
+                <Clock className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">{t('bills.open', 'Offen')}</span>
               </div>
-              <p className="text-2xl font-bold mt-1 text-blue-600">{stats.open}</p>
-              <p className="text-sm text-muted-foreground">{formatAmount(stats.totalPending)}</p>
+              <p className="text-2xl font-bold mt-1">{stats.open}</p>
+              <p className="text-sm text-muted-foreground">{formatAmount(stats.openAmount)}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
               <div className="flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-red-500" />
+                <AlertTriangle className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">{t('bills.overdue', 'Überfällig')}</span>
               </div>
-              <p className="text-2xl font-bold mt-1 text-red-600">{stats.overdue}</p>
+              <p className={`text-2xl font-bold mt-1 ${stats.overdue > 0 ? 'text-red-600' : ''}`}>{stats.overdue}</p>
+              {stats.overdueAmount > 0 && (
+                <p className="text-sm text-red-600">{formatAmount(stats.overdueAmount)}</p>
+              )}
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-green-500" />
+                <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">{t('bills.paid', 'Bezahlt')}</span>
               </div>
-              <p className="text-2xl font-bold mt-1 text-green-600">{stats.paid}</p>
-              <p className="text-sm text-muted-foreground">{formatAmount(stats.totalPaid)}</p>
+              <p className="text-2xl font-bold mt-1">{stats.paid}</p>
+              <p className="text-sm text-muted-foreground">{formatAmount(stats.paidAmount)}</p>
             </CardContent>
           </Card>
         </div>
 
         {/* Progress Bar for pending payments */}
-        {stats.totalPending > 0 && (
+        {stats.openAmount > 0 && (
           <Card>
             <CardContent className="pt-4">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm font-medium">{t('bills.pendingPayments', 'Offene Zahlungen')}</span>
-                <span className="text-sm font-bold">{formatAmount(stats.totalPending)}</span>
+                <span className="text-sm font-bold">{formatAmount(stats.openAmount)}</span>
               </div>
-              <Progress value={(stats.paid / (stats.open + stats.paid)) * 100} className="h-2" />
+              <Progress value={stats.total > 0 ? (stats.paid / stats.total) * 100 : 0} className="h-2" />
               <p className="text-xs text-muted-foreground mt-2">
                 {stats.paid} von {stats.total} Rechnungen bezahlt
               </p>

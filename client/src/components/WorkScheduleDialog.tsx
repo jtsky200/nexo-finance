@@ -246,40 +246,40 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-[1400px] h-[90vh] overflow-y-auto p-0">
-        <DialogHeader className="p-10 pb-8 border-b bg-muted/30">
-          <DialogTitle className="flex items-center gap-4 text-3xl font-bold">
-            <Briefcase className="w-9 h-9" />
+      <DialogContent className="!max-w-[95vw] !w-[95vw] max-h-[90vh] overflow-y-auto p-0" style={{ maxWidth: '95vw', width: '95vw' }}>
+        <DialogHeader className="p-6 border-b bg-muted/30">
+          <DialogTitle className="flex items-center gap-3 text-xl font-bold">
+            <Briefcase className="w-6 h-6" />
             Arbeitszeiten planen
           </DialogTitle>
         </DialogHeader>
 
         {peopleLoading ? (
-          <div className="text-center py-24">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto" />
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
           </div>
         ) : householdMembers.length === 0 ? (
-          <div className="text-center py-24 px-10">
-            <Users className="w-20 h-20 mx-auto text-muted-foreground/50 mb-8" />
-            <p className="text-xl text-muted-foreground mb-3">Keine Haushaltsmitglieder gefunden</p>
-            <p className="text-lg text-muted-foreground">
+          <div className="text-center py-12 px-6">
+            <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+            <p className="text-base text-muted-foreground mb-2">Keine Haushaltsmitglieder gefunden</p>
+            <p className="text-sm text-muted-foreground">
               Füge zuerst Personen als "Haushalt" auf der Personen-Seite hinzu.
             </p>
           </div>
         ) : (
-          <div className="p-10 space-y-10">
+          <div className="p-6 space-y-6">
             {/* Person Selector */}
-            <div className="flex flex-wrap items-center gap-6">
-              <span className="text-lg font-semibold">Person:</span>
-              <div className="flex flex-wrap gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm font-medium">Person:</span>
+              <div className="flex flex-wrap gap-2">
                 {householdMembers.map(person => (
                   <Button
                     key={person.id}
                     variant={selectedPerson === person.id ? 'default' : 'outline'}
+                    size="sm"
                     onClick={() => setSelectedPerson(person.id)}
-                    className="text-lg px-8 py-6 h-auto"
                   >
-                    <div className="w-9 h-9 rounded-full bg-primary-foreground text-primary flex items-center justify-center text-base font-bold mr-4">
+                    <div className="w-6 h-6 rounded-full bg-primary-foreground text-primary flex items-center justify-center text-xs font-bold mr-2">
                       {person.name.charAt(0).toUpperCase()}
                     </div>
                     {person.name}
@@ -289,54 +289,55 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
             </div>
 
             {/* Statistics */}
-            <div className="grid grid-cols-3 gap-8">
-              <Card className="border-2">
-                <CardContent className="py-8 px-10 text-center">
-                  <p className="text-5xl font-bold text-blue-600">{stats.workDays}</p>
-                  <p className="text-lg text-muted-foreground mt-3">Arbeitstage</p>
+            <div className="grid grid-cols-3 gap-4">
+              <Card>
+                <CardContent className="py-4 px-6 text-center">
+                  <p className="text-3xl font-bold text-blue-600">{stats.workDays}</p>
+                  <p className="text-sm text-muted-foreground mt-1">Arbeitstage</p>
                 </CardContent>
               </Card>
-              <Card className="border-2">
-                <CardContent className="py-8 px-10 text-center">
-                  <p className="text-5xl font-bold text-amber-600">{stats.hours}h</p>
-                  <p className="text-lg text-muted-foreground mt-3">Stunden</p>
+              <Card>
+                <CardContent className="py-4 px-6 text-center">
+                  <p className="text-3xl font-bold text-amber-600">{stats.hours}h</p>
+                  <p className="text-sm text-muted-foreground mt-1">Stunden</p>
                 </CardContent>
               </Card>
-              <Card className="border-2">
-                <CardContent className="py-8 px-10 text-center">
-                  <p className="text-5xl font-bold text-green-600">{stats.freeDays}</p>
-                  <p className="text-lg text-muted-foreground mt-3">Freie Tage</p>
+              <Card>
+                <CardContent className="py-4 px-6 text-center">
+                  <p className="text-3xl font-bold text-green-600">{stats.freeDays}</p>
+                  <p className="text-sm text-muted-foreground mt-1">Freie Tage</p>
                 </CardContent>
               </Card>
             </div>
 
             {/* Month Navigation */}
-            <div className="flex items-center justify-center gap-8">
-              <Button variant="outline" className="h-14 w-14" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}>
-                <ChevronLeft className="w-7 h-7" />
+            <div className="flex items-center justify-center gap-4">
+              <Button variant="outline" size="icon" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}>
+                <ChevronLeft className="w-4 h-4" />
               </Button>
-              <h3 className="text-3xl font-bold min-w-[300px] text-center">
+              <h3 className="text-xl font-bold min-w-[200px] text-center">
                 {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
               </h3>
-              <Button variant="outline" className="h-14 w-14" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}>
-                <ChevronRight className="w-7 h-7" />
+              <Button variant="outline" size="icon" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}>
+                <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
 
             {/* Type Selector */}
-            <div className="flex flex-wrap items-center gap-6 p-8 bg-muted/50 rounded-xl">
-              <span className="text-lg font-semibold">Arbeitstyp:</span>
-              <div className="flex flex-wrap gap-4">
+            <div className="flex flex-wrap items-center gap-3 p-4 bg-muted/50 rounded-lg">
+              <span className="text-sm font-medium">Arbeitstyp:</span>
+              <div className="flex flex-wrap gap-2">
                 {SCHEDULE_TYPES.map(type => {
                   const Icon = type.icon;
                   return (
                     <Button
                       key={type.value}
                       variant={selectedType === type.value ? 'default' : 'outline'}
+                      size="sm"
                       onClick={() => setSelectedType(type.value)}
-                      className={`text-lg px-8 py-6 h-auto ${selectedType === type.value ? type.color + ' text-white' : ''}`}
+                      className={selectedType === type.value ? type.color + ' text-white' : ''}
                     >
-                      <Icon className="w-6 h-6 mr-3" />
+                      <Icon className="w-4 h-4 mr-1" />
                       {type.label}
                     </Button>
                   );
@@ -345,19 +346,19 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
             </div>
 
             {/* Quick Select Buttons */}
-            <div className="flex flex-wrap items-center gap-4">
-              <span className="text-lg font-semibold">Schnellauswahl:</span>
-              <Button variant="outline" className="text-lg px-8 py-5 h-auto" onClick={selectWorkWeek}>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium">Schnellauswahl:</span>
+              <Button variant="outline" size="sm" onClick={selectWorkWeek}>
                 Mo-Fr
               </Button>
-              <div className="h-10 w-px bg-border" />
+              <div className="h-6 w-px bg-border" />
               {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((day, idx) => {
                 const dow = idx === 6 ? 0 : idx + 1;
                 return (
                   <Button 
                     key={day} 
                     variant="ghost" 
-                    className="text-lg px-6 py-5 h-auto"
+                    size="sm"
                     onClick={() => selectAllWeekdays(dow)}
                   >
                     {day}
@@ -366,9 +367,9 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
               })}
               {selectedDates.size > 0 && (
                 <>
-                  <div className="h-10 w-px bg-border" />
-                  <Button variant="destructive" className="text-lg px-8 py-5 h-auto" onClick={clearSelection}>
-                    <Trash2 className="w-6 h-6 mr-3" />
+                  <div className="h-6 w-px bg-border" />
+                  <Button variant="destructive" size="sm" onClick={clearSelection}>
+                    <Trash2 className="w-4 h-4 mr-1" />
                     Löschen ({selectedDates.size})
                   </Button>
                 </>
@@ -376,11 +377,11 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
             </div>
 
             {/* Calendar Grid */}
-            <div className="border-2 rounded-xl overflow-hidden flex-1">
+            <div className="border rounded-lg overflow-hidden flex-1">
               {/* Day Headers */}
               <div className="grid grid-cols-7 bg-muted">
                 {['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'].map(day => (
-                  <div key={day} className="p-5 text-center text-lg font-bold border-b-2">
+                  <div key={day} className="p-3 text-center text-sm font-semibold border-b">
                     {day}
                   </div>
                 ))}
@@ -399,19 +400,19 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
                       key={index}
                       onClick={() => day.isCurrentMonth && handleDateClick(day.date)}
                       className={`
-                        min-h-[120px] p-4 border-b border-r cursor-pointer transition-all relative
+                        min-h-[80px] p-2 border-b border-r cursor-pointer transition-all relative
                         ${day.isCurrentMonth ? 'bg-background hover:bg-accent/50' : 'bg-muted/30'}
                         ${isToday(day.date) ? 'ring-2 ring-primary ring-inset' : ''}
                         ${isSelected ? 'bg-primary/20' : ''}
                       `}
                     >
-                      <div className={`text-xl font-bold mb-3 ${day.isCurrentMonth ? '' : 'text-muted-foreground'}`}>
+                      <div className={`text-sm font-bold mb-1 ${day.isCurrentMonth ? '' : 'text-muted-foreground'}`}>
                         {day.date.getDate()}
                       </div>
                       
                       {schedule && typeInfo && (
                         <div 
-                          className={`text-base px-4 py-3 rounded-lg ${typeInfo.lightColor} flex items-center justify-between group font-semibold`}
+                          className={`text-xs px-2 py-1 rounded ${typeInfo.lightColor} flex items-center justify-between group font-medium`}
                         >
                           <span>{typeInfo.label}</span>
                           <button
@@ -419,16 +420,16 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
                               e.stopPropagation();
                               if (schedule.id) deleteSchedule(schedule.id);
                             }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity ml-2"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity ml-1"
                           >
-                            <Trash2 className="w-5 h-5" />
+                            <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
                       )}
 
                       {isSelected && (
-                        <div className="absolute top-3 right-3">
-                          <Check className="w-7 h-7 text-primary" />
+                        <div className="absolute top-1 right-1">
+                          <Check className="w-4 h-4 text-primary" />
                         </div>
                       )}
                     </div>
@@ -439,20 +440,20 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
 
             {/* Apply Button */}
             {selectedDates.size > 0 && (
-              <Button onClick={applyToSelected} className="w-full h-16 text-xl">
-                <Check className="w-7 h-7 mr-4" />
+              <Button onClick={applyToSelected} className="w-full">
+                <Check className="w-4 h-4 mr-2" />
                 {getTypeInfo(selectedType).label} auf {selectedDates.size} Tage anwenden
               </Button>
             )}
 
             {/* Legend */}
-            <div className="flex flex-wrap items-center gap-6 pt-6 border-t-2">
-              <span className="text-lg font-semibold">Legende:</span>
+            <div className="flex flex-wrap items-center gap-3 pt-4 border-t">
+              <span className="text-sm font-medium">Legende:</span>
               {SCHEDULE_TYPES.map(type => {
                 const Icon = type.icon;
                 return (
-                  <Badge key={type.value} variant="outline" className={`${type.lightColor} text-base px-5 py-3`}>
-                    <Icon className="w-5 h-5 mr-3" />
+                  <Badge key={type.value} variant="outline" className={`${type.lightColor} text-xs`}>
+                    <Icon className="w-3 h-3 mr-1" />
                     {type.label}
                   </Badge>
                 );

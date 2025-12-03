@@ -203,35 +203,29 @@ export default function Calendar() {
   };
 
   const getEventColor = (event: CalendarEvent) => {
-    // Überfällige Rechnungen immer rot
-    if (event.isOverdue) return 'bg-red-600 text-white';
+    // Dezente, professionelle Farben
+    if (event.isOverdue) return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200';
     
-    // Rechnungen/Fälligkeiten (due) - Orange
+    // Rechnungen/Fälligkeiten
     if (event.type === 'due') {
-      if (event.status === 'paid') return 'bg-green-600 text-white';
-      if (event.status === 'postponed') return 'bg-yellow-500 text-white';
-      return 'bg-orange-500 text-white';
+      if (event.status === 'paid') return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200';
+      return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200';
     }
     
-    // Zahlungserinnerungen - Blau
-    if (event.type === 'reminder') return 'bg-blue-500 text-white';
+    // Erinnerungen
+    if (event.type === 'reminder') return 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-200';
     
-    // Termine/Aufgaben - Grün
+    // Termine/Aufgaben
     if (event.type === 'appointment') {
-      if (event.completed) return 'bg-gray-400 text-white';
-      if (event.category === 'termin') return 'bg-green-600 text-white';
-      if (event.category === 'aufgabe') return 'bg-purple-500 text-white';
-      return 'bg-green-600 text-white';
+      if (event.completed) return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
+      return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200';
     }
     
-    return 'bg-gray-500 text-white';
+    return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
   };
 
-  const getEventBorderColor = (event: CalendarEvent) => {
-    if (event.isOverdue) return 'border-l-4 border-l-red-600';
-    if (event.type === 'due') return 'border-l-4 border-l-orange-500';
-    if (event.type === 'reminder') return 'border-l-4 border-l-blue-500';
-    if (event.type === 'appointment') return 'border-l-4 border-l-green-600';
+  const getEventBorderColor = (_event: CalendarEvent) => {
+    // Dezentes Design ohne farbige Ränder
     return '';
   };
 
@@ -371,24 +365,9 @@ export default function Calendar() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Alle Events</SelectItem>
-                <SelectItem value="due">
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-orange-500"></span>
-                    Rechnungen
-                  </span>
-                </SelectItem>
-                <SelectItem value="reminder">
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                    Erinnerungen
-                  </span>
-                </SelectItem>
-                <SelectItem value="appointment">
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-green-600"></span>
-                    Termine
-                  </span>
-                </SelectItem>
+                <SelectItem value="due">Rechnungen</SelectItem>
+                <SelectItem value="reminder">Erinnerungen</SelectItem>
+                <SelectItem value="appointment">Termine</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -397,7 +376,7 @@ export default function Calendar() {
         {/* Statistics */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           <Card 
-            className={`cursor-pointer transition-all hover:shadow-md ${filterType === 'all' ? 'ring-2 ring-primary' : ''}`} 
+            className={`cursor-pointer transition-all hover:bg-accent ${filterType === 'all' ? 'bg-accent' : ''}`} 
             onClick={() => setFilterType('all')}
           >
             <CardContent className="pt-4 pb-4">
@@ -406,54 +385,39 @@ export default function Calendar() {
             </CardContent>
           </Card>
           <Card 
-            className={`cursor-pointer transition-all hover:shadow-md ${stats.overdue > 0 ? 'border-red-500 bg-red-50 dark:bg-red-900/10' : ''}`}
-            onClick={() => {
-              // Filter to show only overdue
-              setFilterType('all');
-            }}
+            className="cursor-pointer transition-all hover:bg-accent"
+            onClick={() => setFilterType('all')}
           >
             <CardContent className="pt-4 pb-4">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className={`w-4 h-4 ${stats.overdue > 0 ? 'text-red-600' : 'text-muted-foreground'}`} />
-                <p className="text-sm text-muted-foreground">Überfällig</p>
-              </div>
+              <p className="text-sm text-muted-foreground">Überfällig</p>
               <p className={`text-2xl font-bold ${stats.overdue > 0 ? 'text-red-600' : ''}`}>{stats.overdue}</p>
             </CardContent>
           </Card>
           <Card 
-            className={`cursor-pointer transition-all hover:shadow-md border-l-4 border-l-orange-500 ${filterType === 'due' ? 'ring-2 ring-orange-500' : ''}`} 
+            className={`cursor-pointer transition-all hover:bg-accent ${filterType === 'due' ? 'bg-accent' : ''}`} 
             onClick={() => setFilterType('due')}
           >
             <CardContent className="pt-4 pb-4">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-orange-500" />
-                <p className="text-sm text-muted-foreground">Rechnungen</p>
-              </div>
-              <p className="text-2xl font-bold text-orange-600">{stats.dueThisMonth}</p>
+              <p className="text-sm text-muted-foreground">Rechnungen</p>
+              <p className="text-2xl font-bold">{stats.dueThisMonth}</p>
             </CardContent>
           </Card>
           <Card 
-            className={`cursor-pointer transition-all hover:shadow-md border-l-4 border-l-blue-500 ${filterType === 'reminder' ? 'ring-2 ring-blue-500' : ''}`} 
+            className={`cursor-pointer transition-all hover:bg-accent ${filterType === 'reminder' ? 'bg-accent' : ''}`} 
             onClick={() => setFilterType('reminder')}
           >
             <CardContent className="pt-4 pb-4">
-              <div className="flex items-center gap-2">
-                <Bell className="w-4 h-4 text-blue-500" />
-                <p className="text-sm text-muted-foreground">Erinnerungen</p>
-              </div>
-              <p className="text-2xl font-bold text-blue-600">{stats.reminders}</p>
+              <p className="text-sm text-muted-foreground">Erinnerungen</p>
+              <p className="text-2xl font-bold">{stats.reminders}</p>
             </CardContent>
           </Card>
           <Card 
-            className={`cursor-pointer transition-all hover:shadow-md border-l-4 border-l-green-600 ${filterType === 'appointment' ? 'ring-2 ring-green-600' : ''}`} 
+            className={`cursor-pointer transition-all hover:bg-accent ${filterType === 'appointment' ? 'bg-accent' : ''}`} 
             onClick={() => setFilterType('appointment')}
           >
             <CardContent className="pt-4 pb-4">
-              <div className="flex items-center gap-2">
-                <CalendarIcon className="w-4 h-4 text-green-600" />
-                <p className="text-sm text-muted-foreground">Termine</p>
-              </div>
-              <p className="text-2xl font-bold text-green-600">{stats.appointments}</p>
+              <p className="text-sm text-muted-foreground">Termine</p>
+              <p className="text-2xl font-bold">{stats.appointments}</p>
             </CardContent>
           </Card>
         </div>
@@ -513,13 +477,8 @@ export default function Calendar() {
         {/* List View */}
         {view === 'list' && (
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader>
               <CardTitle>Alle Events im {monthNames[currentDate.getMonth()]}</CardTitle>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-orange-500"></span> Rechnungen</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-600"></span> Termine</span>
-                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-500"></span> Erinnerungen</span>
-              </div>
             </CardHeader>
             <CardContent>
               {isLoading ? (

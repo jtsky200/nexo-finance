@@ -1165,42 +1165,55 @@ export const getCalendarEvents = onCall(async (request) => {
   }
 
   // Get work schedules
-  const workSchedulesSnapshot = await db.collection('workSchedules').where('userId', '==', userId).get();
-  
-  console.log(`Found ${workSchedulesSnapshot.docs.length} work schedules`);
-  
-  for (const scheduleDoc of workSchedulesSnapshot.docs) {
-    const scheduleData = scheduleDoc.data();
+  try {
+    const workSchedulesSnapshot = await db.collection('workSchedules').where('userId', '==', userId).get();
     
-    // Filter by date range if provided
-    const scheduleDate = new Date(scheduleData.date);
-    if (startDate && endDate) {
-      const start = new Date(startDate);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(endDate);
-      end.setHours(23, 59, 59, 999);
-      if (scheduleDate < start || scheduleDate > end) continue;
+    console.log(`Found ${workSchedulesSnapshot.docs.length} work schedules`);
+    
+    for (const scheduleDoc of workSchedulesSnapshot.docs) {
+      const scheduleData = scheduleDoc.data();
+      
+      // Skip if no date
+      if (!scheduleData.date) continue;
+      
+      // Parse date safely
+      const scheduleDate = new Date(scheduleData.date);
+      if (isNaN(scheduleDate.getTime())) {
+        console.log(`Invalid date for schedule ${scheduleDoc.id}: ${scheduleData.date}`);
+        continue;
+      }
+      
+      // Filter by date range if provided
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        if (scheduleDate < start || scheduleDate > end) continue;
+      }
+      
+      // Map work type to readable label
+      const typeLabels: { [key: string]: string } = {
+        'full': 'Vollzeit',
+        'half-am': 'Morgen',
+        'half-pm': 'Nachmittag',
+        'off': 'Frei'
+      };
+      
+      events.push({
+        id: `work-${scheduleDoc.id}`,
+        type: 'work',
+        title: `${scheduleData.personName || 'Unbekannt'}: ${typeLabels[scheduleData.type] || scheduleData.type}`,
+        date: scheduleDate.toISOString(),
+        personId: scheduleData.personId,
+        personName: scheduleData.personName,
+        workType: scheduleData.type,
+        startTime: scheduleData.startTime,
+        endTime: scheduleData.endTime,
+      });
     }
-    
-    // Map work type to readable label
-    const typeLabels: { [key: string]: string } = {
-      'full': 'Vollzeit',
-      'half-am': 'Morgen',
-      'half-pm': 'Nachmittag',
-      'off': 'Frei'
-    };
-    
-    events.push({
-      id: `work-${scheduleDoc.id}`,
-      type: 'work',
-      title: `${scheduleData.personName}: ${typeLabels[scheduleData.type] || scheduleData.type}`,
-      date: scheduleDate.toISOString(),
-      personId: scheduleData.personId,
-      personName: scheduleData.personName,
-      workType: scheduleData.type,
-      startTime: scheduleData.startTime,
-      endTime: scheduleData.endTime,
-    });
+  } catch (workError) {
+    console.error('Error fetching work schedules:', workError);
   }
   
   console.log(`Total events: ${events.length}`);

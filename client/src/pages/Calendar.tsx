@@ -13,7 +13,7 @@ import {
   ChevronLeft, ChevronRight, Calendar as CalendarIcon, 
   AlertTriangle, Bell, Clock, CheckCircle, ArrowDownLeft, ArrowUpRight,
   FileText, Filter, Plus, X, Edit2, Trash2, RefreshCw, Eye,
-  Briefcase, Palmtree, Search, Repeat, Download, Share2
+  Briefcase, Palmtree, Search, Repeat, Download, Share2, BellRing
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { functions } from '@/lib/firebase';
@@ -75,6 +75,51 @@ export default function Calendar() {
     recurrenceCount: 4,
   });
   const [searchQuery, setSearchQuery] = useState('');
+  const [draggedEvent, setDraggedEvent] = useState<CalendarEvent | null>(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+
+  // Check notification permission on load
+  useEffect(() => {
+    if ('Notification' in window) {
+      setNotificationsEnabled(Notification.permission === 'granted');
+    }
+  }, []);
+
+  // Schedule notifications for upcoming events
+  useEffect(() => {
+    if (!notificationsEnabled || events.length === 0) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Check for events due today or tomorrow
+    const upcomingEvents = events.filter(e => {
+      const eventDate = new Date(e.date);
+      eventDate.setHours(0, 0, 0, 0);
+      return eventDate >= today && eventDate <= tomorrow && e.type !== 'work';
+    });
+
+    // Show notification for events today
+    const todayEvents = upcomingEvents.filter(e => {
+      const eventDate = new Date(e.date);
+      eventDate.setHours(0, 0, 0, 0);
+      return eventDate.getTime() === today.getTime();
+    });
+
+    if (todayEvents.length > 0 && Notification.permission === 'granted') {
+      // Only show once per session
+      const notificationKey = `notified-${today.toISOString().split('T')[0]}`;
+      if (!sessionStorage.getItem(notificationKey)) {
+        new Notification('Nexo Kalender', {
+          body: `Du hast ${todayEvents.length} Event(s) heute: ${todayEvents.slice(0, 3).map(e => e.title).join(', ')}`,
+          icon: '/favicon.ico'
+        });
+        sessionStorage.setItem(notificationKey, 'true');
+      }
+    }
+  }, [events, notificationsEnabled]);
 
   // Get reminders
   const { data: reminders = [], refetch: refetchReminders } = useReminders();
@@ -465,6 +510,51 @@ export default function Calendar() {
     toast.success('ICS Datei heruntergeladen');
   };
 
+  // Drag & Drop handlers
+  const handleDragStart = (event: CalendarEvent, e: React.DragEvent) => {
+    setDraggedEvent(event);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', event.id);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = async (targetDate: Date, e: React.DragEvent) => {
+    e.preventDefault();
+    if (!draggedEvent) return;
+    
+    // Only allow moving appointments (not invoices or work schedules)
+    if (draggedEvent.type !== 'appointment') {
+      toast.error('Nur Termine können verschoben werden');
+      setDraggedEvent(null);
+      return;
+    }
+
+    try {
+      // Update the reminder date
+      const newDate = new Date(targetDate);
+      // Keep the original time if exists
+      if (draggedEvent.time) {
+        const [hours, minutes] = draggedEvent.time.split(':');
+        newDate.setHours(parseInt(hours), parseInt(minutes));
+      }
+      
+      // Extract the reminder ID from the event ID
+      const reminderId = draggedEvent.id.replace('appointment-', '');
+      await updateReminder(reminderId, { date: newDate });
+      
+      toast.success('Termin verschoben');
+      await refreshAll();
+    } catch (error: any) {
+      toast.error('Fehler beim Verschieben: ' + error.message);
+    }
+    
+    setDraggedEvent(null);
+  };
+
   // Share calendar
   const handleShareCalendar = async () => {
     const shareUrl = window.location.href;
@@ -481,6 +571,34 @@ export default function Calendar() {
     } else {
       await navigator.clipboard.writeText(shareUrl);
       toast.success('Link in Zwischenablage kopiert');
+    }
+  };
+
+  // Toggle notifications
+  const handleToggleNotifications = async () => {
+    if (!('Notification' in window)) {
+      toast.error('Dein Browser unterstützt keine Benachrichtigungen');
+      return;
+    }
+
+    if (Notification.permission === 'granted') {
+      setNotificationsEnabled(!notificationsEnabled);
+      toast.success(notificationsEnabled ? 'Benachrichtigungen deaktiviert' : 'Benachrichtigungen aktiviert');
+    } else if (Notification.permission === 'denied') {
+      toast.error('Benachrichtigungen wurden blockiert. Bitte in den Browser-Einstellungen aktivieren.');
+    } else {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        setNotificationsEnabled(true);
+        toast.success('Benachrichtigungen aktiviert');
+        // Send test notification
+        new Notification('Nexo Kalender', {
+          body: 'Benachrichtigungen sind jetzt aktiviert!',
+          icon: '/favicon.ico'
+        });
+      } else {
+        toast.error('Benachrichtigungen wurden nicht erlaubt');
+      }
     }
   };
 
@@ -590,6 +708,14 @@ export default function Calendar() {
             <Share2 className="w-4 h-4 mr-2" />
             Teilen
           </Button>
+          <Button 
+            variant={notificationsEnabled ? 'default' : 'outline'} 
+            size="sm" 
+            onClick={handleToggleNotifications}
+          >
+            <BellRing className="w-4 h-4 mr-2" />
+            {notificationsEnabled ? 'Benachrichtigt' : 'Benachrichtigen'}
+          </Button>
         </div>
 
         {/* Statistics */}
@@ -687,9 +813,12 @@ export default function Calendar() {
                   <div
                     key={index}
                     onClick={() => handleDayClick(day)}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(day.date, e)}
                     className={`min-h-[100px] p-2 border rounded-lg cursor-pointer transition-colors
                       ${day.isCurrentMonth ? 'bg-background hover:bg-accent' : 'bg-muted/30 hover:bg-muted/50'}
                       ${isToday(day.date) ? 'border-primary border-2' : 'border-border'}
+                      ${draggedEvent ? 'hover:border-primary hover:border-dashed' : ''}
                     `}
                   >
                     <div className={`text-sm font-medium mb-1 ${
@@ -710,13 +839,18 @@ export default function Calendar() {
                           {vacation.personName}
                         </div>
                       ))}
-                      {/* Events */}
+                      {/* Events - with drag support for appointments */}
                       {day.events.slice(0, day.vacations.length > 0 ? 2 : 3).map(event => (
                         <div
                           key={event.id}
+                          draggable={event.type === 'appointment'}
+                          onDragStart={(e) => handleDragStart(event, e)}
+                          onDragEnd={() => setDraggedEvent(null)}
                           onClick={(e) => handleEventClick(event, e)}
-                          className={`text-xs px-1 py-0.5 rounded truncate cursor-pointer hover:opacity-80 ${getEventColor(event)}`}
-                          title={event.title}
+                          className={`text-xs px-1 py-0.5 rounded truncate cursor-pointer hover:opacity-80 ${getEventColor(event)} ${
+                            event.type === 'appointment' ? 'cursor-grab active:cursor-grabbing' : ''
+                          }`}
+                          title={`${event.title}${event.type === 'appointment' ? ' (ziehen zum verschieben)' : ''}`}
                         >
                           {event.title}
                         </div>

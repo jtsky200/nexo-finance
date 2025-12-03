@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import { Link, useLocation } from 'wouter';
 import { useTranslation } from 'react-i18next';
 import { 
@@ -10,7 +11,9 @@ import {
   ClipboardList,
   Users,
   Calendar,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -20,8 +23,9 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { t } = useTranslation();
+  const [miniCalMonth, setMiniCalMonth] = useState(new Date());
 
   const navItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: t('nav.dashboard') },
@@ -34,6 +38,49 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     { path: '/taxes', icon: FileText, label: t('nav.taxes') },
     { path: '/settings', icon: Settings, label: t('nav.settings') },
   ];
+
+  // Mini Calendar Logic
+  const miniCalDays = useMemo(() => {
+    const year = miniCalMonth.getFullYear();
+    const month = miniCalMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startDayOfWeek = firstDay.getDay();
+    const adjustedStartDay = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+    
+    const days: { date: Date; isCurrentMonth: boolean }[] = [];
+    
+    // Previous month days
+    const prevMonth = new Date(year, month, 0);
+    const daysInPrevMonth = prevMonth.getDate();
+    for (let i = adjustedStartDay - 1; i >= 0; i--) {
+      days.push({ date: new Date(year, month - 1, daysInPrevMonth - i), isCurrentMonth: false });
+    }
+    
+    // Current month days
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push({ date: new Date(year, month, i), isCurrentMonth: true });
+    }
+    
+    // Next month days (fill to 42 = 6 weeks)
+    const remainingDays = 42 - days.length;
+    for (let i = 1; i <= remainingDays; i++) {
+      days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false });
+    }
+    
+    return days;
+  }, [miniCalMonth]);
+
+  const isToday = (date: Date) => date.toDateString() === new Date().toDateString();
+
+  const handleDayClick = (date: Date) => {
+    // Navigate to calendar with the selected date
+    setLocation(`/calendar?date=${date.toISOString().split('T')[0]}`);
+    onClose?.();
+  };
+
+  const monthNames = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 
   return (
     <>
@@ -72,7 +119,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 flex flex-col gap-2">
+        <nav className="flex-1 px-3 py-4 flex flex-col gap-2 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = location === item.path;
@@ -100,8 +147,67 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
           })}
         </nav>
 
+        {/* Mini Calendar */}
+        <div className="px-3 py-3 border-t border-border">
+          {/* Month Navigation */}
+          <div className="flex items-center justify-between mb-2">
+            <button 
+              onClick={() => setMiniCalMonth(new Date(miniCalMonth.getFullYear(), miniCalMonth.getMonth() - 1, 1))}
+              className="p-1 hover:bg-accent rounded"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-xs font-medium">
+              {monthNames[miniCalMonth.getMonth()]} {miniCalMonth.getFullYear()}
+            </span>
+            <button 
+              onClick={() => setMiniCalMonth(new Date(miniCalMonth.getFullYear(), miniCalMonth.getMonth() + 1, 1))}
+              className="p-1 hover:bg-accent rounded"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Day Headers */}
+          <div className="grid grid-cols-7 gap-0.5 mb-1">
+            {['M', 'D', 'M', 'D', 'F', 'S', 'S'].map((day, i) => (
+              <div key={i} className="text-center text-[10px] text-muted-foreground font-medium">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          {/* Days Grid */}
+          <div className="grid grid-cols-7 gap-0.5">
+            {miniCalDays.map((day, index) => (
+              <button
+                key={index}
+                onClick={() => handleDayClick(day.date)}
+                className={cn(
+                  "w-7 h-7 text-[10px] rounded transition-colors",
+                  day.isCurrentMonth ? "hover:bg-accent" : "text-muted-foreground/40",
+                  isToday(day.date) && "bg-primary text-primary-foreground font-bold"
+                )}
+              >
+                {day.date.getDate()}
+              </button>
+            ))}
+          </div>
+
+          {/* Today Button */}
+          <button
+            onClick={() => {
+              setMiniCalMonth(new Date());
+              handleDayClick(new Date());
+            }}
+            className="w-full mt-2 text-xs py-1.5 text-center text-primary hover:bg-accent rounded transition-colors"
+          >
+            Heute
+          </button>
+        </div>
+
         {/* Footer */}
-        <div className="p-4 border-t border-border">
+        <div className="p-3 border-t border-border">
           <p className="text-xs text-muted-foreground text-center">
             © 2025 Nexo
           </p>

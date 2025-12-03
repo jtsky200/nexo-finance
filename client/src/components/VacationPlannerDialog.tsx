@@ -229,81 +229,84 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-[95vw] w-[1200px] max-h-[95vh] overflow-y-auto p-0">
-          <DialogHeader className="p-8 pb-6 border-b bg-muted/30">
-            <DialogTitle className="flex items-center gap-3 text-2xl font-bold">
-              <Palmtree className="w-7 h-7" />
+        <DialogContent className="!max-w-[90vw] w-[90vw] max-h-[90vh] overflow-y-auto p-0" style={{ maxWidth: '90vw', width: '90vw' }}>
+          <DialogHeader className="px-8 py-5 border-b bg-muted/30">
+            <DialogTitle className="flex items-center gap-3 text-xl font-bold">
+              <Palmtree className="w-6 h-6" />
               Ferienplaner
             </DialogTitle>
           </DialogHeader>
 
           {peopleLoading ? (
-            <div className="text-center py-20">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto" />
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
             </div>
           ) : householdMembers.length === 0 ? (
-            <div className="text-center py-20 px-8">
-              <Users className="w-16 h-16 mx-auto text-muted-foreground/50 mb-6" />
-              <p className="text-lg text-muted-foreground mb-2">Keine Haushaltsmitglieder gefunden</p>
-              <p className="text-muted-foreground">
+            <div className="text-center py-12 px-8">
+              <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+              <p className="text-base text-muted-foreground mb-2">Keine Haushaltsmitglieder gefunden</p>
+              <p className="text-sm text-muted-foreground">
                 Füge zuerst Personen als "Haushalt" auf der Personen-Seite hinzu.
               </p>
             </div>
           ) : (
-            <div className="p-8 space-y-8">
-              {/* Month Navigation */}
-              <div className="flex items-center justify-center gap-6">
-                <Button variant="outline" size="lg" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}>
-                  <ChevronLeft className="w-5 h-5" />
-                </Button>
-                <h3 className="text-2xl font-bold min-w-[250px] text-center">
-                  {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
-                </h3>
-                <Button variant="outline" size="lg" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}>
-                  <ChevronRight className="w-5 h-5" />
-                </Button>
-              </div>
+            <div className="p-8">
+              {/* Top Controls - centered */}
+              <div className="max-w-3xl mx-auto space-y-5 mb-8">
+                {/* Month Navigation */}
+                <div className="flex items-center justify-center gap-4">
+                  <Button variant="outline" size="icon" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}>
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <h3 className="text-lg font-bold min-w-[180px] text-center">
+                    {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+                  </h3>
+                  <Button variant="outline" size="icon" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
 
-              {/* Statistics Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-                {householdMembers.slice(0, 4).map(person => {
-                  const stats = getVacationStats(person.id);
-                  return (
-                    <Card key={person.id} className="border-2">
-                      <CardContent className="py-6 px-6">
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-lg font-bold">
-                            {person.name.charAt(0).toUpperCase()}
+                {/* Statistics Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-xl mx-auto">
+                  {householdMembers.slice(0, 4).map(person => {
+                    const stats = getVacationStats(person.id);
+                    return (
+                      <Card key={person.id}>
+                        <CardContent className="py-3 px-4">
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-medium">
+                              {person.name.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="font-medium text-xs truncate">{person.name}</span>
                           </div>
-                          <span className="font-semibold text-lg truncate">{person.name}</span>
-                        </div>
-                        <p className="text-3xl font-bold">{stats.totalDays} Tage</p>
-                        <p className="text-base text-muted-foreground mt-1">{stats.count} Einträge</p>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                          <p className="text-xl font-bold">{stats.totalDays} Tage</p>
+                          <p className="text-xs text-muted-foreground">{stats.count} Einträge</p>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+
+                {/* Add Button */}
+                <Button onClick={openAddDialog} className="w-full max-w-md mx-auto flex">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Ferien / Abwesenheit eintragen
+                </Button>
               </div>
 
-              {/* Add Button */}
-              <Button onClick={openAddDialog} className="w-full h-14 text-lg" size="lg">
-                <Plus className="w-6 h-6 mr-3" />
-                Ferien / Abwesenheit eintragen
-              </Button>
-
-              {/* Vacation List */}
+              {/* Vacation List - full width */}
               {isLoading ? (
-                <div className="text-center py-12">
-                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-4" />
-                  <p className="text-lg text-muted-foreground">Laden...</p>
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
+                  <p className="text-sm text-muted-foreground">Laden...</p>
                 </div>
               ) : getMonthVacations().length === 0 ? (
-                <div className="text-center py-16 bg-muted/30 rounded-xl">
-                  <Palmtree className="w-16 h-16 mx-auto text-muted-foreground/50 mb-6" />
-                  <p className="text-lg text-muted-foreground">Keine Einträge für diesen Monat</p>
+                <div className="text-center py-12 bg-muted/30 rounded-lg max-w-2xl mx-auto">
+                  <Palmtree className="w-10 h-10 mx-auto text-muted-foreground/50 mb-4" />
+                  <p className="text-muted-foreground">Keine Einträge für diesen Monat</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3 max-w-4xl mx-auto">
                   {getMonthVacations().map(vacation => {
                     const typeInfo = getTypeInfo(vacation.type);
                     const TypeIcon = typeInfo.icon;
@@ -312,40 +315,40 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
                     return (
                       <div
                         key={vacation.id}
-                        className="p-6 rounded-xl border-2 bg-card hover:bg-muted/30 transition-colors"
+                        className="p-4 rounded-lg border bg-card hover:bg-muted/30 transition-colors"
                       >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex items-start gap-4">
-                            <div className={`p-3 rounded-xl ${typeInfo.color}`}>
-                              <TypeIcon className="w-6 h-6" />
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3">
+                            <div className={`p-2 rounded-lg ${typeInfo.color}`}>
+                              <TypeIcon className="w-4 h-4" />
                             </div>
                             <div>
-                              <h4 className="font-bold text-lg">{vacation.title}</h4>
-                              <p className="text-base text-muted-foreground mt-1">
+                              <h4 className="font-medium">{vacation.title}</h4>
+                              <p className="text-sm text-muted-foreground">
                                 {vacation.personName} • {formatDate(vacation.startDate)} - {formatDate(vacation.endDate)}
                               </p>
                               {vacation.notes && (
-                                <p className="text-base text-muted-foreground mt-2">{vacation.notes}</p>
+                                <p className="text-sm text-muted-foreground mt-1">{vacation.notes}</p>
                               )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-3">
-                            <Badge variant="secondary" className="text-base px-4 py-2">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="text-xs">
                               {days} {days === 1 ? 'Tag' : 'Tage'}
                             </Badge>
                             <Button
-                              variant="outline"
-                              size="lg"
+                              variant="ghost"
+                              size="icon"
                               onClick={() => openEditDialog(vacation)}
                             >
-                              <Edit2 className="w-5 h-5" />
+                              <Edit2 className="w-4 h-4" />
                             </Button>
                             <Button
-                              variant="outline"
-                              size="lg"
+                              variant="ghost"
+                              size="icon"
                               onClick={() => setDeleteConfirmId(vacation.id)}
                             >
-                              <Trash2 className="w-5 h-5" />
+                              <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
                         </div>
@@ -355,14 +358,14 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
                 </div>
               )}
 
-              {/* Legend */}
-              <div className="flex flex-wrap items-center gap-4 pt-6 border-t-2">
-                <span className="text-base font-semibold">Legende:</span>
+              {/* Legend - centered */}
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-6 mt-6 border-t max-w-3xl mx-auto">
+                <span className="text-sm font-medium">Legende:</span>
                 {VACATION_TYPES.map(type => {
                   const TypeIcon = type.icon;
                   return (
-                    <Badge key={type.value} variant="outline" className={`${type.color} text-sm px-4 py-2`}>
-                      <TypeIcon className="w-4 h-4 mr-2" />
+                    <Badge key={type.value} variant="outline" className={`${type.color} text-xs`}>
+                      <TypeIcon className="w-3 h-3 mr-1" />
                       {type.label}
                     </Badge>
                   );
@@ -375,15 +378,15 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
 
       {/* Add/Edit Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle className="text-xl">
+            <DialogTitle>
               {editingVacation ? 'Eintrag bearbeiten' : 'Ferien / Abwesenheit eintragen'}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-5 py-4">
+          <div className="space-y-4 py-2">
             <div>
-              <Label className="text-base">Person *</Label>
+              <Label>Person *</Label>
               <Select
                 value={formData.personId}
                 onValueChange={(value) => {
@@ -395,12 +398,12 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
                   }));
                 }}
               >
-                <SelectTrigger className="mt-2 h-12 text-base">
+                <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Person auswählen" />
                 </SelectTrigger>
                 <SelectContent>
                   {householdMembers.map(person => (
-                    <SelectItem key={person.id} value={person.id} className="text-base py-3">
+                    <SelectItem key={person.id} value={person.id}>
                       {person.name}
                     </SelectItem>
                   ))}
@@ -409,21 +412,21 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
             </div>
 
             <div>
-              <Label className="text-base">Typ *</Label>
+              <Label>Typ *</Label>
               <Select
                 value={formData.type}
                 onValueChange={(value) => setFormData(prev => ({ ...prev, type: value as Vacation['type'] }))}
               >
-                <SelectTrigger className="mt-2 h-12 text-base">
+                <SelectTrigger className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {VACATION_TYPES.map(type => {
                     const TypeIcon = type.icon;
                     return (
-                      <SelectItem key={type.value} value={type.value} className="text-base py-3">
-                        <span className="flex items-center gap-3">
-                          <TypeIcon className="w-5 h-5" />
+                      <SelectItem key={type.value} value={type.value}>
+                        <span className="flex items-center gap-2">
+                          <TypeIcon className="w-4 h-4" />
                           {type.label}
                         </span>
                       </SelectItem>
@@ -434,63 +437,61 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
             </div>
 
             <div>
-              <Label className="text-base">Titel / Beschreibung *</Label>
+              <Label>Titel / Beschreibung *</Label>
               <Input
                 value={formData.title}
                 onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                 placeholder="z.B. Sommerferien, Arzttermin..."
-                className="mt-2 h-12 text-base"
+                className="mt-1"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-base">Von *</Label>
+                <Label>Von *</Label>
                 <Input
                   type="date"
                   value={formData.startDate}
                   onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
-                  className="mt-2 h-12 text-base"
+                  className="mt-1"
                 />
               </div>
               <div>
-                <Label className="text-base">Bis *</Label>
+                <Label>Bis *</Label>
                 <Input
                   type="date"
                   value={formData.endDate}
                   onChange={(e) => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
-                  className="mt-2 h-12 text-base"
+                  className="mt-1"
                 />
               </div>
             </div>
 
             {formData.startDate && formData.endDate && (
-              <div className="text-center py-4 bg-muted rounded-xl">
-                <span className="text-3xl font-bold">
+              <div className="text-center py-2 bg-muted rounded-lg">
+                <span className="text-xl font-bold">
                   {calculateDays(formData.startDate, formData.endDate)}
                 </span>
-                <span className="text-lg text-muted-foreground ml-3">
+                <span className="text-muted-foreground ml-2">
                   {calculateDays(formData.startDate, formData.endDate) === 1 ? 'Tag' : 'Tage'}
                 </span>
               </div>
             )}
 
             <div>
-              <Label className="text-base">Notizen</Label>
+              <Label>Notizen</Label>
               <Textarea
                 value={formData.notes}
                 onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                 placeholder="Optionale Notizen..."
-                className="mt-2 text-base"
-                rows={3}
+                className="mt-1"
+                rows={2}
               />
             </div>
           </div>
-          <DialogFooter className="gap-3">
-            <Button variant="outline" size="lg" onClick={() => setShowAddDialog(false)}>
-              Abbrechen
-            </Button>
-            <Button size="lg" onClick={handleSave}>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowAddDialog(false)}>Abbrechen</Button>
+            <Button onClick={handleSave}>
               {editingVacation ? 'Speichern' : 'Eintragen'}
             </Button>
           </DialogFooter>
@@ -501,12 +502,12 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
       <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-xl">Eintrag löschen?</AlertDialogTitle>
-            <AlertDialogDescription className="text-base">
+            <AlertDialogTitle>Eintrag löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
               Diese Aktion kann nicht rückgängig gemacht werden.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="gap-3">
+          <AlertDialogFooter>
             <AlertDialogCancel>Abbrechen</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete}>Löschen</AlertDialogAction>
           </AlertDialogFooter>

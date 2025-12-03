@@ -895,7 +895,7 @@ exports.getAllBills = (0, https_1.onCall)(async (request) => {
 });
 // ========== Calendar Functions ==========
 exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
-    var _a, _b;
+    var _a, _b, _c, _d, _e;
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
@@ -904,37 +904,61 @@ exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
     const events = [];
     // Get all people with their invoices
     const peopleSnapshot = await db.collection('people').where('userId', '==', userId).get();
+    console.log(`Found ${peopleSnapshot.docs.length} people for user ${userId}`);
     for (const personDoc of peopleSnapshot.docs) {
         const personData = personDoc.data();
         const invoicesSnapshot = await personDoc.ref.collection('invoices').get();
+        console.log(`Found ${invoicesSnapshot.docs.length} invoices for person ${personData.name}`);
         for (const invoiceDoc of invoicesSnapshot.docs) {
             const invoiceData = invoiceDoc.data();
-            // Add due date events
-            if (invoiceData.dueDate && invoiceData.status !== 'paid') {
-                const dueDate = invoiceData.dueDate.toDate();
-                // Filter by date range if provided
-                if (startDate && endDate) {
-                    const start = new Date(startDate);
-                    const end = new Date(endDate);
-                    if (dueDate < start || dueDate > end)
-                        continue;
-                }
-                events.push({
-                    id: `due-${invoiceDoc.id}`,
-                    type: 'due',
-                    title: `Fällig: ${invoiceData.description}`,
-                    date: dueDate.toISOString(),
-                    amount: invoiceData.amount,
-                    status: invoiceData.status,
-                    direction: invoiceData.direction || 'outgoing',
-                    personId: personDoc.id,
-                    personName: personData.name,
-                    invoiceId: invoiceDoc.id,
-                    isOverdue: dueDate < new Date() && invoiceData.status !== 'paid',
-                });
+            // Skip paid invoices
+            if (invoiceData.status === 'paid')
+                continue;
+            // Determine the date to use (dueDate > date > createdAt)
+            let eventDate = null;
+            let isOverdue = false;
+            if ((_a = invoiceData.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) {
+                eventDate = invoiceData.dueDate.toDate();
+                isOverdue = eventDate < new Date();
             }
-            // Add reminder events
-            if (invoiceData.reminderEnabled && invoiceData.reminderDate && invoiceData.status !== 'paid') {
+            else if ((_b = invoiceData.date) === null || _b === void 0 ? void 0 : _b.toDate) {
+                eventDate = invoiceData.date.toDate();
+            }
+            else if ((_c = invoiceData.createdAt) === null || _c === void 0 ? void 0 : _c.toDate) {
+                eventDate = invoiceData.createdAt.toDate();
+            }
+            // If no date found, use today
+            if (!eventDate) {
+                eventDate = new Date();
+            }
+            // Filter by date range if provided
+            if (startDate && endDate) {
+                const start = new Date(startDate);
+                start.setHours(0, 0, 0, 0);
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                if (eventDate < start || eventDate > end) {
+                    console.log(`Invoice ${invoiceData.description} filtered out (date: ${eventDate.toISOString()})`);
+                    continue;
+                }
+            }
+            console.log(`Adding invoice event: ${invoiceData.description} on ${eventDate.toISOString()}`);
+            events.push({
+                id: `due-${invoiceDoc.id}`,
+                type: 'due',
+                title: `${personData.name}: ${invoiceData.description}`,
+                date: eventDate.toISOString(),
+                amount: invoiceData.amount,
+                status: invoiceData.status,
+                direction: invoiceData.direction || 'incoming',
+                personId: personDoc.id,
+                personName: personData.name,
+                invoiceId: invoiceDoc.id,
+                isOverdue: isOverdue,
+                hasDueDate: !!invoiceData.dueDate,
+            });
+            // Add reminder events if enabled
+            if (invoiceData.reminderEnabled && invoiceData.reminderDate) {
                 const reminderDate = invoiceData.reminderDate.toDate();
                 // Filter by date range if provided
                 if (startDate && endDate) {
@@ -946,11 +970,11 @@ exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
                 events.push({
                     id: `reminder-${invoiceDoc.id}`,
                     type: 'reminder',
-                    title: `Erinnerung: ${invoiceData.description}`,
+                    title: `Erinnerung: ${personData.name}: ${invoiceData.description}`,
                     date: reminderDate.toISOString(),
                     amount: invoiceData.amount,
                     status: invoiceData.status,
-                    direction: invoiceData.direction || 'outgoing',
+                    direction: invoiceData.direction || 'incoming',
                     personId: personDoc.id,
                     personName: personData.name,
                     invoiceId: invoiceDoc.id,
@@ -966,13 +990,13 @@ exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
         const reminderData = reminderDoc.data();
         let reminderDate;
         // Handle different date formats - reminders use 'dueDate' field
-        if ((_a = reminderData.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) {
+        if ((_d = reminderData.dueDate) === null || _d === void 0 ? void 0 : _d.toDate) {
             reminderDate = reminderData.dueDate.toDate();
         }
         else if (reminderData.dueDate) {
             reminderDate = new Date(reminderData.dueDate);
         }
-        else if ((_b = reminderData.date) === null || _b === void 0 ? void 0 : _b.toDate) {
+        else if ((_e = reminderData.date) === null || _e === void 0 ? void 0 : _e.toDate) {
             // Fallback to 'date' field if exists
             reminderDate = reminderData.date.toDate();
         }

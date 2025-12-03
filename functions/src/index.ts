@@ -1022,41 +1022,69 @@ export const getCalendarEvents = onCall(async (request) => {
   // Get all people with their invoices
   const peopleSnapshot = await db.collection('people').where('userId', '==', userId).get();
   
+  console.log(`Found ${peopleSnapshot.docs.length} people for user ${userId}`);
+  
   for (const personDoc of peopleSnapshot.docs) {
     const personData = personDoc.data();
     const invoicesSnapshot = await personDoc.ref.collection('invoices').get();
     
+    console.log(`Found ${invoicesSnapshot.docs.length} invoices for person ${personData.name}`);
+    
     for (const invoiceDoc of invoicesSnapshot.docs) {
       const invoiceData = invoiceDoc.data();
       
-      // Add due date events
-      if (invoiceData.dueDate && invoiceData.status !== 'paid') {
-        const dueDate = invoiceData.dueDate.toDate();
-        
-        // Filter by date range if provided
-        if (startDate && endDate) {
-          const start = new Date(startDate);
-          const end = new Date(endDate);
-          if (dueDate < start || dueDate > end) continue;
-        }
-        
-        events.push({
-          id: `due-${invoiceDoc.id}`,
-          type: 'due',
-          title: `Fällig: ${invoiceData.description}`,
-          date: dueDate.toISOString(),
-          amount: invoiceData.amount,
-          status: invoiceData.status,
-          direction: invoiceData.direction || 'outgoing',
-          personId: personDoc.id,
-          personName: personData.name,
-          invoiceId: invoiceDoc.id,
-          isOverdue: dueDate < new Date() && invoiceData.status !== 'paid',
-        });
+      // Skip paid invoices
+      if (invoiceData.status === 'paid') continue;
+      
+      // Determine the date to use (dueDate > date > createdAt)
+      let eventDate: Date | null = null;
+      let isOverdue = false;
+      
+      if (invoiceData.dueDate?.toDate) {
+        eventDate = invoiceData.dueDate.toDate();
+        isOverdue = eventDate < new Date();
+      } else if (invoiceData.date?.toDate) {
+        eventDate = invoiceData.date.toDate();
+      } else if (invoiceData.createdAt?.toDate) {
+        eventDate = invoiceData.createdAt.toDate();
       }
       
-      // Add reminder events
-      if (invoiceData.reminderEnabled && invoiceData.reminderDate && invoiceData.status !== 'paid') {
+      // If no date found, use today
+      if (!eventDate) {
+        eventDate = new Date();
+      }
+      
+      // Filter by date range if provided
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        if (eventDate < start || eventDate > end) {
+          console.log(`Invoice ${invoiceData.description} filtered out (date: ${eventDate.toISOString()})`);
+          continue;
+        }
+      }
+      
+      console.log(`Adding invoice event: ${invoiceData.description} on ${eventDate.toISOString()}`);
+      
+      events.push({
+        id: `due-${invoiceDoc.id}`,
+        type: 'due',
+        title: `${personData.name}: ${invoiceData.description}`,
+        date: eventDate.toISOString(),
+        amount: invoiceData.amount,
+        status: invoiceData.status,
+        direction: invoiceData.direction || 'incoming',
+        personId: personDoc.id,
+        personName: personData.name,
+        invoiceId: invoiceDoc.id,
+        isOverdue: isOverdue,
+        hasDueDate: !!invoiceData.dueDate,
+      });
+      
+      // Add reminder events if enabled
+      if (invoiceData.reminderEnabled && invoiceData.reminderDate) {
         const reminderDate = invoiceData.reminderDate.toDate();
         
         // Filter by date range if provided
@@ -1069,11 +1097,11 @@ export const getCalendarEvents = onCall(async (request) => {
         events.push({
           id: `reminder-${invoiceDoc.id}`,
           type: 'reminder',
-          title: `Erinnerung: ${invoiceData.description}`,
+          title: `Erinnerung: ${personData.name}: ${invoiceData.description}`,
           date: reminderDate.toISOString(),
           amount: invoiceData.amount,
           status: invoiceData.status,
-          direction: invoiceData.direction || 'outgoing',
+          direction: invoiceData.direction || 'incoming',
           personId: personDoc.id,
           personName: personData.name,
           invoiceId: invoiceDoc.id,

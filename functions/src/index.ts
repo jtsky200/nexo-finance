@@ -1098,12 +1098,20 @@ export const getCalendarEvents = onCall(async (request) => {
   }
 
   // Get regular reminders (Termine & Aufgaben) - field is 'dueDate' not 'date'
+  // SKIP type='zahlung' as those are already covered by person invoices
   const remindersSnapshot = await db.collection('reminders').where('userId', '==', userId).get();
   
   console.log(`Found ${remindersSnapshot.docs.length} reminders for user ${userId}`);
   
   for (const reminderDoc of remindersSnapshot.docs) {
     const reminderData = reminderDoc.data();
+    
+    // Skip payment reminders - they are already shown via person invoices
+    if (reminderData.type === 'zahlung') {
+      console.log(`Skipping payment reminder ${reminderDoc.id} - covered by person invoices`);
+      continue;
+    }
+    
     let reminderDate: Date;
     
     // Handle different date formats - reminders use 'dueDate' field
@@ -1145,21 +1153,16 @@ export const getCalendarEvents = onCall(async (request) => {
     const timeStr = (hours > 0 || minutes > 0) ? 
       `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}` : undefined;
     
-    // Map reminder type to calendar event type
-    const eventType = reminderData.type === 'zahlung' ? 'reminder' : 'appointment';
-    
     events.push({
       id: `appointment-${reminderDoc.id}`,
-      type: eventType,
+      type: 'appointment',
       title: reminderData.title,
       date: reminderDate.toISOString(),
       time: timeStr,
       description: reminderData.notes || reminderData.description,
-      category: reminderData.type, // termin, aufgabe, zahlung
+      category: reminderData.type, // termin, aufgabe
       priority: reminderData.priority,
       completed: reminderData.status === 'erledigt',
-      amount: reminderData.amount,
-      currency: reminderData.currency,
     });
   }
   

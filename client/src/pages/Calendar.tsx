@@ -48,6 +48,7 @@ export default function Calendar() {
   const [isLoading, setIsLoading] = useState(true);
   const [view, setView] = useState<'month' | 'week' | 'list'>('month');
   const [filterType, setFilterType] = useState<string>('all');
+  const [upcomingFilter, setUpcomingFilter] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -627,25 +628,20 @@ export default function Calendar() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-orange-500" />
-              Anstehende Fälligkeiten (nächste 7 Tage)
+              Anstehend (nächste 7 Tage)
             </CardTitle>
             <Select 
-              defaultValue="bills"
-              onValueChange={(value) => {
-                if (value === 'bills') setLocation('/bills');
-                else if (value === 'reminders') setLocation('/reminders');
-                else if (value === 'people') setLocation('/people');
-                else if (value === 'finance') setLocation('/finance');
-              }}
+              value={upcomingFilter}
+              onValueChange={setUpcomingFilter}
             >
               <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Schnellzugriff" />
+                <SelectValue placeholder="Filter" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="bills">Alle Rechnungen</SelectItem>
-                <SelectItem value="reminders">Alle Erinnerungen</SelectItem>
-                <SelectItem value="people">Alle Personen</SelectItem>
-                <SelectItem value="finance">Finanzen</SelectItem>
+                <SelectItem value="all">Alle anzeigen</SelectItem>
+                <SelectItem value="due">Nur Rechnungen</SelectItem>
+                <SelectItem value="appointment">Nur Termine</SelectItem>
+                <SelectItem value="overdue">Nur Überfällige</SelectItem>
               </SelectContent>
             </Select>
           </CardHeader>
@@ -660,7 +656,21 @@ export default function Calendar() {
                 .filter(event => {
                   const eventDate = new Date(event.date);
                   eventDate.setHours(0, 0, 0, 0);
-                  return eventDate >= today && eventDate <= nextWeek && event.status !== 'paid';
+                  
+                  // Date filter
+                  const isInRange = eventDate >= today && eventDate <= nextWeek;
+                  const isNotPaid = event.status !== 'paid';
+                  
+                  // Type filter
+                  if (upcomingFilter === 'due') {
+                    return isInRange && isNotPaid && event.type === 'due';
+                  } else if (upcomingFilter === 'appointment') {
+                    return isInRange && event.type === 'appointment';
+                  } else if (upcomingFilter === 'overdue') {
+                    return event.isOverdue && isNotPaid;
+                  }
+                  
+                  return isInRange && (isNotPaid || event.type === 'appointment');
                 })
                 .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
@@ -668,14 +678,20 @@ export default function Calendar() {
                 return (
                   <div className="text-center py-6 text-muted-foreground">
                     <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-500" />
-                    Keine Fälligkeiten in den nächsten 7 Tagen
+                    {upcomingFilter === 'all' 
+                      ? 'Keine Einträge in den nächsten 7 Tagen'
+                      : upcomingFilter === 'due'
+                        ? 'Keine Rechnungen fällig'
+                        : upcomingFilter === 'appointment'
+                          ? 'Keine Termine'
+                          : 'Keine überfälligen Einträge'}
                   </div>
                 );
               }
 
               return (
                 <div className="space-y-3">
-                  {upcomingEvents.slice(0, 5).map(event => (
+                  {upcomingEvents.slice(0, 8).map(event => (
                     <div 
                       key={event.id} 
                       className="flex items-center justify-between p-3 rounded-lg border cursor-pointer hover:bg-accent transition-colors"

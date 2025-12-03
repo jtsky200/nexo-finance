@@ -306,31 +306,31 @@ export default function Calendar() {
   };
 
   const getEventColor = (event: CalendarEvent) => {
-    // Dezente, professionelle Farben
-    if (event.isOverdue) return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200';
+    // Überfällig - dunkelrot
+    if (event.isOverdue) return 'bg-red-200 text-red-900 dark:bg-red-900/50 dark:text-red-100';
     
     // Arbeitszeiten
     if (event.type === 'work') {
       const workType = (event as any).workType;
-      if (workType === 'off') return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200';
+      if (workType === 'off') return 'bg-emerald-200 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200';
       if (workType === 'half-am') return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200';
       if (workType === 'half-pm') return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-200';
       return 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200';
     }
     
-    // Rechnungen/Fälligkeiten
+    // Rechnungen/Fälligkeiten - ROT
     if (event.type === 'due') {
       if (event.status === 'paid') return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200';
-      return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200';
+      return 'bg-rose-200 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200';
     }
     
     // Erinnerungen
     if (event.type === 'reminder') return 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-200';
     
-    // Termine/Aufgaben
+    // Termine/Aufgaben - ORANGE
     if (event.type === 'appointment') {
       if (event.completed) return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
-      return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200';
+      return 'bg-orange-200 text-orange-800 dark:bg-orange-900/40 dark:text-orange-200';
     }
     
     return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
@@ -771,11 +771,11 @@ export default function Calendar() {
         <div className="flex flex-wrap items-center gap-4 text-sm">
           <span className="text-muted-foreground">Legende:</span>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-amber-200" />
+            <div className="w-3 h-3 rounded bg-rose-400" />
             <span>Rechnungen</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-green-200" />
+            <div className="w-3 h-3 rounded bg-orange-400" />
             <span>Termine</span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -783,16 +783,12 @@ export default function Calendar() {
             <span>Arbeit</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-emerald-200" />
+            <div className="w-3 h-3 rounded bg-emerald-300" />
             <span>Frei</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-cyan-200" />
+            <div className="w-3 h-3 rounded bg-cyan-300" />
             <span>Ferien</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded bg-red-200" />
-            <span>Überfällig</span>
           </div>
         </div>
 

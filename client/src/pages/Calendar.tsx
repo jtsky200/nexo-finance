@@ -714,10 +714,24 @@ export default function Calendar() {
               const nextWeek = new Date(today);
               nextWeek.setDate(today.getDate() + 7);
 
+              // Filter events - EXCLUDE work schedules (except free days, limit to 3)
+              let freeCount = 0;
               const upcomingEvents = events
                 .filter(event => {
                   const eventDate = new Date(event.date);
                   eventDate.setHours(0, 0, 0, 0);
+                  
+                  // SKIP all work schedules except "off" days
+                  if (event.type === 'work') {
+                    const workType = (event as any).workType;
+                    // Skip work days completely
+                    if (workType !== 'off') return false;
+                    // Only show max 3 free days
+                    if (freeCount >= 3) return false;
+                    const isInRange = eventDate >= today && eventDate <= nextWeek;
+                    if (isInRange) freeCount++;
+                    return isInRange;
+                  }
                   
                   // Date filter
                   const isInRange = eventDate >= today && eventDate <= nextWeek;
@@ -736,7 +750,18 @@ export default function Calendar() {
                 })
                 .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-              if (upcomingEvents.length === 0) {
+              // Group vacations into date ranges for display
+              const upcomingVacations = vacations
+                .filter(v => {
+                  const start = new Date(v.startDate);
+                  const end = new Date(v.endDate);
+                  return end >= today && start <= nextWeek;
+                })
+                .slice(0, 3);
+
+              const hasItems = upcomingEvents.length > 0 || upcomingVacations.length > 0;
+
+              if (!hasItems) {
                 return (
                   <div className="text-center py-6 text-muted-foreground">
                     <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-500" />
@@ -751,8 +776,33 @@ export default function Calendar() {
                 );
               }
 
+              const formatShortDate = (d: string) => {
+                const date = new Date(d);
+                return `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+              };
+
               return (
                 <div className="space-y-3">
+                  {/* Vacations as grouped ranges */}
+                  {upcomingVacations.map((vacation: any) => (
+                    <div 
+                      key={vacation.id} 
+                      className="flex items-center justify-between p-3 rounded-lg border bg-cyan-50 dark:bg-cyan-900/20"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-full bg-cyan-100 text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-200">
+                          <Palmtree className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="font-medium">{vacation.title || 'Ferien'}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {formatShortDate(vacation.startDate)} - {formatShortDate(vacation.endDate)} • {vacation.personName}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {/* Regular events (no work days) */}
                   {upcomingEvents.slice(0, 8).map(event => (
                     <div 
                       key={event.id} 

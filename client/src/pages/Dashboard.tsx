@@ -9,10 +9,11 @@ import {
   Banknote, Clock, AlertTriangle, CheckCircle2, ClipboardList,
   CalendarClock, CheckSquare
 } from 'lucide-react';
-import { useReminders, useFinanceEntries, getTaxProfileByYear } from '@/lib/firebaseHooks';
+import { useReminders, useFinanceEntries, getTaxProfileByYear, useAllBills, Bill } from '@/lib/firebaseHooks';
 import AddReminderDialog from '@/components/AddReminderDialog';
 import AddFinanceEntryDialog from '@/components/AddFinanceEntryDialog';
 import { useLocation } from 'wouter';
+import { toast } from 'sonner';
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -20,37 +21,61 @@ export default function Dashboard() {
   const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
   const [financeDialogOpen, setFinanceDialogOpen] = useState(false);
   const [taxProfile, setTaxProfile] = useState<any>(null);
+  const [dismissedWarnings, setDismissedWarnings] = useState<Set<string>>(new Set());
 
-  // Fetch all open reminders
+  // Fetch all open reminders for appointments
   const now = useMemo(() => new Date(), []);
   const { data: allReminders = [], isLoading: remindersLoading, refetch: refetchReminders } = useReminders({
     status: 'offen',
   });
+
+  // Fetch ALL bills (from people/invoices AND payment reminders)
+  const { data: allBills = [], stats: billStats, isLoading: billsLoading, refetch: refetchBills } = useAllBills();
   
-  // Separate appointments (termine/aufgaben) and bills (zahlungen)
-  const { appointments, bills, overdueCount } = useMemo(() => {
+  // Separate appointments (termine/aufgaben) from reminders
+  const appointments = useMemo(() => {
     const upcoming = allReminders.filter(r => {
       const dueDate = new Date(r.dueDate);
       return dueDate >= now || r.status === 'offen';
     });
     
-    const appointments = upcoming
+    return upcoming
       .filter(r => r.type === 'termin' || r.type === 'aufgabe')
       .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
       .slice(0, 3);
-    
-    const bills = upcoming
-      .filter(r => r.type === 'zahlung')
-      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-      .slice(0, 3);
-    
-    const overdueCount = allReminders.filter(r => {
-      const dueDate = new Date(r.dueDate);
-      return dueDate < now && r.status === 'offen';
-    }).length;
-    
-    return { appointments, bills, overdueCount };
   }, [allReminders, now]);
+
+  // Get open bills (from useAllBills which includes person invoices)
+  const openBills = useMemo(() => {
+    return allBills
+      .filter(b => b.status !== 'paid')
+      .sort((a, b) => {
+        // Sort by due date if available, otherwise by creation date
+        const dateA = a.dueDate ? new Date(a.dueDate).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : Infinity);
+        const dateB = b.dueDate ? new Date(b.dueDate).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : Infinity);
+        return dateA - dateB;
+      })
+      .slice(0, 5);
+  }, [allBills]);
+
+  // Count overdue bills
+  const overdueCount = useMemo(() => {
+    return allBills.filter(b => b.isOverdue && b.status !== 'paid').length;
+  }, [allBills]);
+
+  // Show warning for bills without due date (only once per bill)
+  useEffect(() => {
+    openBills.forEach(bill => {
+      if (!bill.dueDate && !dismissedWarnings.has(bill.id)) {
+        // Show a subtle toast that auto-dismisses
+        toast.info(`"${bill.title}" hat kein Fälligkeitsdatum`, {
+          duration: 4000,
+          id: `no-date-${bill.id}`,
+        });
+        setDismissedWarnings(prev => new Set(prev).add(bill.id));
+      }
+    });
+  }, [openBills, dismissedWarnings]);
 
   // Fetch current month finance data
   const startOfMonth = useMemo(() => {
@@ -96,7 +121,7 @@ export default function Dashboard() {
   const balance = totalIncome - totalExpenses;
 
   // Calculate total pending bills
-  const totalPendingBills = bills.reduce((sum, b) => sum + (b.amount || 0), 0) / 100;
+  const totalPendingBills = (billStats?.openAmount || 0) / 100;
 
   const formatDate = (date: Date | any) => {
     if (!date) return 'N/A';
@@ -212,7 +237,7 @@ export default function Dashboard() {
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ClipboardList className="w-5 h-5 text-green-500" />
+                <ClipboardList className="w-5 h-5" />
                 <CardTitle className="text-base">{t('dashboard.pendingBills', 'Offene Rechnungen')}</CardTitle>
               </div>
               {overdueCount > 0 && (
@@ -222,45 +247,59 @@ export default function Dashboard() {
               )}
             </div>
             {totalPendingBills > 0 && (
-              <p className="text-lg font-bold text-green-600 mt-1">
+              <p className="text-lg font-bold text-red-600 mt-1">
                 {formatAmount(totalPendingBills)}
               </p>
             )}
           </CardHeader>
           <CardContent>
-            {remindersLoading ? (
+            {billsLoading ? (
               <div className="text-sm text-muted-foreground text-center py-6">
                 {t('common.loading')}
               </div>
-            ) : bills.length === 0 ? (
+            ) : openBills.length === 0 ? (
               <div className="text-sm text-muted-foreground text-center py-6">
                 {t('dashboard.noBills', 'Keine offenen Rechnungen')}
               </div>
             ) : (
               <div className="space-y-2">
-                {bills.map((bill) => {
-                  const daysUntil = getDaysUntilDue(bill.dueDate);
-                  const isOverdue = daysUntil < 0;
-                  const isDueSoon = daysUntil >= 0 && daysUntil <= 7;
+                {openBills.map((bill) => {
+                  const hasDueDate = !!bill.dueDate;
+                  const daysUntil = hasDueDate ? getDaysUntilDue(bill.dueDate!) : null;
+                  const isOverdue = bill.isOverdue;
+                  const isDueSoon = daysUntil !== null && daysUntil >= 0 && daysUntil <= 7;
+                  
                   return (
                     <div
                       key={bill.id}
                       className={`flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer ${isOverdue ? 'bg-red-50 dark:bg-red-900/20' : isDueSoon ? 'bg-orange-50 dark:bg-orange-900/20' : ''}`}
-                      onClick={() => setLocation('/bills')}
+                      onClick={() => bill.personId ? setLocation('/people') : setLocation('/bills')}
                     >
-                      <div className="p-1.5 rounded bg-green-100 text-green-600">
+                      <div className="p-1.5 rounded bg-muted">
                         <ClipboardList className="w-4 h-4" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">{bill.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {isOverdue 
-                            ? `${Math.abs(daysUntil)} Tage überfällig` 
-                            : daysUntil === 0 
-                              ? 'Heute fällig'
-                              : `Fällig in ${daysUntil} Tagen`
-                          }
-                        </p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {bill.personName && (
+                            <span>{bill.personName}</span>
+                          )}
+                          {hasDueDate ? (
+                            <span className={isOverdue ? 'text-red-600' : isDueSoon ? 'text-orange-600' : ''}>
+                              {isOverdue 
+                                ? `${Math.abs(daysUntil!)} Tage überfällig` 
+                                : daysUntil === 0 
+                                  ? 'Heute fällig'
+                                  : `Fällig in ${daysUntil} Tagen`
+                              }
+                            </span>
+                          ) : (
+                            <span className="text-amber-600 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              Kein Datum
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="text-right">
                         <p className="font-semibold text-sm">

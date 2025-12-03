@@ -25,7 +25,7 @@ import VacationPlannerDialog from '@/components/VacationPlannerDialog';
 
 interface CalendarEvent {
   id: string;
-  type: 'due' | 'reminder' | 'appointment';
+  type: 'due' | 'reminder' | 'appointment' | 'work';
   title: string;
   date: string;
   time?: string;
@@ -234,6 +234,15 @@ export default function Calendar() {
     // Dezente, professionelle Farben
     if (event.isOverdue) return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200';
     
+    // Arbeitszeiten
+    if (event.type === 'work') {
+      const workType = (event as any).workType;
+      if (workType === 'off') return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200';
+      if (workType === 'half-am') return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200';
+      if (workType === 'half-pm') return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-200';
+      return 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200';
+    }
+    
     // Rechnungen/Fälligkeiten
     if (event.type === 'due') {
       if (event.status === 'paid') return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-200';
@@ -259,6 +268,7 @@ export default function Calendar() {
 
   const getEventIcon = (event: CalendarEvent) => {
     if (event.isOverdue) return <AlertTriangle className="w-4 h-4" />;
+    if (event.type === 'work') return <Briefcase className="w-4 h-4" />;
     if (event.type === 'due') return <FileText className="w-4 h-4" />;
     if (event.type === 'reminder') return <Bell className="w-4 h-4" />;
     if (event.type === 'appointment') {
@@ -269,6 +279,13 @@ export default function Calendar() {
   };
 
   const getEventTypeLabel = (event: CalendarEvent) => {
+    if (event.type === 'work') {
+      const workType = (event as any).workType;
+      if (workType === 'off') return 'Frei';
+      if (workType === 'half-am') return 'Morgen';
+      if (workType === 'half-pm') return 'Nachmittag';
+      return 'Arbeit';
+    }
     if (event.type === 'due') return 'Rechnung';
     if (event.type === 'reminder') return 'Erinnerung';
     if (event.type === 'appointment') {

@@ -1645,17 +1645,17 @@ export const createWorkSchedule = onCall(async (request) => {
   }
 
   const userId = request.auth.uid;
-  const { personId, personName, dayOfWeek, type, startTime, endTime, notes } = request.data;
+  const { personId, personName, date, type, startTime, endTime, notes } = request.data;
 
-  if (!personId || !personName || dayOfWeek === undefined || !type) {
+  if (!personId || !personName || !date || !type) {
     throw new HttpsError('invalid-argument', 'Missing required fields');
   }
 
-  // Check if schedule already exists for this person and day
+  // Check if schedule already exists for this person and date
   const existingQuery = await db.collection('workSchedules')
     .where('userId', '==', userId)
     .where('personId', '==', personId)
-    .where('dayOfWeek', '==', dayOfWeek)
+    .where('date', '==', date)
     .get();
 
   if (!existingQuery.empty) {
@@ -1675,7 +1675,7 @@ export const createWorkSchedule = onCall(async (request) => {
     userId,
     personId,
     personName,
-    dayOfWeek,
+    date,
     type,
     startTime: startTime || null,
     endTime: endTime || null,

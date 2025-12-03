@@ -1433,15 +1433,15 @@ exports.createWorkSchedule = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
     const userId = request.auth.uid;
-    const { personId, personName, dayOfWeek, type, startTime, endTime, notes } = request.data;
-    if (!personId || !personName || dayOfWeek === undefined || !type) {
+    const { personId, personName, date, type, startTime, endTime, notes } = request.data;
+    if (!personId || !personName || !date || !type) {
         throw new https_1.HttpsError('invalid-argument', 'Missing required fields');
     }
-    // Check if schedule already exists for this person and day
+    // Check if schedule already exists for this person and date
     const existingQuery = await db.collection('workSchedules')
         .where('userId', '==', userId)
         .where('personId', '==', personId)
-        .where('dayOfWeek', '==', dayOfWeek)
+        .where('date', '==', date)
         .get();
     if (!existingQuery.empty) {
         // Update existing schedule
@@ -1459,7 +1459,7 @@ exports.createWorkSchedule = (0, https_1.onCall)(async (request) => {
         userId,
         personId,
         personName,
-        dayOfWeek,
+        date,
         type,
         startTime: startTime || null,
         endTime: endTime || null,

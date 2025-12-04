@@ -36,7 +36,7 @@ interface Document {
 
 export default function Documents() {
   const { t } = useTranslation();
-  const { people, loading: peopleLoading, refetch: refetchPeople } = usePeople();
+  const { people = [], loading: peopleLoading, refetch: refetchPeople } = usePeople();
   
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
@@ -200,7 +200,7 @@ export default function Documents() {
                   <SelectValue placeholder="Person auswählen..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {people.map(person => (
+                  {(people || []).map(person => (
                     <SelectItem key={person.id} value={person.id}>
                       <div className="flex items-center gap-2">
                         <User className="w-4 h-4" />
@@ -216,7 +216,7 @@ export default function Documents() {
             {uploadPersonId ? (
               <DocumentUploader
                 personId={uploadPersonId}
-                personName={people.find(p => p.id === uploadPersonId)?.name || ''}
+                personName={(people || []).find(p => p.id === uploadPersonId)?.name || ''}
                 onUploadComplete={() => fetchDocuments()}
                 onInvoiceCreated={() => fetchDocuments()}
                 onReminderCreated={() => fetchDocuments()}
@@ -272,7 +272,7 @@ export default function Documents() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Alle Personen</SelectItem>
-                  {people.map(person => (
+                  {(people || []).map(person => (
                     <SelectItem key={person.id} value={person.id}>{person.name}</SelectItem>
                   ))}
                 </SelectContent>

@@ -25,7 +25,40 @@ import { toast } from 'sonner';
 import { functions } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 // Animations removed for better performance
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
+
+// Receipt data interfaces
+interface ReceiptItem {
+  name: string;
+  articleNumber?: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  taxCategory?: string;
+  selected?: boolean;
+}
+
+interface ReceiptData {
+  store: {
+    name: string;
+    address?: string;
+    city?: string;
+    postalCode?: string;
+  };
+  purchase: {
+    date?: string;
+    time?: string;
+    paymentMethod?: string;
+  };
+  items: ReceiptItem[];
+  totals: {
+    subtotal?: number;
+    rounding?: number;
+    total: number;
+    itemCount?: number;
+  };
+  confidence: number;
+}
 
 // Swiss stores
 const stores = [
@@ -120,10 +153,14 @@ export default function Shopping() {
   const [showReceiptScanner, setShowReceiptScanner] = useState(false);
   const [scannerMode, setScannerMode] = useState<'upload' | 'camera'>('upload');
   const [isScanning, setIsScanning] = useState(false);
-  const [scannedItems, setScannedItems] = useState<Array<{ name: string; price: number; quantity: number }>>([]);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [scannedReceiptItems, setScannedReceiptItems] = useState<ReceiptItem[]>([]);
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [showReceiptStore, setShowReceiptStore] = useState(true);
+  const [showReceiptItems, setShowReceiptItems] = useState(true);
+  const [showReceiptPayment, setShowReceiptPayment] = useState(true);
   
   // Confirm dialog state
   const [showFinanceConfirm, setShowFinanceConfirm] = useState(false);
@@ -713,11 +750,13 @@ export default function Shopping() {
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(videoRef.current, 0, 0);
-        const imageData = canvas.toDataURL('image/jpeg');
-        setReceiptImage(imageData);
-        stopCamera();
-        setScannerMode('upload');
-        processReceipt(imageData);
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const file = new File([blob], 'receipt.jpg', { type: 'image/jpeg' });
+            stopCamera();
+            processReceipt(file);
+          }
+        }, 'image/jpeg', 0.95);
       }
     }
   };
@@ -732,53 +771,137 @@ export default function Shopping() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setReceiptImage(e.target?.result as string);
-        processReceipt(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
+      processReceipt(file);
     }
   };
 
-  const processReceipt = async (imageData: string) => {
+  const processReceipt = async (file: File) => {
     setIsScanning(true);
+    setReceiptData(null);
+    setScannedReceiptItems([]);
     
-    // Simulate OCR processing - in production, you would use a real OCR API
-    // like Google Cloud Vision, AWS Textract, or Tesseract.js
-    setTimeout(() => {
-      // Demo: Extract some sample items from "receipt"
-      const demoItems = [
-        { name: 'Milch 1L', price: 1.85, quantity: 1 },
-        { name: 'Vollkornbrot', price: 3.90, quantity: 1 },
-        { name: 'Bio-Eier 6er', price: 4.50, quantity: 1 },
-        { name: 'Butter', price: 2.95, quantity: 1 },
-      ];
-      setScannedItems(demoItems);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = (reader.result as string).split(',')[1];
+        setReceiptImage(reader.result as string);
+        
+        // Use intelligent receipt analyzer
+        const analyzeReceiptFn = httpsCallable(functions, 'analyzeReceipt');
+        const result = await analyzeReceiptFn({
+          fileData: base64,
+          fileType: file.type,
+          fileName: file.name,
+        });
+        
+        const data = result.data as any;
+        
+        if (data.success && data.items && data.items.length > 0) {
+          setReceiptData({
+            store: data.store,
+            purchase: data.purchase,
+            items: data.items,
+            totals: data.totals,
+            confidence: data.confidence,
+          });
+          setScannedReceiptItems(data.items.map((item: ReceiptItem) => ({ ...item, selected: true })));
+          toast.success(`${data.items.length} Artikel erkannt (${data.confidence}% Konfidenz)`);
+        } else {
+          toast.error(data.error || 'Keine Artikel erkannt');
+        }
+        
+        setIsScanning(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
       setIsScanning(false);
-      toast.success('Quittung analysiert - Bitte Artikel überprüfen');
-    }, 2000);
+    }
+  };
+
+  // Categorize item based on name
+  const categorizeReceiptItem = (name: string): string => {
+    const lowerName = name.toLowerCase();
+    const categories: Record<string, string[]> = {
+      'Getränke': ['bier', 'wein', 'saft', 'wasser', 'cola', 'fanta', 'sprite', 'energy', 'shot', 'drink'],
+      'Lebensmittel': ['apfel', 'orange', 'banane', 'tomate', 'salat', 'gurke', 'karotte', 'bio oran', 'gemüse', 'milch', 'joghurt', 'käse', 'butter', 'sahne', 'quark', 'naturejog', 'fleisch', 'steak', 'wurst', 'schinken', 'poulet', 'brot', 'brötchen', 'toast'],
+      'Süsswaren': ['schoko', 'bonbon', 'gummi', 'chips', 'zucker', 'gelatine'],
+      'Haushalt': ['waschmittel', 'spülmittel', 'reiniger', 'papier', 'müll', 'tüte'],
+      'Hygiene': ['shampoo', 'duschgel', 'seife', 'zahnpasta', 'deo', 'creme'],
+    };
+
+    for (const [category, keywords] of Object.entries(categories)) {
+      if (keywords.some(kw => lowerName.includes(kw))) {
+        return category;
+      }
+    }
+    return 'Lebensmittel';
   };
 
   const handleAddReceiptScannedItems = async () => {
+    const selected = scannedReceiptItems.filter(i => i.selected);
+    if (selected.length === 0) {
+      toast.error('Bitte mindestens einen Artikel auswählen');
+      return;
+    }
+    
     try {
-      for (const item of scannedItems) {
+      for (const item of selected) {
         await createShoppingItem({
           item: item.name,
           quantity: item.quantity,
-          category: 'Lebensmittel',
-          estimatedPrice: item.price * 100,
+          category: categorizeReceiptItem(item.name),
+          estimatedPrice: Math.round(item.unitPrice * 100),
           currency: 'CHF',
+          store: receiptData?.store?.name || '',
         });
       }
-      toast.success(`${scannedItems.length} Artikel hinzugefügt`);
-      setShowReceiptScanner(false);
-      setScannedItems([]);
-      setReceiptImage(null);
+      toast.success(`${selected.length} Artikel hinzugefügt`);
+      closeReceiptScanner();
       refetch();
     } catch (error: any) {
       toast.error('Fehler: ' + error.message);
     }
+  };
+
+  const handleSaveReceipt = async () => {
+    if (!receiptData) return;
+    
+    try {
+      const saveReceiptFn = httpsCallable(functions, 'saveReceipt');
+      await saveReceiptFn({ receiptData });
+      toast.success('Quittung gespeichert!');
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
+  const handleAddReceiptToFinance = async () => {
+    if (!receiptData) return;
+    
+    try {
+      await createFinanceEntry({
+        type: 'expense',
+        amount: Math.round(receiptData.totals.total * 100),
+        category: 'Lebensmittel',
+        description: `Einkauf bei ${receiptData.store.name}`,
+        date: receiptData.purchase.date || new Date().toISOString().split('T')[0],
+        paymentMethod: receiptData.purchase.paymentMethod || 'Karte',
+        status: 'bezahlt',
+      });
+      toast.success('Zu Finanzen hinzugefügt!');
+      closeReceiptScanner();
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
+  const closeReceiptScanner = () => {
+    stopCamera();
+    setShowReceiptScanner(false);
+    setScannedReceiptItems([]);
+    setReceiptData(null);
+    setReceiptImage(null);
   };
 
   const formatPrice = (cents: number) => `CHF ${(cents / 100).toFixed(2)}`;
@@ -1581,9 +1704,9 @@ export default function Shopping() {
       </Dialog>
 
       {/* Receipt Scanner Dialog */}
-      <Dialog open={showReceiptScanner} onOpenChange={setShowReceiptScanner}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+      <Dialog open={showReceiptScanner} onOpenChange={(open) => !open && closeReceiptScanner()}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="pr-8">
             <DialogTitle className="flex items-center gap-2">
               <ScanLine className="w-5 h-5" />
               Quittung scannen
@@ -1594,160 +1717,290 @@ export default function Shopping() {
           </DialogHeader>
           
           <div className="space-y-4">
-            {/* Upload/Camera Toggle */}
-            <div className="flex gap-2">
-              <Button
-                variant={scannerMode === 'upload' ? 'default' : 'outline'}
-                className="flex-1"
-                onClick={() => setScannerMode('upload')}
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                Hochladen
-              </Button>
-              <Button
-                variant={scannerMode === 'camera' ? 'default' : 'outline'}
-                className="flex-1"
-                onClick={() => setScannerMode('camera')}
-              >
-                <Camera className="w-4 h-4 mr-2" />
-                Kamera
-              </Button>
-            </div>
+            {/* Upload/Camera Toggle - Only show when no results yet */}
+            {!receiptData && (
+              <>
+                <div className="flex gap-2">
+                  <Button
+                    variant={scannerMode === 'upload' ? 'default' : 'outline'}
+                    className="flex-1"
+                    onClick={() => setScannerMode('upload')}
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Hochladen
+                  </Button>
+                  <Button
+                    variant={scannerMode === 'camera' ? 'default' : 'outline'}
+                    className="flex-1"
+                    onClick={() => setScannerMode('camera')}
+                  >
+                    <Camera className="w-4 h-4 mr-2" />
+                    Kamera
+                  </Button>
+                </div>
 
-            {/* Upload Area */}
-            {scannerMode === 'upload' && (
-              <div 
-                className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {receiptImage ? (
-                  <div className="space-y-3">
-                    <img src={receiptImage} alt="Quittung" className="max-h-48 mx-auto rounded" />
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setReceiptImage(null);
-                        setScannedItems([]);
-                      }}
-                    >
-                      Anderes Bild wählen
-                    </Button>
-                  </div>
-                ) : (
-                  <>
+                {/* Upload Area */}
+                {scannerMode === 'upload' && (
+                  <div 
+                    className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
                     <FileText className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
                     <p className="text-sm text-muted-foreground">
                       Klicke hier oder ziehe ein Bild hierher
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      JPG, PNG oder HEIC
+                      JPG, PNG, PDF oder HEIC
                     </p>
-                  </>
-                )}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleFileUpload}
-                />
-              </div>
-            )}
-
-            {/* Camera View */}
-            {scannerMode === 'camera' && (
-              <div className="space-y-3">
-                <div className="border rounded-lg overflow-hidden bg-black aspect-video relative">
-                  {isCameraActive ? (
-                    <video 
-                      ref={videoRef}
-                      autoPlay 
-                      playsInline 
-                      muted
-                      className="w-full h-full object-cover"
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*,.pdf"
+                      className="hidden"
+                      onChange={handleFileUpload}
                     />
-                  ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <Camera className="w-12 h-12 text-white/40 mb-3" />
-                      <p className="text-white/60 text-sm">Kamera nicht aktiv</p>
+                  </div>
+                )}
+
+                {/* Camera View */}
+                {scannerMode === 'camera' && (
+                  <div className="space-y-3">
+                    <div className="border rounded-lg overflow-hidden bg-black aspect-video relative">
+                      {isCameraActive ? (
+                        <video 
+                          ref={videoRef}
+                          autoPlay 
+                          playsInline 
+                          muted
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <Camera className="w-12 h-12 text-white/40 mb-3" />
+                          <p className="text-white/60 text-sm">Kamera nicht aktiv</p>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <div className="flex gap-2 justify-center">
-                  {!isCameraActive ? (
-                    <Button onClick={startCamera} className="flex-1">
-                      <Video className="w-4 h-4 mr-2" />
-                      Kamera starten
-                    </Button>
-                  ) : (
-                    <>
-                      <Button onClick={stopCamera} variant="outline">
-                        <VideoOff className="w-4 h-4 mr-2" />
-                        Stoppen
-                      </Button>
-                      <Button onClick={capturePhoto} className="flex-1">
-                        <Camera className="w-4 h-4 mr-2" />
-                        Foto aufnehmen
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
+                    <div className="flex gap-2 justify-center">
+                      {!isCameraActive ? (
+                        <Button onClick={startCamera} className="flex-1">
+                          <Video className="w-4 h-4 mr-2" />
+                          Kamera starten
+                        </Button>
+                      ) : (
+                        <>
+                          <Button onClick={stopCamera} variant="outline">
+                            <VideoOff className="w-4 h-4 mr-2" />
+                            Stoppen
+                          </Button>
+                          <Button onClick={capturePhoto} className="flex-1">
+                            <Camera className="w-4 h-4 mr-2" />
+                            Foto aufnehmen
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             {/* Loading State */}
             {isScanning && (
-              <div className="text-center py-4">
-                <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">Analysiere Quittung...</p>
+              <div className="text-center py-8">
+                <div className="animate-spin w-10 h-10 border-3 border-primary border-t-transparent rounded-full mx-auto mb-3" />
+                <p className="text-muted-foreground">Analysiere Quittung mit KI...</p>
               </div>
             )}
 
-            {/* Scanned Items */}
-            {scannedItems.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Erkannte Artikel:</p>
-                {scannedItems.map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-2 p-2 border rounded-lg">
-                    <span className="flex-1 text-sm">{item.name}</span>
-                    <span className="text-sm text-muted-foreground">
-                      {item.quantity}x CHF {item.price.toFixed(2)}
-                    </span>
-                    <Button 
-                      size="icon" 
-                      variant="ghost"
-                      onClick={() => setScannedItems(prev => prev.filter((_, i) => i !== idx))}
-                    >
-                      <X className="w-4 h-4" />
+            {/* Structured Receipt Results */}
+            {receiptData && scannedReceiptItems.length > 0 && (
+              <div className="space-y-4">
+                {/* Store Section */}
+                <div className="bg-muted rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => setShowReceiptStore(!showReceiptStore)}
+                    className="w-full p-4 flex items-center justify-between text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Store className="w-5 h-5 text-primary" />
+                      <span className="font-semibold">Geschäft</span>
+                    </div>
+                    {showReceiptStore ? <ChevronRight className="w-5 h-5 rotate-90" /> : <ChevronRight className="w-5 h-5" />}
+                  </button>
+                  {showReceiptStore && (
+                    <div className="px-4 pb-4 pt-0 space-y-1">
+                      <p className="text-xl font-bold">{receiptData.store.name}</p>
+                      {receiptData.store.address && (
+                        <p className="text-sm text-muted-foreground">{receiptData.store.address}</p>
+                      )}
+                      {receiptData.store.city && (
+                        <p className="text-sm text-muted-foreground">
+                          {receiptData.store.postalCode} {receiptData.store.city}
+                        </p>
+                      )}
+                      <div className="flex gap-4 mt-3 text-sm text-muted-foreground">
+                        {receiptData.purchase.date && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-4 h-4" />
+                            {new Date(receiptData.purchase.date).toLocaleDateString('de-CH')}
+                          </span>
+                        )}
+                        {receiptData.purchase.time && (
+                          <span>{receiptData.purchase.time} Uhr</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Items Section */}
+                <div className="bg-muted rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => setShowReceiptItems(!showReceiptItems)}
+                    className="w-full p-4 flex items-center justify-between text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <ShoppingCart className="w-5 h-5 text-primary" />
+                      <span className="font-semibold">Artikel ({scannedReceiptItems.length})</span>
+                      <Badge variant="secondary">
+                        {scannedReceiptItems.filter(i => i.selected).length} ausgewählt
+                      </Badge>
+                    </div>
+                    {showReceiptItems ? <ChevronRight className="w-5 h-5 rotate-90" /> : <ChevronRight className="w-5 h-5" />}
+                  </button>
+                  {showReceiptItems && (
+                    <div className="px-4 pb-4 pt-0">
+                      <div className="flex justify-end mb-3">
+                        <button
+                          onClick={() => setScannedReceiptItems(items => items.map(i => ({ ...i, selected: !scannedReceiptItems.every(x => x.selected) })))}
+                          className="text-sm text-primary hover:underline"
+                        >
+                          {scannedReceiptItems.every(i => i.selected) ? 'Alle abwählen' : 'Alle auswählen'}
+                        </button>
+                      </div>
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {scannedReceiptItems.map((item, idx) => (
+                          <div 
+                            key={idx}
+                            className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                              item.selected 
+                                ? 'bg-background border-primary' 
+                                : 'bg-background/50 border-border hover:border-muted-foreground'
+                            }`}
+                            onClick={() => setScannedReceiptItems(items => 
+                              items.map((i, j) => j === idx ? { ...i, selected: !i.selected } : i)
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
+                                item.selected ? 'bg-primary border-primary' : 'border-muted-foreground'
+                              }`}>
+                                {item.selected && <Check className="w-3 h-3 text-primary-foreground" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium truncate">{item.name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {item.articleNumber && <span className="mr-2">#{item.articleNumber}</span>}
+                                  {item.quantity}x à CHF {item.unitPrice.toFixed(2)}
+                                </p>
+                              </div>
+                              <p className="font-bold shrink-0">
+                                CHF {item.totalPrice.toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Payment Section */}
+                <div className="bg-muted rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => setShowReceiptPayment(!showReceiptPayment)}
+                    className="w-full p-4 flex items-center justify-between text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Wallet className="w-5 h-5 text-primary" />
+                      <span className="font-semibold">Zahlung</span>
+                    </div>
+                    {showReceiptPayment ? <ChevronRight className="w-5 h-5 rotate-90" /> : <ChevronRight className="w-5 h-5" />}
+                  </button>
+                  {showReceiptPayment && (
+                    <div className="px-4 pb-4 pt-0 space-y-2">
+                      {receiptData.totals.subtotal && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Zwischensumme</span>
+                          <span>CHF {receiptData.totals.subtotal.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {receiptData.totals.rounding && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Rundung</span>
+                          <span>CHF {receiptData.totals.rounding.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-xl font-bold pt-2 border-t">
+                        <span>Total</span>
+                        <span>CHF {receiptData.totals.total.toFixed(2)}</span>
+                      </div>
+                      {receiptData.purchase.paymentMethod && (
+                        <p className="text-sm text-muted-foreground">
+                          Bezahlt mit: {receiptData.purchase.paymentMethod}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Confidence Indicator */}
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <div className={`w-2.5 h-2.5 rounded-full ${
+                    receiptData.confidence >= 70 ? 'bg-green-500' : 
+                    receiptData.confidence >= 40 ? 'bg-yellow-500' : 'bg-red-500'
+                  }`} />
+                  Erkennungsqualität: {receiptData.confidence}%
+                </div>
+
+                {/* Action Buttons */}
+                <div className="space-y-3 pt-2">
+                  <Button
+                    onClick={handleAddReceiptScannedItems}
+                    className="w-full"
+                    size="lg"
+                  >
+                    <Plus className="w-5 h-5 mr-2" />
+                    {scannedReceiptItems.filter(i => i.selected).length} Artikel zur Liste hinzufügen
+                  </Button>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button variant="outline" onClick={handleSaveReceipt}>
+                      <Save className="w-4 h-4 mr-2" />
+                      Speichern
+                    </Button>
+                    <Button variant="outline" onClick={handleAddReceiptToFinance}>
+                      <Banknote className="w-4 h-4 mr-2" />
+                      Zu Finanzen
                     </Button>
                   </div>
-                ))}
-                <div className="flex justify-between items-center pt-2 border-t">
-                  <span className="text-sm font-medium">Gesamt:</span>
-                  <span className="font-bold">
-                    CHF {scannedItems.reduce((sum, i) => sum + i.price * i.quantity, 0).toFixed(2)}
-                  </span>
+                  
+                  <Button 
+                    variant="ghost" 
+                    className="w-full"
+                    onClick={() => {
+                      setReceiptData(null);
+                      setScannedReceiptItems([]);
+                      setReceiptImage(null);
+                    }}
+                  >
+                    Neue Quittung scannen
+                  </Button>
                 </div>
               </div>
             )}
           </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setShowReceiptScanner(false);
-              setScannedItems([]);
-              setReceiptImage(null);
-            }}>
-              Abbrechen
-            </Button>
-            {scannedItems.length > 0 && (
-              <Button onClick={handleAddReceiptScannedItems}>
-                {scannedItems.length} Artikel hinzufügen
-              </Button>
-            )}
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 

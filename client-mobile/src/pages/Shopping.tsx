@@ -223,65 +223,51 @@ export default function MobileShopping() {
     setDetectionProgress(0);
   };
 
-  // Intelligent edge detection for receipt corners - adaptive brightness approach
+  // Simple and reliable receipt corner detection
   const findReceiptCorners = (imageData: ImageData, width: number, height: number) => {
     const data = imageData.data;
     
-    // Step 1: Convert to grayscale and calculate average brightness
-    const gray = new Uint8ClampedArray(width * height);
-    let totalBrightness = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      const g = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
-      gray[i / 4] = g;
-      totalBrightness += g;
-    }
-    const avgBrightness = totalBrightness / gray.length;
-    
-    // Step 2: Adaptive threshold - receipts are brighter than average
-    const brightnessThreshold = Math.min(200, Math.max(120, avgBrightness + 30));
-    
-    // Step 3: Find bright area with relaxed criteria
+    // Simple approach: find the bounding box of bright pixels
     let minX = width, maxX = 0, minY = height, maxY = 0;
-    let brightCount = 0;
+    let brightPixelCount = 0;
     
-    for (let y = 0; y < height; y++) {
-      let rowBright = 0;
-      let rowMinX = width, rowMaxX = 0;
-      for (let x = 0; x < width; x++) {
-        if (gray[y * width + x] > brightnessThreshold) {
-          rowBright++;
-          if (x < rowMinX) rowMinX = x;
-          if (x > rowMaxX) rowMaxX = x;
+    // Scan every 4th pixel for speed
+    for (let y = 0; y < height; y += 2) {
+      for (let x = 0; x < width; x += 2) {
+        const i = (y * width + x) * 4;
+        // Check if pixel is bright (white/light colored like a receipt)
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        const brightness = (r + g + b) / 3;
+        
+        // Receipt paper is typically bright (> 150)
+        if (brightness > 140) {
+          brightPixelCount++;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
         }
       }
-      // Relaxed: 10% of width is enough
-      if (rowBright > width * 0.1) {
-        if (y < minY) minY = y;
-        maxY = y;
-        if (rowMinX < minX) minX = rowMinX;
-        if (rowMaxX > maxX) maxX = rowMaxX;
-        brightCount += rowBright;
-      }
     }
     
-    // Check if we found a reasonable rectangle
+    // Calculate area coverage
     const rectWidth = maxX - minX;
     const rectHeight = maxY - minY;
-    const hasValidSize = rectWidth > width * 0.08 && rectHeight > height * 0.08;
+    const totalScanned = (width / 2) * (height / 2);
+    const coverage = brightPixelCount / totalScanned;
     
-    if (hasValidSize) {
+    // Need at least 5% of image to be bright, and reasonable size
+    if (coverage > 0.05 && rectWidth > 50 && rectHeight > 50) {
       // Add padding
-      const padX = rectWidth * 0.05;
-      const padY = rectHeight * 0.03;
-      
-      const confidence = Math.min(100, (rectWidth * rectHeight) / (width * height) * 250);
+      const padX = Math.max(10, rectWidth * 0.03);
+      const padY = Math.max(10, rectHeight * 0.02);
       
       return {
         topLeft: { x: Math.max(0, minX - padX), y: Math.max(0, minY - padY) },
         topRight: { x: Math.min(width, maxX + padX), y: Math.max(0, minY - padY) },
         bottomLeft: { x: Math.max(0, minX - padX), y: Math.min(height, maxY + padY) },
         bottomRight: { x: Math.min(width, maxX + padX), y: Math.min(height, maxY + padY) },
-        confidence
+        confidence: Math.min(100, coverage * 200)
       };
     }
     
@@ -315,7 +301,7 @@ export default function MobileShopping() {
       // Try to find receipt corners
       const foundCorners = findReceiptCorners(imageData, canvas.width, canvas.height);
       
-      if (foundCorners && foundCorners.confidence > 30) {
+      if (foundCorners && foundCorners.confidence > 10) {
         // Convert pixel coordinates to percentage
         const newCorners = {
           topLeft: { 

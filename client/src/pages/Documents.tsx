@@ -1,22 +1,23 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import { functions } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { usePeople } from '@/lib/firebaseHooks';
-import DocumentUploader from '@/components/DocumentUploader';
 import { 
   FileText, Search, Filter, Upload, FolderOpen, 
-  User, Calendar, Clock, Eye, Trash2, RefreshCw,
-  ScanLine, FileImage, File, AlertCircle
+  User, Clock, Eye, Trash2, RefreshCw,
+  ScanLine, FileImage, File, AlertCircle, Check, X, Loader2
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -35,9 +36,26 @@ interface Document {
   updatedAt: string | null;
 }
 
+interface AnalysisResult {
+  type: string;
+  confidence: number;
+  extractedData: {
+    amount?: number;
+    currency?: string;
+    dueDate?: string;
+    iban?: string;
+    description?: string;
+    date?: string;
+    time?: string;
+    title?: string;
+  };
+  rawText?: string;
+}
+
 export default function Documents() {
   const { t } = useTranslation();
-  const { people = [], loading: peopleLoading, refetch: refetchPeople } = usePeople();
+  const { people = [], loading: peopleLoading } = usePeople();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,7 +64,18 @@ export default function Documents() {
   const [searchQuery, setSearchQuery] = useState('');
   
   // Upload state
-  const [uploadPersonId, setUploadPersonId] = useState<string>('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  
+  // Analysis & Assignment Dialog
+  const [showAssignDialog, setShowAssignDialog] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [tempDocumentData, setTempDocumentData] = useState<string | null>(null); // base64 data
+  const [assignPersonId, setAssignPersonId] = useState<string>('');
+  const [assignFolder, setAssignFolder] = useState<string>('Sonstiges');
+  const [isSaving, setIsSaving] = useState(false);
   
   // Preview state
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -54,6 +83,13 @@ export default function Documents() {
 
   const folders = [
     { value: 'all', label: 'Alle Ordner' },
+    { value: 'Rechnungen', label: 'Rechnungen' },
+    { value: 'Termine', label: 'Termine' },
+    { value: 'Verträge', label: 'Verträge' },
+    { value: 'Sonstiges', label: 'Sonstiges' },
+  ];
+
+  const documentFolders = [
     { value: 'Rechnungen', label: 'Rechnungen' },
     { value: 'Termine', label: 'Termine' },
     { value: 'Verträge', label: 'Verträge' },
@@ -79,6 +115,138 @@ export default function Documents() {
     fetchDocuments();
   }, [fetchDocuments]);
 
+  // Handle file selection
+  const handleFileSelect = async (file: File) => {
+    if (!file) return;
+    
+    // Validate file type
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'application/pdf'];
+    if (!validTypes.includes(file.type)) {
+      toast.error('Ungültiges Dateiformat. Bitte JPG, PNG, PDF oder HEIC verwenden.');
+      return;
+    }
+    
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Datei ist zu gross (max. 10MB)');
+      return;
+    }
+    
+    setUploadedFile(file);
+    setIsUploading(true);
+    setUploadProgress(10);
+    
+    // Create preview
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => setFilePreview(e.target?.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      setFilePreview(null);
+    }
+    
+    try {
+      // Convert to base64
+      setUploadProgress(30);
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(',')[1]); // Remove data:xxx;base64, prefix
+        };
+        reader.readAsDataURL(file);
+      });
+      
+      setTempDocumentData(base64);
+      setUploadProgress(50);
+      
+      // Analyze document
+      toast.info('Dokument wird analysiert...');
+      const analyzeDocument = httpsCallable(functions, 'analyzeDocument');
+      const result = await analyzeDocument({ 
+        fileData: base64,
+        fileName: file.name,
+        fileType: file.type
+      });
+      
+      setUploadProgress(90);
+      const analysisData = result.data as AnalysisResult;
+      setAnalysisResult(analysisData);
+      
+      // Set default folder based on analysis
+      if (analysisData.type === 'rechnung') {
+        setAssignFolder('Rechnungen');
+      } else if (analysisData.type === 'termin') {
+        setAssignFolder('Termine');
+      } else if (analysisData.type === 'vertrag') {
+        setAssignFolder('Verträge');
+      } else {
+        setAssignFolder('Sonstiges');
+      }
+      
+      setUploadProgress(100);
+      setShowAssignDialog(true);
+      
+    } catch (error: any) {
+      console.error('Error analyzing document:', error);
+      toast.error('Fehler bei der Analyse: ' + (error.message || 'Unbekannter Fehler'));
+      // Still show dialog to assign manually
+      setShowAssignDialog(true);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Save document to selected person
+  const handleSaveDocument = async () => {
+    if (!assignPersonId) {
+      toast.error('Bitte wähle eine Person aus');
+      return;
+    }
+    
+    if (!tempDocumentData || !uploadedFile) {
+      toast.error('Keine Datei zum Speichern');
+      return;
+    }
+    
+    setIsSaving(true);
+    
+    try {
+      const uploadDocument = httpsCallable(functions, 'uploadDocument');
+      await uploadDocument({
+        personId: assignPersonId,
+        fileData: tempDocumentData,
+        fileName: uploadedFile.name,
+        fileType: uploadedFile.type,
+        folder: assignFolder,
+        analyzedData: analysisResult?.extractedData || null
+      });
+      
+      toast.success('Dokument gespeichert!');
+      setShowAssignDialog(false);
+      resetUploadState();
+      fetchDocuments();
+      
+    } catch (error: any) {
+      console.error('Error saving document:', error);
+      toast.error('Fehler beim Speichern: ' + (error.message || 'Unbekannter Fehler'));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const resetUploadState = () => {
+    setUploadedFile(null);
+    setFilePreview(null);
+    setTempDocumentData(null);
+    setAnalysisResult(null);
+    setAssignPersonId('');
+    setAssignFolder('Sonstiges');
+    setUploadProgress(0);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleDeleteDocument = async (personId: string, documentId: string) => {
     if (!confirm('Dokument wirklich löschen?')) return;
@@ -129,6 +297,15 @@ export default function Documents() {
       case 'Termine': return 'bg-green-100 text-green-700';
       case 'Verträge': return 'bg-blue-100 text-blue-700';
       default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case 'rechnung': return 'Rechnung';
+      case 'termin': return 'Termin';
+      case 'vertrag': return 'Vertrag';
+      default: return 'Sonstiges';
     }
   };
 
@@ -185,7 +362,7 @@ export default function Documents() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Upload Section */}
+        {/* Upload Section - Now without required person selection */}
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -194,49 +371,48 @@ export default function Documents() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Person Selection */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Person zuordnen</label>
-              <Select value={uploadPersonId} onValueChange={setUploadPersonId}>
-                <SelectTrigger>
-                  <SelectValue placeholder={peopleLoading ? "Laden..." : "Person auswählen..."} />
-                </SelectTrigger>
-                <SelectContent>
-                  {peopleLoading ? (
-                    <div className="p-2 text-sm text-muted-foreground text-center">Laden...</div>
-                  ) : (people || []).length === 0 ? (
-                    <div className="p-2 text-sm text-muted-foreground text-center">Keine Personen gefunden</div>
-                  ) : (
-                    (people || []).map(person => (
-                      <SelectItem key={person.id} value={person.id}>
-                        <div className="flex items-center gap-2">
-                          <User className="w-4 h-4" />
-                          {person.name}
-                        </div>
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              className="hidden"
+              onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
+            />
+            
+            {/* Upload Area - Always visible */}
+            <div
+              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer hover:border-primary/50 hover:bg-slate-50 ${
+                isUploading ? 'border-primary bg-primary/5' : 'border-gray-200'
+              }`}
+              onClick={() => !isUploading && fileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const file = e.dataTransfer.files[0];
+                if (file) handleFileSelect(file);
+              }}
+            >
+              {isUploading ? (
+                <div className="space-y-3">
+                  <Loader2 className="w-10 h-10 mx-auto text-primary animate-spin" />
+                  <p className="text-sm font-medium">Wird hochgeladen & analysiert...</p>
+                  <Progress value={uploadProgress} className="w-full" />
+                </div>
+              ) : (
+                <>
+                  <Upload className="w-10 h-10 mx-auto text-gray-400 mb-2" />
+                  <p className="font-medium">Datei hochladen</p>
+                  <p className="text-sm text-muted-foreground">
+                    Klicke oder ziehe eine Datei hierher
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Die Person wird nach der Analyse zugeordnet
+                  </p>
+                </>
+              )}
             </div>
-
-            {/* Upload Area */}
-            {uploadPersonId ? (
-              <DocumentUploader
-                personId={uploadPersonId}
-                personName={(people || []).find(p => p.id === uploadPersonId)?.name || ''}
-                onUploadComplete={() => fetchDocuments()}
-                onInvoiceCreated={() => fetchDocuments()}
-                onReminderCreated={() => fetchDocuments()}
-              />
-            ) : (
-              <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center">
-                <AlertCircle className="w-10 h-10 mx-auto text-gray-400 mb-2" />
-                <p className="text-sm text-muted-foreground">
-                  Bitte wähle zuerst eine Person aus
-                </p>
-              </div>
-            )}
 
             {/* Quick Tips */}
             <div className="bg-slate-50 rounded-lg p-3 text-sm">
@@ -373,6 +549,148 @@ export default function Documents() {
         </Card>
       </div>
 
+      {/* Assignment Dialog - Shows after upload & analysis */}
+      <Dialog open={showAssignDialog} onOpenChange={(open) => {
+        if (!open) {
+          resetUploadState();
+        }
+        setShowAssignDialog(open);
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Dokument zuordnen
+            </DialogTitle>
+            <DialogDescription>
+              Wähle eine Person und einen Ordner für das Dokument
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {/* File Preview */}
+            {uploadedFile && (
+              <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                {filePreview ? (
+                  <img src={filePreview} alt="Preview" className="w-16 h-16 object-cover rounded" />
+                ) : (
+                  <div className="w-16 h-16 bg-slate-200 rounded flex items-center justify-center">
+                    <FileText className="w-8 h-8 text-slate-400" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate">{uploadedFile.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Analysis Result */}
+            {analysisResult && (
+              <div className="p-3 bg-green-50 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <Check className="w-4 h-4 text-green-600" />
+                  <span className="font-medium text-green-700">
+                    Erkannt als: {getTypeLabel(analysisResult.type)}
+                  </span>
+                  <Badge variant="secondary" className="ml-auto">
+                    {analysisResult.confidence}% Sicherheit
+                  </Badge>
+                </div>
+                {analysisResult.extractedData?.amount && (
+                  <p className="text-sm text-green-700">
+                    Betrag: CHF {(analysisResult.extractedData.amount / 100).toFixed(2)}
+                  </p>
+                )}
+                {analysisResult.extractedData?.dueDate && (
+                  <p className="text-sm text-green-700">
+                    Fällig: {analysisResult.extractedData.dueDate}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Person Selection */}
+            <div className="space-y-2">
+              <Label>Person zuordnen *</Label>
+              <Select value={assignPersonId} onValueChange={setAssignPersonId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Person auswählen..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {peopleLoading ? (
+                    <div className="p-2 text-center text-muted-foreground">Laden...</div>
+                  ) : (people || []).length === 0 ? (
+                    <div className="p-2 text-center text-muted-foreground">
+                      Keine Personen vorhanden.
+                      <br />
+                      <span className="text-xs">Erstelle zuerst eine Person unter "Personen"</span>
+                    </div>
+                  ) : (
+                    (people || []).map(person => (
+                      <SelectItem key={person.id} value={person.id}>
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4" />
+                          {person.name}
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Folder Selection */}
+            <div className="space-y-2">
+              <Label>Ordner</Label>
+              <Select value={assignFolder} onValueChange={setAssignFolder}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {documentFolders.map(folder => (
+                    <SelectItem key={folder.value} value={folder.value}>
+                      {folder.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowAssignDialog(false);
+                resetUploadState();
+              }}
+              disabled={isSaving}
+            >
+              <X className="w-4 h-4 mr-2" />
+              Abbrechen
+            </Button>
+            <Button 
+              onClick={handleSaveDocument} 
+              disabled={!assignPersonId || isSaving}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Speichern...
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4 mr-2" />
+                  Speichern
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Preview Dialog */}
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
@@ -403,4 +721,3 @@ export default function Documents() {
     </Layout>
   );
 }
-

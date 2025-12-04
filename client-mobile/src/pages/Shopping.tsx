@@ -84,12 +84,16 @@ export default function MobileShopping() {
   // Scanner state
   const [showScanner, setShowScanner] = useState(false);
   const [scannerMode, setScannerMode] = useState<'camera' | 'upload'>('camera');
-  const [scannerType, setScannerType] = useState<'receipt' | 'single'>('receipt'); // NEW: receipt vs single item
+  const [scannerType, setScannerType] = useState<'receipt' | 'single'>('receipt');
   const [isScanning, setIsScanning] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [scannedItems, setScannedItems] = useState<ReceiptItem[]>([]);
-  const [liveScannedItems, setLiveScannedItems] = useState<ReceiptItem[]>([]); // NEW: for live scanning
-  const [liveTotal, setLiveTotal] = useState(0); // NEW: running total
+  const [liveScannedItems, setLiveScannedItems] = useState<ReceiptItem[]>([]);
+  const [liveTotal, setLiveTotal] = useState(0);
+  
+  // NEW: Pending item for confirmation
+  const [pendingItem, setPendingItem] = useState<ReceiptItem | null>(null);
+  const [pendingQuantity, setPendingQuantity] = useState(1);
   const [showStoreSection, setShowStoreSection] = useState(true);
   const [showItemsSection, setShowItemsSection] = useState(true);
   const [showPaymentSection, setShowPaymentSection] = useState(true);
@@ -468,34 +472,27 @@ export default function MobileShopping() {
     }
   };
 
-  // State for last scanned item (for visual feedback)
-  const [lastScannedItem, setLastScannedItem] = useState<string | null>(null);
+  // State for scan error message
+  const [scanError, setScanError] = useState<string | null>(null);
 
-  // NEW: Scan single item for live scanning with duplicate detection
+  // NEW: Simplified scan - shows item for confirmation
   const scanSingleItem = async () => {
     if (!videoRef.current || !canvasRef.current) return;
     
     setIsScanning(true);
-    setLastScannedItem(null);
+    setScanError(null);
+    setPendingItem(null);
     
     const video = videoRef.current;
     const canvas = canvasRef.current;
     
-    // Capture only the center strip where scan line is
-    const stripHeight = video.videoHeight * 0.15; // 15% of height
-    const stripY = (video.videoHeight - stripHeight) / 2;
-    
+    // Capture full frame for better OCR
     canvas.width = video.videoWidth;
-    canvas.height = stripHeight;
+    canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
     
     if (ctx) {
-      // Draw only the center strip
-      ctx.drawImage(
-        video, 
-        0, stripY, video.videoWidth, stripHeight,  // Source
-        0, 0, video.videoWidth, stripHeight         // Destination
-      );
+      ctx.drawImage(video, 0, 0);
       
       canvas.toBlob(async (blob) => {
         if (blob) {
@@ -505,7 +502,6 @@ export default function MobileShopping() {
               try {
                 const base64 = (reader.result as string).split(',')[1];
                 
-                // Use single line analyzer
                 const analyzeSingleLine = httpsCallable(functions, 'analyzeSingleLine');
                 const result = await analyzeSingleLine({
                   fileData: base64,
@@ -516,42 +512,18 @@ export default function MobileShopping() {
                 console.log('Single item result:', data);
                 
                 if (data.success && data.item) {
+                  // Set as pending for user confirmation
                   const newItem: ReceiptItem = {
                     name: data.item.name,
                     articleNumber: data.item.articleNumber,
-                    quantity: data.item.quantity || 1,
+                    quantity: 1,
                     unitPrice: data.item.price,
-                    totalPrice: data.item.price * (data.item.quantity || 1),
+                    totalPrice: data.item.price,
                     selected: true
                   };
                   
-                  // Check for duplicates by articleNumber or name
-                  setLiveScannedItems(prev => {
-                    const existingIndex = prev.findIndex(item => 
-                      (item.articleNumber && item.articleNumber === newItem.articleNumber) ||
-                      item.name.toLowerCase() === newItem.name.toLowerCase()
-                    );
-                    
-                    if (existingIndex >= 0) {
-                      // Duplicate found - increase quantity
-                      const updated = [...prev];
-                      updated[existingIndex] = {
-                        ...updated[existingIndex],
-                        quantity: updated[existingIndex].quantity + newItem.quantity,
-                        totalPrice: updated[existingIndex].totalPrice + newItem.totalPrice
-                      };
-                      setLiveTotal(t => t + newItem.totalPrice);
-                      setLastScannedItem(`+1 ${newItem.name}`);
-                      toast.success(`+1 ${newItem.name}`, { duration: 1500 });
-                      return updated;
-                    } else {
-                      // New item
-                      setLiveTotal(t => t + newItem.totalPrice);
-                      setLastScannedItem(newItem.name);
-                      toast.success(`${newItem.name} - CHF ${newItem.totalPrice.toFixed(2)}`, { duration: 1500 });
-                      return [...prev, newItem];
-                    }
-                  });
+                  setPendingItem(newItem);
+                  setPendingQuantity(1);
                   
                   // Vibration feedback
                   if (navigator.vibrate) {
@@ -559,8 +531,8 @@ export default function MobileShopping() {
                   }
                 } else {
                   const errorMsg = data.error || 'Artikel nicht erkannt';
-                  setLastScannedItem(`❌ ${errorMsg}`);
-                  toast.error(errorMsg, { duration: 1500 });
+                  setScanError(errorMsg);
+                  toast.error(errorMsg, { duration: 2000 });
                   if (navigator.vibrate) {
                     navigator.vibrate([50, 50, 50]);
                   }
@@ -568,8 +540,8 @@ export default function MobileShopping() {
               } catch (innerError: any) {
                 console.error('Single scan error:', innerError);
                 const msg = innerError.message?.includes('INTERNAL') ? 'Server-Fehler, nochmal versuchen' : 'Scan-Fehler';
-                setLastScannedItem(`❌ ${msg}`);
-                toast.error(msg, { duration: 1500 });
+                setScanError(msg);
+                toast.error(msg, { duration: 2000 });
               }
               setIsScanning(false);
             };
@@ -579,8 +551,31 @@ export default function MobileShopping() {
             setIsScanning(false);
           }
         }
-      }, 'image/jpeg', 0.9); // Reduced quality for faster upload
+      }, 'image/jpeg', 0.95);
     }
+  };
+
+  // Add pending item to list with selected quantity
+  const confirmPendingItem = () => {
+    if (!pendingItem) return;
+    
+    const itemToAdd: ReceiptItem = {
+      ...pendingItem,
+      quantity: pendingQuantity,
+      totalPrice: pendingItem.unitPrice * pendingQuantity
+    };
+    
+    setLiveScannedItems(prev => [...prev, itemToAdd]);
+    setLiveTotal(prev => prev + itemToAdd.totalPrice);
+    setPendingItem(null);
+    setPendingQuantity(1);
+    toast.success(`${itemToAdd.name} (${pendingQuantity}x) hinzugefügt`);
+  };
+
+  // Cancel pending item
+  const cancelPendingItem = () => {
+    setPendingItem(null);
+    setPendingQuantity(1);
   };
 
   // NEW: Remove a live scanned item
@@ -717,9 +712,12 @@ export default function MobileShopping() {
     setShowScanner(false);
     setScannedItems([]);
     setReceiptData(null);
-    setLiveScannedItems([]); // Reset live scanner
+    setLiveScannedItems([]);
     setLiveTotal(0);
-    setScannerType('receipt'); // Reset to receipt mode
+    setScannerType('receipt');
+    setPendingItem(null);
+    setPendingQuantity(1);
+    setScanError(null);
   };
 
   return (
@@ -1011,11 +1009,11 @@ export default function MobileShopping() {
             </div>
           )}
 
-          {/* LIVE SINGLE ITEM SCANNER */}
+          {/* IMPROVED SINGLE ITEM SCANNER */}
           {scannerMode === 'camera' && scannerType === 'single' && (
-            <div className="flex-1 flex flex-col">
-              {/* Camera - Upper section (smaller) */}
-              <div className="relative" style={{ height: '35%' }}>
+            <div className="flex-1 flex flex-col bg-background">
+              {/* Camera Section */}
+              <div className="relative bg-black" style={{ height: '30%', minHeight: '180px' }}>
                 <video
                   ref={videoRef}
                   autoPlay
@@ -1025,136 +1023,181 @@ export default function MobileShopping() {
                 />
                 <canvas ref={canvasRef} className="hidden" />
                 
-                {/* Scan line guide - centered strip */}
+                {/* Simple frame guide */}
                 {cameraStream && (
-                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                    <div className="w-[92%] h-12 border-2 border-green-400 rounded-lg bg-green-400/10">
-                      <div className="w-full h-full flex items-center justify-center">
-                        <div className="w-full h-0.5 bg-green-400 animate-pulse" />
-                      </div>
-                    </div>
-                  </div>
+                  <div className="absolute inset-4 border-2 border-white/50 rounded-lg pointer-events-none" />
                 )}
                 
-                {/* Last scanned feedback */}
-                {lastScannedItem && (
-                  <div className="absolute top-2 left-2 right-2 z-20">
-                    <div className={`rounded-lg p-2 text-center ${lastScannedItem.startsWith('❌') ? 'bg-red-500/80' : 'bg-green-500/80'}`}>
-                      <p className="text-white text-xs font-medium truncate">
-                        {lastScannedItem}
-                      </p>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Scan Button - larger */}
-                {cameraStream && (
-                  <div className="absolute bottom-3 left-0 right-0 z-20 flex justify-center">
+                {/* Scan Button */}
+                {cameraStream && !pendingItem && (
+                  <div className="absolute bottom-4 left-0 right-0 z-20 flex justify-center">
                     <button
                       onClick={scanSingleItem}
                       disabled={isScanning}
-                      className={`px-8 py-4 rounded-full shadow-lg flex items-center justify-center gap-2 active:opacity-80 ${
-                        isScanning ? 'bg-gray-500' : 'bg-green-500'
+                      className={`px-10 py-4 rounded-full shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-transform ${
+                        isScanning ? 'bg-gray-600' : 'bg-green-500'
                       }`}
                     >
                       {isScanning ? (
-                        <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <div className="w-7 h-7 border-3 border-white/30 border-t-white rounded-full animate-spin" />
                       ) : (
-                        <ScanLine className="w-6 h-6 text-white" />
+                        <Camera className="w-7 h-7 text-white" />
                       )}
-                      <span className="font-semibold text-white text-lg">Scannen</span>
+                      <span className="font-bold text-white text-xl">{isScanning ? 'Scanne...' : 'SCANNEN'}</span>
                     </button>
                   </div>
                 )}
                 
-                {/* Start camera button if not active */}
+                {/* Start camera */}
                 {!cameraStream && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+                  <div className="absolute inset-0 flex items-center justify-center bg-black">
                     <button
                       onClick={startCamera}
-                      className="px-6 py-3 rounded-full bg-white shadow-lg flex items-center justify-center gap-2"
+                      className="px-8 py-4 rounded-full bg-white shadow-lg flex items-center justify-center gap-3"
                     >
-                      <Camera className="w-5 h-5 text-gray-800" />
-                      <span className="font-medium text-gray-800">Kamera starten</span>
+                      <Camera className="w-6 h-6 text-gray-800" />
+                      <span className="font-semibold text-gray-800 text-lg">Kamera starten</span>
                     </button>
                   </div>
                 )}
               </div>
               
-              {/* Scanned Items List - Larger section */}
-              <div className="flex-1 bg-background overflow-y-auto" style={{ maxHeight: '65%' }}>
-                <div className="p-3">
-                  {/* Running Total - Compact header */}
-                  <div className="flex items-center justify-between mb-2 p-2 bg-green-500/10 rounded-lg border border-green-500/30">
-                    <div className="flex items-center gap-2">
-                      <ShoppingCart className="w-4 h-4 text-green-600" />
-                      <span className="text-sm font-medium">{liveScannedItems.reduce((sum, i) => sum + i.quantity, 0)} Artikel</span>
-                    </div>
-                    <span className="text-base font-bold text-green-600">CHF {liveTotal.toFixed(2)}</span>
+              {/* Content Section */}
+              <div className="flex-1 overflow-y-auto p-4">
+                {/* Error Message */}
+                {scanError && !pendingItem && (
+                  <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+                    <p className="text-red-600 font-medium text-center">{scanError}</p>
+                    <p className="text-red-500/70 text-sm text-center mt-1">Quittung näher halten und erneut scannen</p>
                   </div>
-                  
-                  {/* Scanned items list - Compact */}
-                  {liveScannedItems.length === 0 ? (
-                    <div className="text-center py-6 text-muted-foreground">
-                      <ScanLine className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                      <p className="text-sm">Quittung unter den grünen Rahmen halten</p>
-                      <p className="text-xs mt-1">Artikel-Zeile anvisieren → "Scannen"</p>
+                )}
+                
+                {/* PENDING ITEM - Confirmation Card */}
+                {pendingItem && (
+                  <div className="mb-4 p-4 bg-green-500/10 border-2 border-green-500 rounded-xl">
+                    <p className="text-green-600 font-semibold text-sm mb-3">ERKANNT:</p>
+                    
+                    <div className="bg-background rounded-lg p-4 mb-4">
+                      <p className="font-bold text-lg">{pendingItem.name}</p>
+                      <p className="text-muted-foreground">CHF {pendingItem.unitPrice.toFixed(2)} pro Stück</p>
                     </div>
-                  ) : (
-                    <div className="space-y-1.5">
+                    
+                    {/* Quantity Selector */}
+                    <div className="flex items-center justify-center gap-4 mb-4">
+                      <button
+                        onClick={() => setPendingQuantity(q => Math.max(1, q - 1))}
+                        className="w-14 h-14 rounded-full bg-muted flex items-center justify-center text-2xl font-bold active:bg-muted/80"
+                      >
+                        −
+                      </button>
+                      <span className="text-4xl font-bold w-16 text-center">{pendingQuantity}</span>
+                      <button
+                        onClick={() => setPendingQuantity(q => q + 1)}
+                        className="w-14 h-14 rounded-full bg-muted flex items-center justify-center text-2xl font-bold active:bg-muted/80"
+                      >
+                        +
+                      </button>
+                    </div>
+                    
+                    <p className="text-center text-xl font-bold mb-4">
+                      Total: CHF {(pendingItem.unitPrice * pendingQuantity).toFixed(2)}
+                    </p>
+                    
+                    {/* Action Buttons */}
+                    <div className="flex gap-3">
+                      <button
+                        onClick={cancelPendingItem}
+                        className="flex-1 py-4 rounded-xl bg-muted flex items-center justify-center gap-2 font-semibold"
+                      >
+                        <X className="w-5 h-5" />
+                        Abbrechen
+                      </button>
+                      <button
+                        onClick={confirmPendingItem}
+                        className="flex-1 py-4 rounded-xl bg-green-500 text-white flex items-center justify-center gap-2 font-semibold"
+                      >
+                        <Check className="w-5 h-5" />
+                        Hinzufügen
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Instructions when no pending item */}
+                {!pendingItem && liveScannedItems.length === 0 && !scanError && (
+                  <div className="text-center py-6">
+                    <ScanLine className="w-16 h-16 mx-auto mb-4 text-muted-foreground/30" />
+                    <p className="text-lg font-medium text-muted-foreground">Artikel scannen</p>
+                    <p className="text-sm text-muted-foreground/70 mt-2">
+                      Quittung vor die Kamera halten<br/>und SCANNEN drücken
+                    </p>
+                  </div>
+                )}
+                
+                {/* Scanned Items List */}
+                {liveScannedItems.length > 0 && (
+                  <div className="mt-2">
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-3 p-3 bg-green-500/10 rounded-xl border border-green-500/30">
+                      <div className="flex items-center gap-2">
+                        <ShoppingCart className="w-5 h-5 text-green-600" />
+                        <span className="font-semibold">{liveScannedItems.reduce((sum, i) => sum + i.quantity, 0)} Artikel</span>
+                      </div>
+                      <span className="text-xl font-bold text-green-600">CHF {liveTotal.toFixed(2)}</span>
+                    </div>
+                    
+                    {/* Items */}
+                    <div className="space-y-2 mb-4">
                       {liveScannedItems.map((item, idx) => (
                         <div 
                           key={idx}
-                          className="p-2 bg-muted rounded-lg flex items-center justify-between"
+                          className="p-3 bg-muted rounded-xl flex items-center justify-between"
                         >
-                          <div className="flex items-center gap-2 flex-1 min-w-0">
-                            {/* Quantity badge if > 1 */}
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
                             {item.quantity > 1 && (
-                              <span className="w-6 h-6 rounded-full bg-green-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
-                                {item.quantity}
+                              <span className="w-8 h-8 rounded-full bg-green-500 text-white text-sm font-bold flex items-center justify-center flex-shrink-0">
+                                {item.quantity}×
                               </span>
                             )}
                             <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm truncate">{item.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {item.quantity > 1 ? `${item.quantity}× CHF ${item.unitPrice.toFixed(2)}` : `CHF ${item.unitPrice.toFixed(2)}`}
+                              <p className="font-semibold truncate">{item.name}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {item.quantity > 1 ? `${item.quantity} × CHF ${item.unitPrice.toFixed(2)}` : `CHF ${item.unitPrice.toFixed(2)}`}
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-semibold text-sm">CHF {item.totalPrice.toFixed(2)}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold">CHF {item.totalPrice.toFixed(2)}</span>
                             <button
                               onClick={() => removeLiveItem(idx)}
-                              className="w-7 h-7 rounded-full bg-red-500/10 flex items-center justify-center"
+                              className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center"
                             >
-                              <X className="w-3.5 h-3.5 text-red-500" />
+                              <X className="w-4 h-4 text-red-500" />
                             </button>
                           </div>
                         </div>
                       ))}
                     </div>
-                  )}
-                  
-                  {/* Action buttons */}
-                  {liveScannedItems.length > 0 && (
-                    <div className="mt-4 flex gap-2">
+                    
+                    {/* Action Buttons */}
+                    <div className="flex gap-3">
                       <button
                         onClick={() => { setLiveScannedItems([]); setLiveTotal(0); }}
-                        className="flex-1 py-3 rounded-lg bg-muted flex items-center justify-center gap-2"
+                        className="flex-1 py-4 rounded-xl bg-muted flex items-center justify-center gap-2 font-semibold"
                       >
-                        <Trash2 className="w-4 h-4" />
-                        Löschen
+                        <Trash2 className="w-5 h-5" />
+                        Alle löschen
                       </button>
                       <button
                         onClick={addLiveItemsToList}
-                        className="flex-1 py-3 rounded-lg bg-primary text-primary-foreground flex items-center justify-center gap-2"
+                        className="flex-1 py-4 rounded-xl bg-primary text-primary-foreground flex items-center justify-center gap-2 font-semibold"
                       >
-                        <Plus className="w-4 h-4" />
-                        Zur Liste
+                        <Check className="w-5 h-5" />
+                        Fertig
                       </button>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -770,16 +770,9 @@ export default function MobileShopping() {
             </button>
           </div>
 
-          {/* Camera View */}
+          {/* Simple Camera View - No complex corners */}
           {scannerMode === 'camera' && scannedItems.length === 0 && (
-            <div 
-              className="flex-1 relative scanner-container"
-              onTouchMove={(e) => activeCorner && handleCornerMove(e, activeCorner)}
-              onMouseMove={(e) => activeCorner && handleCornerMove(e, activeCorner)}
-              onTouchEnd={handleCornerEnd}
-              onMouseUp={handleCornerEnd}
-              onMouseLeave={handleCornerEnd}
-            >
+            <div className="flex-1 relative">
               <video
                 ref={videoRef}
                 autoPlay
@@ -789,81 +782,31 @@ export default function MobileShopping() {
               />
               <canvas ref={canvasRef} className="hidden" />
               
-              {/* Scanner Overlay with Draggable Corners */}
+              {/* Simple guide overlay */}
               {cameraStream && (
-                <div className="absolute inset-0">
-                  {/* Dark overlay */}
-                  <div className="absolute inset-0 bg-black/40 pointer-events-none" />
+                <div className="absolute inset-0 pointer-events-none">
+                  {/* Simple white border guide */}
+                  <div className="absolute inset-8 border-2 border-white/60 rounded-lg" />
                   
-                  {/* SVG for the selection area */}
-                  <svg className="absolute inset-0 w-full h-full pointer-events-none">
-                    {/* Clear area inside polygon */}
-                    <defs>
-                      <mask id="scanMask">
-                        <rect width="100%" height="100%" fill="white" />
-                        <polygon
-                          points={`${corners.topLeft.x}%,${corners.topLeft.y}% ${corners.topRight.x}%,${corners.topRight.y}% ${corners.bottomRight.x}%,${corners.bottomRight.y}% ${corners.bottomLeft.x}%,${corners.bottomLeft.y}%`}
-                          fill="black"
-                        />
-                      </mask>
-                    </defs>
-                    <rect width="100%" height="100%" fill="rgba(0,0,0,0.4)" mask="url(#scanMask)" />
-                    
-                    {/* Border lines */}
-                    <polygon
-                      points={`${corners.topLeft.x}%,${corners.topLeft.y}% ${corners.topRight.x}%,${corners.topRight.y}% ${corners.bottomRight.x}%,${corners.bottomRight.y}% ${corners.bottomLeft.x}%,${corners.bottomLeft.y}%`}
-                      fill="none"
-                      stroke={scannerStatus === 'detected' || scannerStatus === 'adjusting' ? '#22c55e' : 'white'}
-                      strokeWidth="2"
-                    />
-                  </svg>
-                  
-                  {/* Draggable Corner Points */}
-                  {['topLeft', 'topRight', 'bottomLeft', 'bottomRight'].map((corner) => {
-                    const pos = corners[corner as keyof typeof corners];
-                    return (
-                      <div
-                        key={corner}
-                        className={`absolute w-10 h-10 -translate-x-1/2 -translate-y-1/2 touch-none cursor-move z-10
-                          ${activeCorner === corner ? 'scale-125' : ''}`}
-                        style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
-                        onTouchStart={() => handleCornerStart(corner)}
-                        onMouseDown={() => handleCornerStart(corner)}
-                      >
-                        <div className={`w-full h-full rounded-full border-4 ${
-                          scannerStatus === 'detected' || activeCorner === corner ? 'border-green-500 bg-green-500/30' : 'border-white bg-white/30'
-                        } flex items-center justify-center`}>
-                          <div className={`w-3 h-3 rounded-full ${
-                            scannerStatus === 'detected' || activeCorner === corner ? 'bg-green-500' : 'bg-white'
-                          }`} />
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {/* Corner markers */}
+                  <div className="absolute top-8 left-8 w-6 h-6 border-t-4 border-l-4 border-white rounded-tl" />
+                  <div className="absolute top-8 right-8 w-6 h-6 border-t-4 border-r-4 border-white rounded-tr" />
+                  <div className="absolute bottom-8 left-8 w-6 h-6 border-b-4 border-l-4 border-white rounded-bl" />
+                  <div className="absolute bottom-8 right-8 w-6 h-6 border-b-4 border-r-4 border-white rounded-br" />
                 </div>
               )}
               
-              {/* Status Message */}
+              {/* Status */}
               <div className="absolute top-4 left-4 right-4 z-20">
-                <div className={`rounded-lg p-3 text-center ${
-                  scannerStatus === 'capturing' ? 'bg-green-500' :
-                  scannerStatus === 'detected' ? 'bg-green-500/80' :
-                  scannerStatus === 'adjusting' ? 'bg-blue-500' :
-                  'bg-black/50'
-                }`}>
+                <div className="bg-black/60 rounded-lg p-3 text-center">
                   <p className="text-white text-sm font-medium">
-                    {scannerStatus === 'capturing' && 'Analysiere...'}
-                    {scannerStatus === 'adjusting' && 'Ecke anpassen...'}
-                    {(scannerStatus === 'scanning' || scannerStatus === 'detected') && 'Positioniere Quittung im Rahmen'}
-                    {scannerStatus === 'idle' && 'Tippe auf Start'}
+                    {isScanning ? 'Analysiere...' : 'Quittung fotografieren'}
                   </p>
                 </div>
               </div>
               
-              {/* No progress bar - manual scan only */}
-              
               {/* Bottom Controls */}
-              <div className="absolute bottom-4 left-0 right-0 z-20">
+              <div className="absolute bottom-8 left-0 right-0 z-20">
                 {!cameraStream ? (
                   <div className="flex justify-center">
                     <button
@@ -871,46 +814,31 @@ export default function MobileShopping() {
                       className="px-6 py-3 rounded-full bg-white shadow-lg flex items-center justify-center gap-2 active:opacity-80"
                     >
                       <Camera className="w-5 h-5 text-gray-800" />
-                      <span className="font-medium text-gray-800">Scanner starten</span>
+                      <span className="font-medium text-gray-800">Kamera starten</span>
                     </button>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center gap-3">
-                    {/* Tips */}
-                    <div className="bg-black/60 rounded-lg px-3 py-1.5">
-                      <p className="text-white/80 text-xs text-center">
-                        Quittung im Rahmen positionieren • Dann Scan-Button drücken
-                      </p>
-                    </div>
+                  <div className="flex justify-center items-center gap-4">
+                    <button
+                      onClick={closeScanner}
+                      className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center active:opacity-80"
+                    >
+                      <X className="w-6 h-6 text-white" />
+                    </button>
                     
-                    {/* Buttons */}
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={resetCorners}
-                        className="px-4 py-2 rounded-full bg-white/20 text-white text-sm active:opacity-80"
-                      >
-                        Zurücksetzen
-                      </button>
-                      
-                      <button
-                        onClick={captureWithPerspective}
-                        disabled={isScanning || scannerStatus === 'capturing'}
-                        className="w-16 h-16 rounded-full bg-white shadow-lg flex items-center justify-center active:opacity-80"
-                      >
-                        {isScanning || scannerStatus === 'capturing' ? (
-                          <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-                        ) : (
-                          <ScanLine className="w-8 h-8 text-gray-800" />
-                        )}
-                      </button>
-                      
-                      <button
-                        onClick={stopCamera}
-                        className="px-4 py-2 rounded-full bg-white/20 text-white text-sm active:opacity-80"
-                      >
-                        Abbrechen
-                      </button>
-                    </div>
+                    <button
+                      onClick={capturePhoto}
+                      disabled={isScanning}
+                      className="w-20 h-20 rounded-full bg-white shadow-lg flex items-center justify-center active:opacity-80 border-4 border-white/50"
+                    >
+                      {isScanning ? (
+                        <div className="w-8 h-8 border-3 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                      ) : (
+                        <div className="w-14 h-14 rounded-full bg-white" />
+                      )}
+                    </button>
+                    
+                    <div className="w-12 h-12" /> {/* Spacer for alignment */}
                   </div>
                 )}
               </div>

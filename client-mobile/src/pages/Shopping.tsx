@@ -474,8 +474,167 @@ export default function MobileShopping() {
 
   // State for scan error message
   const [scanError, setScanError] = useState<string | null>(null);
+  const [autoScanEnabled, setAutoScanEnabled] = useState(false);
+  const [autoScanInterval, setAutoScanInterval] = useState<NodeJS.Timeout | null>(null);
+  const [lastScanTime, setLastScanTime] = useState(0);
 
-  // NEW: Simplified scan - shows item for confirmation
+  // NEW: Auto-scan all items in frame
+  const scanAllItemsInFrame = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    if (isScanning) return; // Prevent multiple scans
+    
+    const now = Date.now();
+    if (now - lastScanTime < 2000) return; // Throttle: max 1 scan per 2 seconds
+    setLastScanTime(now);
+    
+    setIsScanning(true);
+    setScanError(null);
+    
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    
+    // Capture only the frame area (center 80% of screen)
+    const frameMargin = 0.1; // 10% margin on each side
+    const frameX = video.videoWidth * frameMargin;
+    const frameY = video.videoHeight * frameMargin;
+    const frameWidth = video.videoWidth * (1 - 2 * frameMargin);
+    const frameHeight = video.videoHeight * (1 - 2 * frameMargin);
+    
+    canvas.width = frameWidth;
+    canvas.height = frameHeight;
+    const ctx = canvas.getContext('2d');
+    
+    if (ctx) {
+      // Draw only the frame area
+      ctx.drawImage(
+        video,
+        frameX, frameY, frameWidth, frameHeight, // Source
+        0, 0, frameWidth, frameHeight              // Destination
+      );
+      
+      canvas.toBlob(async (blob) => {
+        if (blob) {
+          try {
+            const reader = new FileReader();
+            reader.onload = async () => {
+              try {
+                const base64 = (reader.result as string).split(',')[1];
+                
+                // Use full receipt analyzer for multiple items
+                const analyzeReceipt = httpsCallable(functions, 'analyzeReceipt');
+                const result = await analyzeReceipt({
+                  fileData: base64,
+                  fileType: 'image/jpeg',
+                  fileName: 'frame-scan.jpg',
+                });
+                
+                const data = result.data as any;
+                console.log('Frame scan result:', data);
+                
+                if (data.success && data.items && data.items.length > 0) {
+                  // Add all items to pending list (merge with existing)
+                  const newItems: ReceiptItem[] = data.items.map((item: any) => ({
+                    name: item.name || 'Unbekannt',
+                    articleNumber: item.articleNumber,
+                    quantity: item.quantity || 1,
+                    unitPrice: item.unitPrice || item.totalPrice || 0,
+                    totalPrice: item.totalPrice || (item.unitPrice * (item.quantity || 1)),
+                    selected: true
+                  }));
+                  
+                  // Merge with existing items (avoid duplicates)
+                  setLiveScannedItems(prev => {
+                    const merged = [...prev];
+                    newItems.forEach(newItem => {
+                      const existingIndex = merged.findIndex(item => 
+                        (item.articleNumber && item.articleNumber === newItem.articleNumber) ||
+                        item.name.toLowerCase() === newItem.name.toLowerCase()
+                      );
+                      
+                      if (existingIndex >= 0) {
+                        // Update quantity if same item
+                        merged[existingIndex].quantity += newItem.quantity;
+                        merged[existingIndex].totalPrice += newItem.totalPrice;
+                      } else {
+                        merged.push(newItem);
+                      }
+                    });
+                    
+                    // Recalculate total
+                    const newTotal = merged.reduce((sum, item) => sum + item.totalPrice, 0);
+                    setLiveTotal(newTotal);
+                    
+                    return merged;
+                  });
+                  
+                  toast.success(`${newItems.length} Artikel erkannt!`, { duration: 1500 });
+                  
+                  // Vibration feedback
+                  if (navigator.vibrate) {
+                    navigator.vibrate(200);
+                  }
+                } else {
+                  // No items found - don't show error if auto-scan (it's normal)
+                  if (!autoScanEnabled) {
+                    setScanError('Keine Artikel erkannt');
+                  }
+                }
+              } catch (innerError: any) {
+                console.error('Frame scan error:', innerError);
+                if (!autoScanEnabled) {
+                  const msg = innerError.message?.includes('INTERNAL') ? 'Server-Fehler' : 'Scan-Fehler';
+                  setScanError(msg);
+                }
+              }
+              setIsScanning(false);
+            };
+            reader.readAsDataURL(blob);
+          } catch (error: any) {
+            console.error('Blob read error:', error);
+            setIsScanning(false);
+          }
+        }
+      }, 'image/jpeg', 0.9);
+    }
+  };
+
+  // Start/Stop auto-scan
+  useEffect(() => {
+    if (autoScanEnabled && cameraStream && scannerType === 'single') {
+      const interval = setInterval(() => {
+        if (!isScanning) {
+          scanAllItemsInFrame();
+        }
+      }, 3000); // Scan every 3 seconds
+      setAutoScanInterval(interval);
+      
+      // Also scan immediately after 1 second
+      const immediateTimeout = setTimeout(() => {
+        if (!isScanning) {
+          scanAllItemsInFrame();
+        }
+      }, 1000);
+      
+      return () => {
+        clearInterval(interval);
+        clearTimeout(immediateTimeout);
+        setAutoScanInterval(null);
+      };
+    } else {
+      if (autoScanInterval) {
+        clearInterval(autoScanInterval);
+        setAutoScanInterval(null);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoScanEnabled, cameraStream, scannerType]);
+
+  // NEW: Manual scan all items
+  const scanAllItems = async () => {
+    await scanAllItemsInFrame();
+  };
+
+  // NEW: Simplified scan - shows item for confirmation (kept for manual single item scan)
   const scanSingleItem = async () => {
     if (!videoRef.current || !canvasRef.current) return;
     
@@ -584,6 +743,29 @@ export default function MobileShopping() {
       const item = prev[index];
       setLiveTotal(t => t - item.totalPrice);
       return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  // NEW: Update item quantity
+  const updateItemQuantity = (index: number, newQuantity: number) => {
+    if (newQuantity < 1) {
+      removeLiveItem(index);
+      return;
+    }
+    
+    setLiveScannedItems(prev => {
+      const updated = [...prev];
+      const item = updated[index];
+      const oldTotal = item.totalPrice;
+      
+      updated[index] = {
+        ...item,
+        quantity: newQuantity,
+        totalPrice: item.unitPrice * newQuantity
+      };
+      
+      setLiveTotal(t => t - oldTotal + updated[index].totalPrice);
+      return updated;
     });
   };
 
@@ -718,6 +900,11 @@ export default function MobileShopping() {
     setPendingItem(null);
     setPendingQuantity(1);
     setScanError(null);
+    setAutoScanEnabled(false);
+    if (autoScanInterval) {
+      clearInterval(autoScanInterval);
+      setAutoScanInterval(null);
+    }
   };
 
   return (
@@ -1023,16 +1210,44 @@ export default function MobileShopping() {
                 />
                 <canvas ref={canvasRef} className="hidden" />
                 
-                {/* Simple frame guide */}
+                {/* Frame guide with auto-scan indicator */}
                 {cameraStream && (
-                  <div className="absolute inset-4 border-2 border-white/50 rounded-lg pointer-events-none" />
+                  <div className="absolute inset-4 border-2 rounded-lg pointer-events-none" 
+                       style={{ borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.5)' }}>
+                    {autoScanEnabled && (
+                      <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-2">
+                        <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                        Auto-Scan aktiv
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Auto-Scan Toggle */}
+                {cameraStream && (
+                  <div className="absolute top-4 left-4 right-4 z-20 flex justify-between items-center">
+                    <div className="bg-black/60 rounded-lg px-3 py-2">
+                      <p className="text-white text-xs">
+                        {isScanning ? 'Scanne...' : autoScanEnabled ? 'Auto-Scan aktiv' : 'Quittung in Rahmen halten'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setAutoScanEnabled(!autoScanEnabled)}
+                      className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+                        autoScanEnabled ? 'bg-green-500' : 'bg-white/20'
+                      }`}
+                    >
+                      <div className={`w-3 h-3 rounded-full ${autoScanEnabled ? 'bg-white' : 'bg-white/50'}`} />
+                      <span className="text-white text-xs font-medium">Auto</span>
+                    </button>
+                  </div>
                 )}
                 
                 {/* Scan Button */}
                 {cameraStream && !pendingItem && (
-                  <div className="absolute bottom-4 left-0 right-0 z-20 flex justify-center">
+                  <div className="absolute bottom-4 left-0 right-0 z-20 flex flex-col items-center gap-2">
                     <button
-                      onClick={scanSingleItem}
+                      onClick={scanAllItems}
                       disabled={isScanning}
                       className={`px-10 py-4 rounded-full shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-transform ${
                         isScanning ? 'bg-gray-600' : 'bg-green-500'
@@ -1041,10 +1256,15 @@ export default function MobileShopping() {
                       {isScanning ? (
                         <div className="w-7 h-7 border-3 border-white/30 border-t-white rounded-full animate-spin" />
                       ) : (
-                        <Camera className="w-7 h-7 text-white" />
+                        <ScanLine className="w-7 h-7 text-white" />
                       )}
-                      <span className="font-bold text-white text-xl">{isScanning ? 'Scanne...' : 'SCANNEN'}</span>
+                      <span className="font-bold text-white text-xl">{isScanning ? 'Scanne...' : 'ALLE SCANNEN'}</span>
                     </button>
+                    {!autoScanEnabled && (
+                      <p className="text-white/70 text-xs text-center px-4">
+                        Quittung in den grünen Rahmen halten<br/>und "ALLE SCANNEN" drücken
+                      </p>
+                    )}
                   </div>
                 )}
                 
@@ -1129,7 +1349,11 @@ export default function MobileShopping() {
                     <ScanLine className="w-16 h-16 mx-auto mb-4 text-muted-foreground/30" />
                     <p className="text-lg font-medium text-muted-foreground">Artikel scannen</p>
                     <p className="text-sm text-muted-foreground/70 mt-2">
-                      Quittung vor die Kamera halten<br/>und SCANNEN drücken
+                      {autoScanEnabled ? (
+                        <>Auto-Scan aktiv: Quittung in den Rahmen halten<br/>Alle Artikel werden automatisch erkannt</>
+                      ) : (
+                        <>Quittung in den grünen Rahmen halten<br/>und "ALLE SCANNEN" drücken</>
+                      )}
                     </p>
                   </div>
                 )}
@@ -1146,34 +1370,46 @@ export default function MobileShopping() {
                       <span className="text-xl font-bold text-green-600">CHF {liveTotal.toFixed(2)}</span>
                     </div>
                     
-                    {/* Items */}
+                    {/* Items with quantity controls */}
                     <div className="space-y-2 mb-4">
                       {liveScannedItems.map((item, idx) => (
                         <div 
                           key={idx}
-                          className="p-3 bg-muted rounded-xl flex items-center justify-between"
+                          className="p-3 bg-muted rounded-xl"
                         >
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            {item.quantity > 1 && (
-                              <span className="w-8 h-8 rounded-full bg-green-500 text-white text-sm font-bold flex items-center justify-center flex-shrink-0">
-                                {item.quantity}×
-                              </span>
-                            )}
+                          <div className="flex items-center justify-between mb-2">
                             <div className="flex-1 min-w-0">
                               <p className="font-semibold truncate">{item.name}</p>
                               <p className="text-sm text-muted-foreground">
-                                {item.quantity > 1 ? `${item.quantity} × CHF ${item.unitPrice.toFixed(2)}` : `CHF ${item.unitPrice.toFixed(2)}`}
+                                CHF {item.unitPrice.toFixed(2)} pro Stück
                               </p>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold">CHF {item.totalPrice.toFixed(2)}</span>
                             <button
                               onClick={() => removeLiveItem(idx)}
-                              className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center"
+                              className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0"
                             >
                               <X className="w-4 h-4 text-red-500" />
                             </button>
+                          </div>
+                          
+                          {/* Quantity Selector */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => updateItemQuantity(idx, item.quantity - 1)}
+                                className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-xl font-bold active:bg-background/80"
+                              >
+                                −
+                              </button>
+                              <span className="text-2xl font-bold w-12 text-center">{item.quantity}</span>
+                              <button
+                                onClick={() => updateItemQuantity(idx, item.quantity + 1)}
+                                className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-xl font-bold active:bg-background/80"
+                              >
+                                +
+                              </button>
+                            </div>
+                            <span className="font-bold text-lg">CHF {item.totalPrice.toFixed(2)}</span>
                           </div>
                         </div>
                       ))}

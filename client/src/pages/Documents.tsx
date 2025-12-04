@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -132,6 +133,7 @@ export default function Documents() {
   };
 
   return (
+    <Layout>
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -197,17 +199,23 @@ export default function Documents() {
               <label className="text-sm font-medium">Person zuordnen</label>
               <Select value={uploadPersonId} onValueChange={setUploadPersonId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Person auswählen..." />
+                  <SelectValue placeholder={peopleLoading ? "Laden..." : "Person auswählen..."} />
                 </SelectTrigger>
                 <SelectContent>
-                  {(people || []).map(person => (
-                    <SelectItem key={person.id} value={person.id}>
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4" />
-                        {person.name}
-                      </div>
-                    </SelectItem>
-                  ))}
+                  {peopleLoading ? (
+                    <div className="p-2 text-sm text-muted-foreground text-center">Laden...</div>
+                  ) : (people || []).length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground text-center">Keine Personen gefunden</div>
+                  ) : (
+                    (people || []).map(person => (
+                      <SelectItem key={person.id} value={person.id}>
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4" />
+                          {person.name}
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -392,6 +400,7 @@ export default function Documents() {
         </DialogContent>
       </Dialog>
     </div>
+    </Layout>
   );
 }
 

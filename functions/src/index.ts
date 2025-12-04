@@ -3441,22 +3441,45 @@ function parseSwissReceipt(text: string): ReceiptData {
   };
 
   // Known Swiss stores for better recognition
-  const knownStores: Record<string, string> = {
-    'ALDI': 'ALDI SUISSE AG',
-    'MIGROS': 'Migros',
-    'COOP': 'Coop',
-    'LIDL': 'Lidl Schweiz',
-    'DENNER': 'Denner',
-    'SPAR': 'Spar',
-    'VOLG': 'Volg',
-    'MANOR': 'Manor',
+  const knownStores: Record<string, { name: string; category: string }> = {
+    'ALDI': { name: 'ALDI SUISSE AG', category: 'Lebensmittel' },
+    'MIGROS': { name: 'Migros', category: 'Lebensmittel' },
+    'COOP': { name: 'Coop', category: 'Lebensmittel' },
+    'LIDL': { name: 'Lidl Schweiz', category: 'Lebensmittel' },
+    'DENNER': { name: 'Denner', category: 'Lebensmittel' },
+    'SPAR': { name: 'Spar', category: 'Lebensmittel' },
+    'VOLG': { name: 'Volg', category: 'Lebensmittel' },
+    'MANOR': { name: 'Manor', category: 'Kaufhaus' },
+    'H&M': { name: 'H&M Hennes & Mauritz', category: 'Kleidung' },
+    'HENNES': { name: 'H&M Hennes & Mauritz', category: 'Kleidung' },
+    'SNIPES': { name: 'Snipes', category: 'Kleidung' },
+    'ZARA': { name: 'Zara', category: 'Kleidung' },
+    'C&A': { name: 'C&A', category: 'Kleidung' },
+    'OCHSNER': { name: 'Ochsner Sport', category: 'Sport' },
+    'DECATHLON': { name: 'Decathlon', category: 'Sport' },
+    'BP': { name: 'BP Tankstelle', category: 'Tankstelle' },
+    'SHELL': { name: 'Shell', category: 'Tankstelle' },
+    'AVIA': { name: 'Avia', category: 'Tankstelle' },
+    'COOP PRONTO': { name: 'Coop Pronto', category: 'Tankstelle' },
+    'MIGROLINO': { name: 'Migrolino', category: 'Tankstelle' },
+    'VALORA': { name: 'Valora', category: 'Tankstelle' },
+    'VENDEX': { name: 'Vendex AG', category: 'Sonstiges' },
+    'VAPE': { name: 'Vape Shop', category: 'Sonstiges' },
+    'MEDIA MARKT': { name: 'Media Markt', category: 'Elektronik' },
+    'INTERDISCOUNT': { name: 'Interdiscount', category: 'Elektronik' },
+    'FUST': { name: 'Fust', category: 'Elektronik' },
+    'IKEA': { name: 'IKEA', category: 'Möbel' },
+    'APOTHEKE': { name: 'Apotheke', category: 'Gesundheit' },
+    'DROGERIE': { name: 'Drogerie', category: 'Gesundheit' },
   };
+  
+  let detectedCategory = 'Sonstiges';
 
   // Patterns
   const patterns = {
-    // Store detection
-    storeNames: /^(ALDI|MIGROS|COOP|LIDL|DENNER|SPAR|VOLG|MANOR|MIGROLINO|AVEC)/i,
-    storeFull: /(ALDI\s*SUISSE|MIGROS\s*\w*|COOP\s*\w*|LIDL\s*SCHWEIZ)/i,
+    // Store detection - expanded for all store types
+    storeNames: /^(ALDI|MIGROS|COOP|LIDL|DENNER|SPAR|VOLG|MANOR|MIGROLINO|AVEC|H&M|SNIPES|ZARA|C&A|BP|SHELL|AVIA|VENDEX|VAPE|MEDIA\s*MARKT|INTERDISCOUNT|FUST|IKEA)/i,
+    storeFull: /(ALDI\s*SUISSE|MIGROS\s*\w*|COOP\s*\w*|LIDL\s*SCHWEIZ|H&M\s*Hennes|Hennes\s*&\s*Mauritz|Valora\s*Schweiz|Sneakers\s*und\s*Street)/i,
     
     // Address patterns
     postalCity: /(\d{4})\s+([A-Za-zäöüÄÖÜ\-\s]+?)(?:\s+[A-Z]{2})?$/,
@@ -3474,8 +3497,8 @@ function parseSwissReceipt(text: string): ReceiptData {
     // Price at end
     priceEnd: /(\d+[.,]\d{2})\s*([AB])?$/,
     
-    // Total patterns
-    total: /(Total|PREIS|TOTAL|Summe|SUMME|Total-EFT)\s*(?:CHF)?\s*(\d+[.,]\d{2})/i,
+    // Total patterns - expanded for all receipt types
+    total: /(Total|PREIS|TOTAL|Summe|SUMME|Total-EFT|Gesamtbetrag|ALDI\s*PREIS|Total\s*Treibstoff)\s*(?:CHF)?\s*(\d+[.,]\d{2})/i,
     subtotal: /(Zwischensumme|Subtotal|ZWISCHENSUMME)\s*(\d+[.,]\d{2})/i,
     rounding: /(Rundung|RUNDUNG)\s*(-?\d+[.,]\d{2})/i,
     
@@ -3522,16 +3545,17 @@ function parseSwissReceipt(text: string): ReceiptData {
     if (headerSection) {
       // Detect known store
       const storeMatch = line.match(patterns.storeNames) || line.match(patterns.storeFull);
-      if (storeMatch) {
-        const storeName = storeMatch[0].toUpperCase();
-        for (const [key, fullName] of Object.entries(knownStores)) {
-          if (storeName.includes(key)) {
-            result.store.name = fullName;
+      if (storeMatch || line.match(/H&M|Hennes|Snipes|BP\s|Shell|Valora|Vendex|Vape/i)) {
+        const lineUpper = line.toUpperCase();
+        for (const [key, storeInfo] of Object.entries(knownStores)) {
+          if (lineUpper.includes(key)) {
+            result.store.name = storeInfo.name;
+            detectedCategory = storeInfo.category;
             confidencePoints += 20;
             break;
           }
         }
-        if (!result.store.name) result.store.name = storeMatch[0];
+        if (!result.store.name && storeMatch) result.store.name = storeMatch[0];
         continue;
       }
 
@@ -3595,6 +3619,52 @@ function parseSwissReceipt(text: string): ReceiptData {
 
       // Skip if this line is just a price (it was combined with previous line)
       if (/^\d+[.,]\d{2}\s*[AB]?$/.test(line)) {
+        continue;
+      }
+      
+      // Skip Rabatt/Urspr. Preis lines (H&M discount info)
+      if (/^(Rabatt|Urspr\.\s*Preis)/i.test(line)) {
+        continue;
+      }
+
+      // Check if previous line was a product name (for H&M format)
+      const prevLine = i > 0 ? lines[i - 1] : '';
+      let productNameFromPrev = '';
+      
+      // H&M format: Name on one line, then ArticleNo Size Color Price on next
+      // Check if current line has article number pattern and previous line was just text
+      const hmDataLine = line.match(/^(\d{7})\s+(\d+(?:\/\d+)?|ONESIZE|[SML]|[A-Z]\d?)\s+([A-Za-zäöüÄÖÜ]+)\s+(\d+[.,]\d{2})$/i);
+      if (hmDataLine && prevLine && prevLine.match(/^[A-Za-zäöüÄÖÜ\s]+$/) && !prevLine.match(/^(CHF|Total|Rabatt)/i)) {
+        productNameFromPrev = prevLine.trim();
+        const item: ReceiptItem = {
+          quantity: 1,
+          articleNumber: hmDataLine[1],
+          name: `${productNameFromPrev} - ${hmDataLine[3]}`, // Name from prev line + Color
+          unitPrice: parseFloat(hmDataLine[4].replace(',', '.')),
+          totalPrice: parseFloat(hmDataLine[4].replace(',', '.')),
+        };
+        result.items.push(item);
+        headerSection = false;
+        confidencePoints += 3;
+        continue;
+      }
+      
+      // Snipes format: Data line followed by product name
+      const snipesDataLine = line.match(/^(\d)\s+(\d{6})\s+\d\s+\|(\d+)\s*\|.*?\|\s*(\d+[.,]\d{2})$/);
+      if (snipesDataLine) {
+        // Next line should be the product name
+        const productName = nextLine && !nextLine.match(/^\d/) && !nextLine.match(/^(SUMME|Total)/i) ? nextLine.trim() : `Artikel ${snipesDataLine[2]}`;
+        const item: ReceiptItem = {
+          quantity: parseInt(snipesDataLine[1]),
+          articleNumber: snipesDataLine[2],
+          name: productName,
+          unitPrice: parseFloat(snipesDataLine[4].replace(',', '.')),
+          totalPrice: parseFloat(snipesDataLine[4].replace(',', '.')),
+        };
+        result.items.push(item);
+        headerSection = false;
+        confidencePoints += 3;
+        i++; // Skip the product name line
         continue;
       }
 
@@ -3674,6 +3744,21 @@ function parseSwissReceipt(text: string): ReceiptData {
   // Calculate confidence
   result.confidence = Math.min(100, confidencePoints);
   result.totals.itemCount = result.totals.itemCount || result.items.length;
+  
+  // Add detected category
+  (result as any).category = detectedCategory;
+  
+  // Auto-detect category from items if not detected from store
+  if (detectedCategory === 'Sonstiges' && result.items.length > 0) {
+    const itemNames = result.items.map(i => i.name.toLowerCase()).join(' ');
+    if (itemNames.match(/diesel|benzin|treibstoff|liter/)) {
+      (result as any).category = 'Tankstelle';
+    } else if (itemNames.match(/jersey|hemd|hose|schuhe|shirt|jacke|kleid/)) {
+      (result as any).category = 'Kleidung';
+    } else if (itemNames.match(/bio|milch|brot|joghurt|käse|fleisch|gemüse|obst/)) {
+      (result as any).category = 'Lebensmittel';
+    }
+  }
 
   return result;
 }
@@ -3682,14 +3767,22 @@ function parseSwissReceipt(text: string): ReceiptData {
 function parseReceiptItem(line: string, nextLine: string): ReceiptItem | null {
   // Skip non-item patterns
   const skipPatterns = [
-    /^(Zwischensumme|Subtotal|Total|PREIS|Summe|Rundung)/i,
-    /^(MwSt|MWST|Steuer|Netto|Brutto)/i,
-    /^(Vielen\s*Dank|Danke|Bitte)/i,
-    /^(Kartenzahlung|Barzahlung|TWINT|Debit)/i,
+    /^(Zwischensumme|Subtotal|Total|PREIS|Summe|Rundung|ALDI PREIS|Gesamtbetrag)/i,
+    /^(MwSt|MWST|Steuer|Netto|Brutto|St\s*%)/i,
+    /^(Vielen\s*Dank|Danke|Bitte|Herzlich|Willkommen)/i,
+    /^(Kartenzahlung|Barzahlung|TWINT|Debit|Mastercard|Erhalten|Gegeben)/i,
+    /^(Urspr\.\s*Preis|Rabatt)/i, // H&M discount lines
+    /^(ANZAHL|Artikel\s*\d)/i,
+    /^(Benutzer|Datum|Kasse|Store|Bon|Zeit)/i,
+    /^(Member|EFT|Buchung|Trm-Id|Trx|Auth)/i,
+    /^(Rückgeld|CHE-|MWST-Nr|www\.|Tel)/i,
     /^\d{10,}$/, // Barcodes
     /^[A-Z]{2,3}-?\d{3}/i, // Tax IDs
     /^CHF$/i,
     /^[x×]\s*$/i, // Standalone x
+    /^[-=*]+$/, // Separators
+    /^\s*\d+\s*Artikel\s*$/i,
+    /^(A|B|Ges\.?)\s+\d/i, // Tax summary lines
   ];
 
   if (skipPatterns.some(p => p.test(line))) return null;
@@ -3701,11 +3794,79 @@ function parseReceiptItem(line: string, nextLine: string): ReceiptItem | null {
   const priceOnlyMatch = nextLine.match(/^(\d+[.,]\d{2})\s*([AB])?$/);
   const combinedLine = priceOnlyMatch ? `${line} ${nextLine}` : line;
 
-  // Pattern 0: ALDI format - articleNo name price taxCat (on same or combined line)
+  // === BP TANKSTELLE FORMAT ===
+  // Example: "*000002 Ultimate Diesel 30.07 CHF A*"
+  const bpMatch = combinedLine.match(/^\*?(\d{4,})\s+(.+?)\s+(\d+[.,]\d{2})\s*(?:CHF)?\s*([AB])?\*?$/);
+  if (bpMatch) {
+    return {
+      quantity: 1,
+      articleNumber: bpMatch[1],
+      name: bpMatch[2].trim(),
+      unitPrice: parseFloat(bpMatch[3].replace(',', '.')),
+      totalPrice: parseFloat(bpMatch[3].replace(',', '.')),
+      taxCategory: bpMatch[4] || undefined,
+    };
+  }
+
+  // === SNIPES FORMAT ===
+  // Example: "1 080376 1 |41 |89|0| 139.90" followed by "Air Force 1 white/bl"
+  const snipesMatch = line.match(/^(\d)\s+(\d{6})\s+\d\s+\|(\d+)\s*\|.*?\|\s*(\d+[.,]\d{2})$/);
+  if (snipesMatch) {
+    // Check if next line has the product name
+    const productName = nextLine && !nextLine.match(/^\d/) ? nextLine : 'Artikel';
+    return {
+      quantity: parseInt(snipesMatch[1]),
+      articleNumber: snipesMatch[2],
+      name: productName.trim(),
+      unitPrice: parseFloat(snipesMatch[4].replace(',', '.')),
+      totalPrice: parseFloat(snipesMatch[4].replace(',', '.')),
+    };
+  }
+
+  // === H&M FORMAT ===
+  // Example: "1245302 122/128 Rot 12.95" with "Basic Jersey" on previous line
+  // Or combined: "Basic Jersey 1245302 122/128 Rot 12.95"
+  const hmMatch = combinedLine.match(/^(.+?)\s+(\d{7})\s+(\d+(?:\/\d+)?|ONESIZE|[SML]|[A-Z]\d?)\s+([A-Za-zäöüÄÖÜ]+)\s+(\d+[.,]\d{2})$/i);
+  if (hmMatch) {
+    return {
+      quantity: 1,
+      articleNumber: hmMatch[2],
+      name: `${hmMatch[1].trim()} - ${hmMatch[4]}`, // Name + Color
+      unitPrice: parseFloat(hmMatch[5].replace(',', '.')),
+      totalPrice: parseFloat(hmMatch[5].replace(',', '.')),
+    };
+  }
+  
+  // H&M alternate: Just article number, size, color, price
+  const hmAltMatch = combinedLine.match(/^(\d{7})\s+(\d+(?:\/\d+)?|ONESIZE|[SML])\s+([A-Za-zäöüÄÖÜ]+)\s+(\d+[.,]\d{2})$/i);
+  if (hmAltMatch) {
+    return {
+      quantity: 1,
+      articleNumber: hmAltMatch[1],
+      name: `Artikel ${hmAltMatch[1]} - ${hmAltMatch[3]}`,
+      unitPrice: parseFloat(hmAltMatch[4].replace(',', '.')),
+      totalPrice: parseFloat(hmAltMatch[4].replace(',', '.')),
+    };
+  }
+
+  // === VENDEX/VAPE FORMAT ===
+  // Example: "Elfbar - Elfliq Peac 7.30 A"
+  const vendexMatch = combinedLine.match(/^([A-Za-zäöüÄÖÜ][A-Za-zäöüÄÖÜ0-9\s\-\.\/]+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
+  if (vendexMatch && vendexMatch[1].length > 3 && !vendexMatch[1].match(/^(Total|Summe|Netto)/i)) {
+    return {
+      quantity: 1,
+      name: vendexMatch[1].trim(),
+      unitPrice: parseFloat(vendexMatch[2].replace(',', '.')),
+      totalPrice: parseFloat(vendexMatch[2].replace(',', '.')),
+      taxCategory: vendexMatch[3] || undefined,
+    };
+  }
+
+  // === ALDI FORMAT ===
   // Example: "12055 Super Bock 6x0.331 7.95 B"
   const aldiMatch = combinedLine.match(/^(\d{4,6})\s+(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
   if (aldiMatch) {
-    item = {
+    return {
       quantity: 1,
       articleNumber: aldiMatch[1],
       name: aldiMatch[2].trim(),
@@ -3713,21 +3874,19 @@ function parseReceiptItem(line: string, nextLine: string): ReceiptItem | null {
       totalPrice: parseFloat(aldiMatch[3].replace(',', '.')),
       taxCategory: aldiMatch[4] || undefined,
     };
-    return item;
   }
   
-  // Pattern 0b: Name + price without article number
-  // Example: "Bio Apfel 3.98 A"
-  const nameOnlyMatch = combinedLine.match(/^([A-Za-zäöüÄÖÜ][A-Za-zäöüÄÖÜ0-9\s\/.\-]+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
-  if (nameOnlyMatch && nameOnlyMatch[1].length > 2) {
-    item = {
+  // === GENERIC FORMAT ===
+  // Name + price (fallback)
+  const genericMatch = combinedLine.match(/^([A-Za-zäöüÄÖÜ][A-Za-zäöüÄÖÜ0-9\s\/.\-\(\)]+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
+  if (genericMatch && genericMatch[1].length > 2 && !genericMatch[1].match(/^(CHF|Total|MwSt)/i)) {
+    return {
       quantity: 1,
-      name: nameOnlyMatch[1].trim(),
-      unitPrice: parseFloat(nameOnlyMatch[2].replace(',', '.')),
-      totalPrice: parseFloat(nameOnlyMatch[2].replace(',', '.')),
-      taxCategory: nameOnlyMatch[3] || undefined,
+      name: genericMatch[1].trim(),
+      unitPrice: parseFloat(genericMatch[2].replace(',', '.')),
+      totalPrice: parseFloat(genericMatch[2].replace(',', '.')),
+      taxCategory: genericMatch[3] || undefined,
     };
-    return item;
   }
 
   // Pattern 1: Full format - qty articleNo name price taxCat

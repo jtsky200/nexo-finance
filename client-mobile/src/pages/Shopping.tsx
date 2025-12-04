@@ -186,8 +186,8 @@ export default function MobileShopping() {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { 
           facingMode: 'environment', 
-          width: { ideal: 1920 }, 
-          height: { ideal: 1080 } 
+          width: { ideal: 3840 },  // 4K für bessere OCR
+          height: { ideal: 2160 } 
         }
       });
       setCameraStream(stream);
@@ -257,13 +257,15 @@ export default function MobileShopping() {
       ctx.drawImage(video, 0, 0);
       toast.success('Foto aufgenommen!');
       
+      // Maximale Qualität für bessere OCR-Erkennung
       canvas.toBlob(async (blob) => {
         if (blob) {
           stopCamera();
+          console.log(`Photo size: ${blob.size} bytes`);
           const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
           await analyzeShoppingList(file);
         }
-      }, 'image/jpeg', 0.95);
+      }, 'image/jpeg', 1.0);
     }
   };
   

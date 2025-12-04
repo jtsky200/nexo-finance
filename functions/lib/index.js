@@ -3257,29 +3257,25 @@ function parseSwissReceipt(text) {
     }
     result.items = uniqueItems;
     console.log(`[parseSwissReceipt] After filtering: ${result.items.length} items`);
-    // If no total was found from the receipt, calculate from items
-    if (!result.totals.total || result.totals.total === 0) {
-        // Try to find the real total from common patterns
-        for (const line of lines) {
-            // ALDI PREIS pattern
-            const aldiMatch = line.match(/ALDI\s*PREIS\s+(\d+[.,]\d{2})/i);
-            if (aldiMatch) {
-                result.totals.total = parseFloat(aldiMatch[1].replace(',', '.'));
-                console.log(`[parseSwissReceipt] Found ALDI PREIS total: ${result.totals.total}`);
-                break;
-            }
-            // Total-EFT CHF pattern
-            const eftMatch = line.match(/Total-EFT\s+CHF\s+(\d+[.,]\d{2})/i);
-            if (eftMatch) {
-                result.totals.total = parseFloat(eftMatch[1].replace(',', '.'));
-                console.log(`[parseSwissReceipt] Found Total-EFT total: ${result.totals.total}`);
-                break;
-            }
-            // Kartenzahlung CHF pattern
-            const karteMatch = line.match(/Kartenzahlung\s+CHF\s+(\d+[.,]\d{2})/i);
-            if (karteMatch) {
-                result.totals.total = parseFloat(karteMatch[1].replace(',', '.'));
-                console.log(`[parseSwissReceipt] Found Kartenzahlung total: ${result.totals.total}`);
+    // Search for total in all lines (even if parser didn't find it earlier)
+    const fullText = lines.join(' ');
+    // Try multiple total patterns
+    const totalPatterns = [
+        /ALDI\s*PREIS\s+(\d+[.,]\d{2})/i,
+        /Total-EFT\s+(?:CHF)?\s*(\d+[.,]\d{2})/i,
+        /Kartenzahlung\s+(?:CHF)?\s*(\d+[.,]\d{2})/i,
+        /(?:Total|TOTAL|Summe|SUMME)\s+(?:CHF)?\s*(\d+[.,]\d{2})/i,
+        /(?:CHF|Fr\.)\s*(\d+[.,]\d{2})\s*$/i,
+    ];
+    for (const pattern of totalPatterns) {
+        const match = fullText.match(pattern);
+        if (match) {
+            const foundTotal = parseFloat(match[1].replace(',', '.'));
+            // Use this total if we don't have one yet, or if it's more reasonable
+            if (!result.totals.total || result.totals.total === 0 ||
+                (foundTotal > 0 && foundTotal < result.totals.total)) {
+                result.totals.total = foundTotal;
+                console.log(`[parseSwissReceipt] Found total via pattern: ${result.totals.total}`);
                 break;
             }
         }
@@ -3291,6 +3287,11 @@ function parseSwissReceipt(text) {
             result.totals.total = Math.round(calculatedTotal * 100) / 100;
             console.log(`[parseSwissReceipt] Calculated total from ${result.items.length} items: ${result.totals.total}`);
         }
+    }
+    // Mark as potentially incomplete if total seems too high compared to items
+    const itemSum = result.items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
+    if (result.totals.total > itemSum * 1.5) {
+        console.log(`[parseSwissReceipt] Warning: Total ${result.totals.total} seems high compared to items sum ${itemSum}`);
     }
     // Add detected category
     result.category = detectedCategory;

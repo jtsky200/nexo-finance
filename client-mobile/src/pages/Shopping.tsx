@@ -277,7 +277,7 @@ export default function MobileShopping() {
   // Edge detection for auto-capture with corner finding
   const startEdgeDetection = () => {
     let stableFrames = 0;
-    const requiredStableFrames = 12;
+    const requiredStableFrames = 30; // Erhöht von 12 auf 30 (~1 Sekunde stabil)
     let lastCorners: typeof corners | null = null;
     let isRunning = true;
     
@@ -351,8 +351,9 @@ export default function MobileShopping() {
             if (stableFrames >= requiredStableFrames) {
               isRunning = false;
               setScannerStatus('capturing');
-              toast.success('Quittung erkannt! Aufnahme...');
-              setTimeout(() => capturePhoto(), 200);
+              toast.success('Quittung erkannt! Bitte stillhalten...');
+              // Längere Verzögerung für bessere Bildqualität
+              setTimeout(() => capturePhoto(), 800);
               return;
             }
           } else {

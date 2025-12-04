@@ -2497,7 +2497,8 @@ exports.getAllDocuments = (0, https_1.onCall)(async (request) => {
         if (folder && folder !== 'all') {
             docsQuery = docsQuery.where('folder', '==', folder);
         }
-        const docsSnapshot = await docsQuery.orderBy('createdAt', 'desc').get();
+        // Don't use orderBy in query to avoid index requirement - sort in code instead
+        const docsSnapshot = await docsQuery.get();
         for (const doc of docsSnapshot.docs) {
             const data = doc.data();
             allDocuments.push(Object.assign(Object.assign({ id: doc.id, personId: personDoc.id, personName: personData.name }, data), { createdAt: ((_c = (_b = (_a = data.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null, updatedAt: ((_f = (_e = (_d = data.updatedAt) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null }));

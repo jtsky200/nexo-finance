@@ -54,7 +54,7 @@ interface AnalysisResult {
 
 export default function Documents() {
   const { t } = useTranslation();
-  const { people = [], loading: peopleLoading } = usePeople();
+  const { data: people = [], isLoading: peopleLoading } = usePeople();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [documents, setDocuments] = useState<Document[]>([]);

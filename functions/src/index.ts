@@ -2888,7 +2888,8 @@ export const getAllDocuments = onCall(async (request) => {
       docsQuery = docsQuery.where('folder', '==', folder);
     }
     
-    const docsSnapshot = await docsQuery.orderBy('createdAt', 'desc').get();
+    // Don't use orderBy in query to avoid index requirement - sort in code instead
+    const docsSnapshot = await docsQuery.get();
     
     for (const doc of docsSnapshot.docs) {
       const data = doc.data();

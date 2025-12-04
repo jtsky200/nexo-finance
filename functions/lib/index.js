@@ -2971,6 +2971,7 @@ exports.analyzeSingleLine = (0, https_1.onCall)({ memory: '512MiB', timeoutSecon
         // Parse single line/item
         const item = parseSingleItem(extractedText);
         if (item) {
+            console.log(`[analyzeSingleLine] Parsed item:`, JSON.stringify(item));
             return {
                 success: true,
                 item: item,
@@ -2978,6 +2979,7 @@ exports.analyzeSingleLine = (0, https_1.onCall)({ memory: '512MiB', timeoutSecon
             };
         }
         else {
+            console.log(`[analyzeSingleLine] No item found in text`);
             return {
                 success: false,
                 error: 'Artikel nicht erkannt',
@@ -2990,13 +2992,15 @@ exports.analyzeSingleLine = (0, https_1.onCall)({ memory: '512MiB', timeoutSecon
         return { success: false, error: error.message };
     }
 });
-// Parse a single item from OCR text
+// Parse a single item from OCR text - improved multi-line support
 function parseSingleItem(text) {
     const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(l => l.length > 0);
-    // Try each line to find a valid item
-    for (const line of lines) {
+    // First, try to find complete items on single lines
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const nextLine = i < lines.length - 1 ? lines[i + 1] : '';
         // Skip metadata lines
-        if (/^(CHF|Total|Summe|Zwischensumme|MwSt|Netto|Kartenzahlung|ALDI|MIGROS|COOP)/i.test(line)) {
+        if (/^(CHF|Total|Summe|Zwischensumme|Rundung|MwSt|Netto|Kartenzahlung|ALDI|MIGROS|COOP|Artikel|VIELEN|Bitte)/i.test(line)) {
             continue;
         }
         // ALDI format: "12055 Super Bock 6x0.331  7.95 B"
@@ -3028,19 +3032,43 @@ function parseSingleItem(text) {
                 quantity: 1
             };
         }
-        // Price only on line - try to combine with next line
-        const priceOnly = line.match(/^(\d+[.,]\d{2})\s*([AB])?$/);
-        if (priceOnly) {
-            // Look for article name in previous/next line
-            const idx = lines.indexOf(line);
-            const prevLine = idx > 0 ? lines[idx - 1] : '';
-            if (prevLine && prevLine.match(/^(\d{4,6})?\s*[A-Za-zäöüÄÖÜ]/)) {
+        // MULTI-LINE: Article number + name on one line, price on next
+        // Format: "740713 Zucker figuren 3D" followed by "5.98 A"
+        const articleLineMatch = line.match(/^(\d{4,6})\s+(.+)$/);
+        if (articleLineMatch && nextLine) {
+            const priceMatch = nextLine.match(/^(\d+[.,]\d{2})\s*([AB])?$/);
+            if (priceMatch) {
+                return {
+                    articleNumber: articleLineMatch[1],
+                    name: articleLineMatch[2].trim(),
+                    price: parseFloat(priceMatch[1].replace(',', '.')),
+                    quantity: 1
+                };
+            }
+        }
+        // MULTI-LINE: Name on one line, price on next (no article number)
+        // Format: "Naturejog. 500g" followed by "0.85 A"
+        if (line.match(/^[A-Za-zäöüÄÖÜ]/) && !line.match(/\d+[.,]\d{2}/) && nextLine) {
+            const priceMatch = nextLine.match(/^(\d+[.,]\d{2})\s*([AB])?$/);
+            if (priceMatch && line.length > 3) {
+                return {
+                    name: line.trim(),
+                    price: parseFloat(priceMatch[1].replace(',', '.')),
+                    quantity: 1
+                };
+            }
+        }
+        // MULTI-LINE: Price on current line, name on previous
+        if (i > 0) {
+            const priceMatch = line.match(/^(\d+[.,]\d{2})\s*([AB])?$/);
+            const prevLine = lines[i - 1];
+            if (priceMatch && prevLine && prevLine.match(/^[A-Za-zäöüÄÖÜ]/) && !prevLine.match(/\d+[.,]\d{2}/)) {
                 const articleMatch = prevLine.match(/^(\d{4,6})?\s*(.+)$/);
                 if (articleMatch) {
                     return {
                         articleNumber: articleMatch[1] || undefined,
                         name: articleMatch[2].trim(),
-                        price: parseFloat(priceOnly[1].replace(',', '.')),
+                        price: parseFloat(priceMatch[1].replace(',', '.')),
                         quantity: 1
                     };
                 }

@@ -223,159 +223,17 @@ export default function MobileShopping() {
     setDetectionProgress(0);
   };
 
-  // Simple and reliable receipt corner detection
-  const findReceiptCorners = (imageData: ImageData, width: number, height: number) => {
-    const data = imageData.data;
-    
-    // Simple approach: find the bounding box of bright pixels
-    let minX = width, maxX = 0, minY = height, maxY = 0;
-    let brightPixelCount = 0;
-    
-    // Scan every 4th pixel for speed
-    for (let y = 0; y < height; y += 2) {
-      for (let x = 0; x < width; x += 2) {
-        const i = (y * width + x) * 4;
-        // Check if pixel is bright (white/light colored like a receipt)
-        const r = data[i], g = data[i + 1], b = data[i + 2];
-        const brightness = (r + g + b) / 3;
-        
-        // Receipt paper is typically bright (> 150)
-        if (brightness > 140) {
-          brightPixelCount++;
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
-        }
-      }
-    }
-    
-    // Calculate area coverage
-    const rectWidth = maxX - minX;
-    const rectHeight = maxY - minY;
-    const totalScanned = (width / 2) * (height / 2);
-    const coverage = brightPixelCount / totalScanned;
-    
-    // Need at least 5% of image to be bright, and reasonable size
-    if (coverage > 0.05 && rectWidth > 50 && rectHeight > 50) {
-      // Add padding
-      const padX = Math.max(10, rectWidth * 0.03);
-      const padY = Math.max(10, rectHeight * 0.02);
-      
-      return {
-        topLeft: { x: Math.max(0, minX - padX), y: Math.max(0, minY - padY) },
-        topRight: { x: Math.min(width, maxX + padX), y: Math.max(0, minY - padY) },
-        bottomLeft: { x: Math.max(0, minX - padX), y: Math.min(height, maxY + padY) },
-        bottomRight: { x: Math.min(width, maxX + padX), y: Math.min(height, maxY + padY) },
-        confidence: Math.min(100, coverage * 200)
-      };
-    }
-    
-    return null;
-  };
-
-  // Edge detection for auto-capture with corner finding
+  // No auto-detection - fixed frame in center
   const startEdgeDetection = () => {
-    let stableFrames = 0;
-    const requiredStableFrames = 30; // Erhöht von 12 auf 30 (~1 Sekunde stabil)
-    let lastCorners: typeof corners | null = null;
-    let isRunning = true;
-    
-    const detectEdges = () => {
-      if (!isRunning) return;
-      
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      
-      // Check if video is ready
-      if (!video || !canvas || !video.srcObject || video.videoWidth === 0) {
-        animationRef.current = requestAnimationFrame(detectEdges);
-        return;
-      }
-      
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        animationRef.current = requestAnimationFrame(detectEdges);
-        return;
-      }
-      
-      // Draw video frame to canvas
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
-      
-      try {
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        
-        // Try to find receipt corners
-        const foundCorners = findReceiptCorners(imageData, canvas.width, canvas.height);
-        
-        if (foundCorners && foundCorners.confidence > 10) {
-          // Convert pixel coordinates to percentage
-          const newCorners = {
-            topLeft: { 
-              x: (foundCorners.topLeft.x / canvas.width) * 100, 
-              y: (foundCorners.topLeft.y / canvas.height) * 100 
-            },
-            topRight: { 
-              x: (foundCorners.topRight.x / canvas.width) * 100, 
-              y: (foundCorners.topRight.y / canvas.height) * 100 
-            },
-            bottomLeft: { 
-              x: (foundCorners.bottomLeft.x / canvas.width) * 100, 
-              y: (foundCorners.bottomLeft.y / canvas.height) * 100 
-            },
-            bottomRight: { 
-              x: (foundCorners.bottomRight.x / canvas.width) * 100, 
-              y: (foundCorners.bottomRight.y / canvas.height) * 100 
-            }
-          };
-          
-          // Check if corners are stable
-          const isStable = lastCorners && 
-            Math.abs(newCorners.topLeft.x - lastCorners.topLeft.x) < 5 &&
-            Math.abs(newCorners.topLeft.y - lastCorners.topLeft.y) < 5 &&
-            Math.abs(newCorners.bottomRight.x - lastCorners.bottomRight.x) < 5 &&
-            Math.abs(newCorners.bottomRight.y - lastCorners.bottomRight.y) < 5;
-          
-          lastCorners = newCorners;
-          
-          // Always update corners immediately
-          setCorners(newCorners);
-          
-          if (isStable) {
-            stableFrames++;
-            setDetectionProgress(Math.min(100, (stableFrames / requiredStableFrames) * 100));
-            setScannerStatus('detected');
-            
-            if (stableFrames >= requiredStableFrames) {
-              // Auto-Capture DEAKTIVIERT - User muss manuell scannen
-              // Zeige nur "Bereit" Status
-              setScannerStatus('detected');
-              setDetectionProgress(100);
-              // KEIN automatischer Scan mehr - User muss Button drücken
-            }
-          } else {
-            stableFrames = Math.max(0, stableFrames - 1);
-            setDetectionProgress(Math.max(0, (stableFrames / requiredStableFrames) * 100));
-            setScannerStatus('scanning');
-          }
-        } else {
-          stableFrames = Math.max(0, stableFrames - 2);
-          setDetectionProgress(0);
-          setScannerStatus('scanning');
-          lastCorners = null;
-        }
-      } catch (e) {
-        // Continue running even if there's an error
-        console.error('Edge detection error:', e);
-      }
-      
-      animationRef.current = requestAnimationFrame(detectEdges);
-    };
-    
-    // Start immediately
-    animationRef.current = requestAnimationFrame(detectEdges);
+    // Set fixed frame position (center of screen with good margins)
+    setCorners({
+      topLeft: { x: 15, y: 10 },
+      topRight: { x: 85, y: 10 },
+      bottomLeft: { x: 15, y: 85 },
+      bottomRight: { x: 85, y: 85 }
+    });
+    setScannerStatus('scanning');
+    setDetectionProgress(0);
   };
 
   const capturePhoto = () => {
@@ -994,26 +852,15 @@ export default function MobileShopping() {
                   'bg-black/50'
                 }`}>
                   <p className="text-white text-sm font-medium">
-                    {scannerStatus === 'capturing' && 'Aufnahme...'}
-                    {scannerStatus === 'detected' && 'Bereit! Drücke den Scan-Button'}
+                    {scannerStatus === 'capturing' && 'Analysiere...'}
                     {scannerStatus === 'adjusting' && 'Ecke anpassen...'}
-                    {scannerStatus === 'scanning' && 'Positioniere die Quittung...'}
+                    {(scannerStatus === 'scanning' || scannerStatus === 'detected') && 'Positioniere Quittung im Rahmen'}
                     {scannerStatus === 'idle' && 'Tippe auf Start'}
                   </p>
                 </div>
               </div>
               
-              {/* Progress bar when detected */}
-              {scannerStatus === 'detected' && (
-                <div className="absolute top-16 left-1/2 -translate-x-1/2 w-[60%] z-20">
-                  <div className="h-1.5 bg-white/30 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-green-500 transition-all duration-100"
-                      style={{ width: `${detectionProgress}%` }}
-                    />
-                  </div>
-                </div>
-              )}
+              {/* No progress bar - manual scan only */}
               
               {/* Bottom Controls */}
               <div className="absolute bottom-4 left-0 right-0 z-20">
@@ -1032,7 +879,7 @@ export default function MobileShopping() {
                     {/* Tips */}
                     <div className="bg-black/60 rounded-lg px-3 py-1.5">
                       <p className="text-white/80 text-xs text-center">
-                        Auto-Erkennung aktiv • Bei Bedarf Ecken anpassen
+                        Quittung im Rahmen positionieren • Dann Scan-Button drücken
                       </p>
                     </div>
                     

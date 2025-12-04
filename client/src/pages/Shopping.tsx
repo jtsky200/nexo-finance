@@ -802,140 +802,17 @@ export default function Shopping() {
   };
   
   // Simple and reliable receipt corner detection
-  const findReceiptCorners = (imageData: ImageData, width: number, height: number) => {
-    const data = imageData.data;
-    
-    let minX = width, maxX = 0, minY = height, maxY = 0;
-    let brightPixelCount = 0;
-    
-    for (let y = 0; y < height; y += 2) {
-      for (let x = 0; x < width; x += 2) {
-        const i = (y * width + x) * 4;
-        const r = data[i], g = data[i + 1], b = data[i + 2];
-        const brightness = (r + g + b) / 3;
-        
-        if (brightness > 140) {
-          brightPixelCount++;
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
-          if (y < minY) minY = y;
-          if (y > maxY) maxY = y;
-        }
-      }
-    }
-    
-    const rectWidth = maxX - minX;
-    const rectHeight = maxY - minY;
-    const totalScanned = (width / 2) * (height / 2);
-    const coverage = brightPixelCount / totalScanned;
-    
-    if (coverage > 0.05 && rectWidth > 50 && rectHeight > 50) {
-      const padX = Math.max(10, rectWidth * 0.03);
-      const padY = Math.max(10, rectHeight * 0.02);
-      
-      return {
-        topLeft: { x: Math.max(0, minX - padX), y: Math.max(0, minY - padY) },
-        topRight: { x: Math.min(width, maxX + padX), y: Math.max(0, minY - padY) },
-        bottomLeft: { x: Math.max(0, minX - padX), y: Math.min(height, maxY + padY) },
-        bottomRight: { x: Math.min(width, maxX + padX), y: Math.min(height, maxY + padY) },
-        confidence: Math.min(100, coverage * 200)
-      };
-    }
-    
-    return null;
-  };
-
-  // Edge detection for automatic receipt capture with corner finding
+  // No auto-detection - fixed frame in center
   const startEdgeDetection = () => {
-    let stableFrames = 0;
-    const requiredStableFrames = 30; // Erhöht von 12 auf 30 (~1 Sekunde stabil)
-    let lastCorners: typeof detectedCorners | null = null;
-    let isRunning = true;
-    
-    const detectEdges = () => {
-      if (!isRunning) return;
-      
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      
-      if (!video || !canvas || !video.srcObject || video.videoWidth === 0) {
-        animationRef.current = requestAnimationFrame(detectEdges);
-        return;
-      }
-      
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        animationRef.current = requestAnimationFrame(detectEdges);
-        return;
-      }
-      
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
-      
-      try {
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const foundCorners = findReceiptCorners(imageData, canvas.width, canvas.height);
-        
-        if (foundCorners && foundCorners.confidence > 10) {
-          const newCorners = {
-            topLeft: { 
-              x: (foundCorners.topLeft.x / canvas.width) * 100, 
-              y: (foundCorners.topLeft.y / canvas.height) * 100 
-            },
-            topRight: { 
-              x: (foundCorners.topRight.x / canvas.width) * 100, 
-              y: (foundCorners.topRight.y / canvas.height) * 100 
-            },
-            bottomLeft: { 
-              x: (foundCorners.bottomLeft.x / canvas.width) * 100, 
-              y: (foundCorners.bottomLeft.y / canvas.height) * 100 
-            },
-            bottomRight: { 
-              x: (foundCorners.bottomRight.x / canvas.width) * 100, 
-              y: (foundCorners.bottomRight.y / canvas.height) * 100 
-            }
-          };
-          
-          const isStable = lastCorners && 
-            Math.abs(newCorners.topLeft.x - lastCorners.topLeft.x) < 5 &&
-            Math.abs(newCorners.topLeft.y - lastCorners.topLeft.y) < 5 &&
-            Math.abs(newCorners.bottomRight.x - lastCorners.bottomRight.x) < 5 &&
-            Math.abs(newCorners.bottomRight.y - lastCorners.bottomRight.y) < 5;
-          
-          lastCorners = newCorners;
-          setDetectedCorners(newCorners);
-          
-          if (isStable) {
-            stableFrames++;
-            setDetectionProgress(Math.min(100, (stableFrames / requiredStableFrames) * 100));
-            setScannerStatus('detected');
-            
-            if (stableFrames >= requiredStableFrames) {
-              // Auto-Capture DEAKTIVIERT - User muss manuell scannen
-              setScannerStatus('detected');
-              setDetectionProgress(100);
-              // KEIN automatischer Scan - User muss Button drücken
-            }
-          } else {
-            stableFrames = Math.max(0, stableFrames - 1);
-            setDetectionProgress(Math.max(0, (stableFrames / requiredStableFrames) * 100));
-            setScannerStatus('scanning');
-          }
-        } else {
-          stableFrames = Math.max(0, stableFrames - 2);
-          setDetectionProgress(0);
-          setScannerStatus('scanning');
-          lastCorners = null;
-        }
-      } catch (e) {
-        console.error('Edge detection error:', e);
-      }
-      
-      animationRef.current = requestAnimationFrame(detectEdges);
-    };
-    
-    animationRef.current = requestAnimationFrame(detectEdges);
+    // Set fixed frame position (center of screen with good margins)
+    setDetectedCorners({
+      topLeft: { x: 15, y: 10 },
+      topRight: { x: 85, y: 10 },
+      bottomLeft: { x: 15, y: 85 },
+      bottomRight: { x: 85, y: 85 }
+    });
+    setScannerStatus('scanning');
+    setDetectionProgress(0);
   };
 
   const stopCamera = () => {

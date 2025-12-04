@@ -3762,54 +3762,66 @@ function parseSwissReceipt(text: string): ReceiptData {
   result.confidence = Math.min(100, confidencePoints);
   result.totals.itemCount = result.totals.itemCount || result.items.length;
   
-  // FALLBACK: If no items found, try aggressive pattern matching
-  if (result.items.length === 0) {
-    console.log('[parseSwissReceipt] No items found, trying aggressive parsing...');
-    
-    // Try to find ANY line with text + price
+  // Filter out invalid items (like "2 x", "4 x" quantity lines)
+  result.items = result.items.filter(item => {
+    const name = item.name.trim();
+    // Remove items that are just quantity indicators
+    if (/^\d+\s*[x×]$/i.test(name)) return false;
+    // Remove items with very short names
+    if (name.length < 3) return false;
+    // Remove items that look like metadata
+    if (/^(CHF|Total|Summe|Subtotal|MwSt|Netto|Zwischensumme|Rundung|Kartenzahlung|Bar|Rückgeld)/i.test(name)) return false;
+    return true;
+  });
+  
+  // Remove duplicate items (same name and price)
+  const uniqueItems: typeof result.items = [];
+  const seen = new Set<string>();
+  for (const item of result.items) {
+    const key = `${item.name}-${item.totalPrice}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueItems.push(item);
+    }
+  }
+  result.items = uniqueItems;
+  
+  console.log(`[parseSwissReceipt] After filtering: ${result.items.length} items`);
+  
+  // If no total was found from the receipt, calculate from items
+  if (!result.totals.total || result.totals.total === 0) {
+    // Try to find the real total from common patterns
     for (const line of lines) {
-      // Match any line with text followed by a number with decimal
-      const aggressiveMatch = line.match(/^(.{3,}?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
-      if (aggressiveMatch) {
-        const name = aggressiveMatch[1].trim();
-        // Skip obvious metadata
-        if (!name.match(/^(CHF|Total|Summe|Subtotal|MwSt|Netto|Bar|Karte|Zahlung|Rückgeld|Vielen Dank|Bon|Nr|UID|Tel|Fax|www|http)/i) && 
-            name.length >= 3) {
-          result.items.push({
-            quantity: 1,
-            name: name,
-            unitPrice: parseFloat(aggressiveMatch[2].replace(',', '.')),
-            totalPrice: parseFloat(aggressiveMatch[2].replace(',', '.')),
-            taxCategory: aggressiveMatch[3] || undefined,
-          });
-        }
+      // ALDI PREIS pattern
+      const aldiMatch = line.match(/ALDI\s*PREIS\s+(\d+[.,]\d{2})/i);
+      if (aldiMatch) {
+        result.totals.total = parseFloat(aldiMatch[1].replace(',', '.'));
+        console.log(`[parseSwissReceipt] Found ALDI PREIS total: ${result.totals.total}`);
+        break;
+      }
+      // Total-EFT CHF pattern
+      const eftMatch = line.match(/Total-EFT\s+CHF\s+(\d+[.,]\d{2})/i);
+      if (eftMatch) {
+        result.totals.total = parseFloat(eftMatch[1].replace(',', '.'));
+        console.log(`[parseSwissReceipt] Found Total-EFT total: ${result.totals.total}`);
+        break;
+      }
+      // Kartenzahlung CHF pattern
+      const karteMatch = line.match(/Kartenzahlung\s+CHF\s+(\d+[.,]\d{2})/i);
+      if (karteMatch) {
+        result.totals.total = parseFloat(karteMatch[1].replace(',', '.'));
+        console.log(`[parseSwissReceipt] Found Kartenzahlung total: ${result.totals.total}`);
+        break;
       }
     }
-    
-    console.log(`[parseSwissReceipt] Aggressive parsing found ${result.items.length} items`);
   }
   
-  // ALWAYS calculate total from items (most reliable)
-  if (result.items.length > 0) {
-    const calculatedTotal = result.items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
-    // Round to 2 decimal places
-    result.totals.total = Math.round(calculatedTotal * 100) / 100;
-    console.log(`[parseSwissReceipt] Calculated total from ${result.items.length} items: ${result.totals.total}`);
-  }
-  
-  // If still no total (no items), look for the largest price in the text
-  if (result.totals.total === 0 || result.totals.total === undefined) {
-    const allPrices: number[] = [];
-    for (const line of lines) {
-      const priceMatches = line.matchAll(/(\d+[.,]\d{2})/g);
-      for (const match of priceMatches) {
-        allPrices.push(parseFloat(match[1].replace(',', '.')));
-      }
-    }
-    if (allPrices.length > 0) {
-      // The total is usually the largest price
-      result.totals.total = Math.max(...allPrices);
-      console.log(`[parseSwissReceipt] Set total as largest price: ${result.totals.total}`);
+  // If STILL no total, calculate from items
+  if (!result.totals.total || result.totals.total === 0) {
+    if (result.items.length > 0) {
+      const calculatedTotal = result.items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
+      result.totals.total = Math.round(calculatedTotal * 100) / 100;
+      console.log(`[parseSwissReceipt] Calculated total from ${result.items.length} items: ${result.totals.total}`);
     }
   }
   

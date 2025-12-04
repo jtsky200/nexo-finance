@@ -2856,12 +2856,18 @@ exports.useShoppingListTemplate = (0, https_1.onCall)(async (request) => {
 });
 // Analyze Receipt with intelligent parsing
 exports.analyzeReceipt = (0, https_1.onCall)(async (request) => {
+    var _a, _b, _c;
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
     const { fileData, fileType, fileName } = request.data;
+    if (!fileData) {
+        return { success: false, error: 'Keine Bilddaten erhalten' };
+    }
     const buffer = Buffer.from(fileData, 'base64');
     let extractedText = '';
+    let visionError = '';
+    console.log(`Processing receipt: ${fileName}, type: ${fileType}, size: ${buffer.length} bytes`);
     // Step 1: Extract text using OCR
     try {
         const mimeType = (fileType === null || fileType === void 0 ? void 0 : fileType.toLowerCase()) || '';
@@ -2870,8 +2876,9 @@ exports.analyzeReceipt = (0, https_1.onCall)(async (request) => {
             const pdfParse = require('pdf-parse');
             const pdfData = await pdfParse(buffer);
             extractedText = (pdfData.text || '').trim();
+            console.log('PDF text extracted:', extractedText.length, 'chars');
         }
-        else if (mimeType.includes('image')) {
+        else if (mimeType.includes('image') || ['jpg', 'jpeg', 'png', 'webp'].includes(fileExt)) {
             // Use Google Vision for images
             try {
                 const vision = require('@google-cloud/vision');
@@ -2879,25 +2886,52 @@ exports.analyzeReceipt = (0, https_1.onCall)(async (request) => {
                 const [result] = await client.textDetection(buffer);
                 const detections = result.textAnnotations;
                 extractedText = detections && detections.length > 0 ? detections[0].description : '';
+                console.log('Vision OCR result:', extractedText.length, 'chars');
             }
             catch (e) {
-                console.error('Vision OCR error:', e);
-                return { success: false, error: 'OCR fehlgeschlagen. Bitte Google Cloud Vision aktivieren.' };
+                console.error('Vision OCR error:', e.message);
+                visionError = e.message;
+                // Try to provide helpful error message
+                if (((_a = e.message) === null || _a === void 0 ? void 0 : _a.includes('PERMISSION_DENIED')) || ((_b = e.message) === null || _b === void 0 ? void 0 : _b.includes('403'))) {
+                    return {
+                        success: false,
+                        error: 'Google Cloud Vision API nicht aktiviert. Bitte in der Google Cloud Console aktivieren: https://console.cloud.google.com/apis/library/vision.googleapis.com',
+                        details: e.message
+                    };
+                }
+                if ((_c = e.message) === null || _c === void 0 ? void 0 : _c.includes('billing')) {
+                    return {
+                        success: false,
+                        error: 'Google Cloud Billing nicht aktiviert. Vision API benötigt ein Abrechnungskonto.',
+                        details: e.message
+                    };
+                }
+                return {
+                    success: false,
+                    error: 'OCR fehlgeschlagen: ' + e.message,
+                    details: 'Bitte Google Cloud Vision API aktivieren oder Bild mit besserer Qualität hochladen.'
+                };
             }
         }
         else {
             extractedText = buffer.toString('utf8').trim();
         }
-        if (!extractedText || extractedText.length < 20) {
-            return { success: false, error: 'Kein Text erkannt' };
+        if (!extractedText || extractedText.length < 10) {
+            return {
+                success: false,
+                error: 'Kein Text erkannt. Bitte Quittung mit besserer Beleuchtung fotografieren.',
+                rawText: extractedText || '',
+                visionError: visionError
+            };
         }
+        console.log('Extracted text preview:', extractedText.substring(0, 200));
         // Step 2: Parse the receipt intelligently
         const receiptData = parseSwissReceipt(extractedText);
         return Object.assign({ success: true }, receiptData);
     }
     catch (error) {
         console.error('Receipt analysis error:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: error.message, stack: error.stack };
     }
 });
 // Intelligent Swiss receipt parser

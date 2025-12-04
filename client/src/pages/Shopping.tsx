@@ -747,58 +747,227 @@ export default function Shopping() {
   };
 
   // Receipt Scanner Functions
+  // Scanner state for auto-detection
+  const [scannerStatus, setScannerStatus] = useState<'idle' | 'scanning' | 'detected' | 'capturing'>('idle');
+  const [detectionProgress, setDetectionProgress] = useState(0);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number | null>(null);
+  
   const startCamera = async () => {
     try {
+      // Check if camera is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast.error('Kamera wird nicht unterstützt. Bitte Bild hochladen.');
+        return;
+      }
+      
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
       });
       setCameraStream(stream);
       setIsCameraActive(true);
+      setScannerStatus('scanning');
       
       // Attach stream to video element
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        await videoRef.current.play();
+        toast.success('Scanner aktiv - Quittung im Rahmen positionieren');
+        
+        // Start edge detection loop
+        startEdgeDetection();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Camera error:', error);
-      toast.error('Kamera konnte nicht gestartet werden. Bitte Berechtigung erteilen.');
+      if (error.name === 'NotAllowedError') {
+        toast.error('Kamera-Berechtigung verweigert. Bitte in Browsereinstellungen erlauben.');
+      } else if (error.name === 'NotFoundError') {
+        toast.error('Keine Kamera gefunden. Bitte Bild hochladen.');
+      } else {
+        toast.error('Kamera-Fehler: ' + error.message);
+      }
     }
+  };
+  
+  // Edge detection for automatic receipt capture
+  const startEdgeDetection = () => {
+    let stableFrames = 0;
+    const requiredStableFrames = 15; // ~0.5 seconds of stable detection
+    
+    const detectEdges = () => {
+      if (!videoRef.current || !canvasRef.current || !isCameraActive) return;
+      
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx || video.videoWidth === 0) {
+        animationRef.current = requestAnimationFrame(detectEdges);
+        return;
+      }
+      
+      // Set canvas size to match video
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      // Draw current frame
+      ctx.drawImage(video, 0, 0);
+      
+      // Get image data for analysis
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      
+      // Simple brightness and contrast check for receipt detection
+      let brightPixels = 0;
+      let edgePixels = 0;
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const scanRadius = Math.min(canvas.width, canvas.height) * 0.35;
+      
+      // Check center area for bright content (receipt is usually white)
+      for (let y = Math.floor(centerY - scanRadius); y < centerY + scanRadius; y += 4) {
+        for (let x = Math.floor(centerX - scanRadius); x < centerX + scanRadius; x += 4) {
+          const i = (y * canvas.width + x) * 4;
+          const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+          
+          if (brightness > 180) brightPixels++;
+          
+          // Check for edges (contrast with neighbors)
+          if (x > 0 && x < canvas.width - 1) {
+            const leftBrightness = (data[i - 4] + data[i - 3] + data[i - 2]) / 3;
+            const rightBrightness = (data[i + 4] + data[i + 5] + data[i + 6]) / 3;
+            if (Math.abs(brightness - leftBrightness) > 30 || Math.abs(brightness - rightBrightness) > 30) {
+              edgePixels++;
+            }
+          }
+        }
+      }
+      
+      // Calculate detection score
+      const totalPixelsChecked = (scanRadius * 2 / 4) * (scanRadius * 2 / 4);
+      const brightRatio = brightPixels / totalPixelsChecked;
+      const edgeRatio = edgePixels / totalPixelsChecked;
+      
+      // Receipt detected if enough bright area with defined edges
+      const isReceiptDetected = brightRatio > 0.3 && edgeRatio > 0.05;
+      
+      if (isReceiptDetected) {
+        stableFrames++;
+        setDetectionProgress(Math.min(100, (stableFrames / requiredStableFrames) * 100));
+        
+        if (stableFrames >= requiredStableFrames && scannerStatus !== 'capturing') {
+          // Auto-capture!
+          setScannerStatus('capturing');
+          toast.info('Quittung erkannt - Aufnahme...');
+          setTimeout(() => capturePhoto(), 300);
+          return;
+        }
+        setScannerStatus('detected');
+      } else {
+        stableFrames = Math.max(0, stableFrames - 2);
+        setDetectionProgress(Math.max(0, (stableFrames / requiredStableFrames) * 100));
+        setScannerStatus('scanning');
+      }
+      
+      animationRef.current = requestAnimationFrame(detectEdges);
+    };
+    
+    animationRef.current = requestAnimationFrame(detectEdges);
   };
 
   const stopCamera = () => {
+    // Stop animation frame
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+    
     if (cameraStream) {
       cameraStream.getTracks().forEach(track => track.stop());
       setCameraStream(null);
     }
     setIsCameraActive(false);
+    setScannerStatus('idle');
+    setDetectionProgress(0);
   };
 
   const capturePhoto = () => {
     if (videoRef.current) {
+      const video = videoRef.current;
+      
+      // Check if video has actual content
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        toast.error('Kamera noch nicht bereit. Bitte warten...');
+        setScannerStatus('scanning');
+        return;
+      }
+      
+      // Stop detection loop
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+      
+      setScannerStatus('capturing');
+      
       const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
+      // Use higher resolution for better OCR
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
+      
       if (ctx) {
-        ctx.drawImage(videoRef.current, 0, 0);
+        // Draw with image smoothing disabled for sharper text
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(video, 0, 0);
+        
+        toast.success('Foto aufgenommen!');
+        
         canvas.toBlob((blob) => {
           if (blob) {
             const file = new File([blob], 'receipt.jpg', { type: 'image/jpeg' });
             stopCamera();
             processReceipt(file);
+          } else {
+            toast.error('Fehler beim Erstellen des Bildes');
+            setScannerStatus('scanning');
+            startEdgeDetection();
           }
-        }, 'image/jpeg', 0.95);
+        }, 'image/jpeg', 0.95); // Higher quality
       }
+    } else {
+      toast.error('Video-Element nicht verfügbar');
     }
   };
 
   // Cleanup camera on dialog close
   useEffect(() => {
-    if (!showReceiptScanner && cameraStream) {
-      stopCamera();
+    if (!showReceiptScanner) {
+      if (cameraStream) {
+        stopCamera();
+      }
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
     }
   }, [showReceiptScanner]);
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -815,37 +984,54 @@ export default function Shopping() {
     try {
       const reader = new FileReader();
       reader.onload = async () => {
-        const base64 = (reader.result as string).split(',')[1];
-        setReceiptImage(reader.result as string);
-        
-        // Use intelligent receipt analyzer
-        const analyzeReceiptFn = httpsCallable(functions, 'analyzeReceipt');
-        const result = await analyzeReceiptFn({
-          fileData: base64,
-          fileType: file.type,
-          fileName: file.name,
-        });
-        
-        const data = result.data as any;
-        
-        if (data.success && data.items && data.items.length > 0) {
-          setReceiptData({
-            store: data.store,
-            purchase: data.purchase,
-            items: data.items,
-            totals: data.totals,
-            confidence: data.confidence,
+        try {
+          const base64 = (reader.result as string).split(',')[1];
+          setReceiptImage(reader.result as string);
+          
+          toast.info('Analysiere Quittung mit OCR...');
+          
+          // Use intelligent receipt analyzer
+          const analyzeReceiptFn = httpsCallable(functions, 'analyzeReceipt');
+          const result = await analyzeReceiptFn({
+            fileData: base64,
+            fileType: file.type || 'image/jpeg',
+            fileName: file.name || 'photo.jpg',
           });
-          setScannedReceiptItems(data.items.map((item: ReceiptItem) => ({ ...item, selected: true })));
-          toast.success(`${data.items.length} Artikel erkannt (${data.confidence}% Konfidenz)`);
-        } else {
-          toast.error(data.error || 'Keine Artikel erkannt');
+          
+          const data = result.data as any;
+          console.log('Receipt analysis result:', data);
+          
+          if (data.success && data.items && data.items.length > 0) {
+            setReceiptData({
+              store: data.store || { name: 'Unbekannt' },
+              purchase: data.purchase || {},
+              items: data.items,
+              totals: data.totals || { total: 0 },
+              confidence: data.confidence || 50,
+            });
+            setScannedReceiptItems(data.items.map((item: ReceiptItem) => ({ ...item, selected: true })));
+            toast.success(`${data.items.length} Artikel erkannt (${data.confidence || 50}% Konfidenz)`);
+          } else if (data.rawText) {
+            // Show raw text for debugging
+            toast.error(`Keine Artikel erkannt. Text gefunden: "${data.rawText.substring(0, 100)}..."`);
+            console.log('Raw OCR text:', data.rawText);
+          } else {
+            toast.error(data.error || 'Keine Artikel erkannt. Versuche bessere Bildqualität.');
+          }
+        } catch (innerError: any) {
+          console.error('Receipt processing error:', innerError);
+          toast.error('Analysefehler: ' + (innerError.message || 'Unbekannter Fehler'));
         }
         
         setIsScanning(false);
       };
+      reader.onerror = () => {
+        toast.error('Fehler beim Lesen der Datei');
+        setIsScanning(false);
+      };
       reader.readAsDataURL(file);
     } catch (error: any) {
+      console.error('File read error:', error);
       toast.error('Fehler: ' + error.message);
       setIsScanning(false);
     }
@@ -1835,37 +2021,118 @@ export default function Shopping() {
                 {/* Camera View */}
                 {scannerMode === 'camera' && (
                   <div className="space-y-3">
-                    <div className="border rounded-lg overflow-hidden bg-black aspect-video relative">
+                    <div className="border rounded-lg overflow-hidden bg-black aspect-[3/4] relative">
                       {isCameraActive ? (
-                        <video 
-                          ref={videoRef}
-                          autoPlay 
-                          playsInline 
-                          muted
-                          className="w-full h-full object-cover"
-                        />
+                        <>
+                          <video 
+                            ref={videoRef}
+                            autoPlay 
+                            playsInline 
+                            muted
+                            className="w-full h-full object-cover"
+                          />
+                          {/* Hidden canvas for processing */}
+                          <canvas ref={canvasRef} className="hidden" />
+                          
+                          {/* Scanner overlay with guide frame */}
+                          <div className="absolute inset-0 pointer-events-none">
+                            {/* Dark overlay outside frame */}
+                            <div className="absolute inset-0 bg-black/40" />
+                            
+                            {/* Clear scanning area */}
+                            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[85%] h-[75%]">
+                              <div className="relative w-full h-full bg-transparent">
+                                {/* Cut out the center */}
+                                <div className="absolute inset-0 shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]" />
+                              </div>
+                            </div>
+                            
+                            {/* Corner guides */}
+                            <div className="absolute left-[7.5%] top-[12.5%] w-8 h-8">
+                              <div className={`absolute top-0 left-0 w-full h-1 rounded ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
+                              <div className={`absolute top-0 left-0 w-1 h-full rounded ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
+                            </div>
+                            <div className="absolute right-[7.5%] top-[12.5%] w-8 h-8">
+                              <div className={`absolute top-0 right-0 w-full h-1 rounded ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
+                              <div className={`absolute top-0 right-0 w-1 h-full rounded ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
+                            </div>
+                            <div className="absolute left-[7.5%] bottom-[12.5%] w-8 h-8">
+                              <div className={`absolute bottom-0 left-0 w-full h-1 rounded ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
+                              <div className={`absolute bottom-0 left-0 w-1 h-full rounded ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
+                            </div>
+                            <div className="absolute right-[7.5%] bottom-[12.5%] w-8 h-8">
+                              <div className={`absolute bottom-0 right-0 w-full h-1 rounded ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
+                              <div className={`absolute bottom-0 right-0 w-1 h-full rounded ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
+                            </div>
+                            
+                            {/* Status text */}
+                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-center">
+                              <div className={`px-4 py-2 rounded-full text-sm font-medium ${
+                                scannerStatus === 'capturing' ? 'bg-green-500 text-white' :
+                                scannerStatus === 'detected' ? 'bg-green-500/80 text-white' :
+                                'bg-black/60 text-white'
+                              }`}>
+                                {scannerStatus === 'capturing' && 'Aufnahme...'}
+                                {scannerStatus === 'detected' && `Erkannt! Halte still... ${Math.round(detectionProgress)}%`}
+                                {scannerStatus === 'scanning' && 'Quittung im Rahmen positionieren'}
+                              </div>
+                            </div>
+                            
+                            {/* Progress indicator */}
+                            {scannerStatus === 'detected' && (
+                              <div className="absolute top-4 left-1/2 -translate-x-1/2 w-[60%]">
+                                <div className="h-1.5 bg-white/30 rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-green-500 transition-all duration-100"
+                                    style={{ width: `${detectionProgress}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </>
                       ) : (
                         <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <Camera className="w-12 h-12 text-white/40 mb-3" />
-                          <p className="text-white/60 text-sm">Kamera nicht aktiv</p>
+                          <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center mb-4">
+                            <Camera className="w-10 h-10 text-white/60" />
+                          </div>
+                          <p className="text-white/80 text-base font-medium">Scanner bereit</p>
+                          <p className="text-white/50 text-sm mt-1">Tippe auf "Scanner starten"</p>
                         </div>
                       )}
                     </div>
+                    
+                    {/* Instructions */}
+                    {isCameraActive && (
+                      <div className="bg-muted rounded-lg p-3 text-sm space-y-1">
+                        <p className="font-medium flex items-center gap-2">
+                          <ScanLine className="w-4 h-4 text-primary" />
+                          Automatischer Scanner aktiv
+                        </p>
+                        <ul className="text-muted-foreground text-xs space-y-0.5 ml-6">
+                          <li>• Quittung flach halten</li>
+                          <li>• Gute Beleuchtung sicherstellen</li>
+                          <li>• Quittung im Rahmen positionieren</li>
+                          <li>• Foto wird automatisch aufgenommen</li>
+                        </ul>
+                      </div>
+                    )}
+                    
                     <div className="flex gap-2 justify-center">
                       {!isCameraActive ? (
-                        <Button onClick={startCamera} className="flex-1">
-                          <Video className="w-4 h-4 mr-2" />
-                          Kamera starten
+                        <Button onClick={startCamera} className="flex-1 h-12 text-base">
+                          <ScanLine className="w-5 h-5 mr-2" />
+                          Scanner starten
                         </Button>
                       ) : (
                         <>
-                          <Button onClick={stopCamera} variant="outline">
+                          <Button onClick={stopCamera} variant="outline" className="h-10">
                             <VideoOff className="w-4 h-4 mr-2" />
                             Stoppen
                           </Button>
-                          <Button onClick={capturePhoto} className="flex-1">
+                          <Button onClick={capturePhoto} className="flex-1 h-10">
                             <Camera className="w-4 h-4 mr-2" />
-                            Foto aufnehmen
+                            Manuell aufnehmen
                           </Button>
                         </>
                       )}

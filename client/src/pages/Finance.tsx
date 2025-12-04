@@ -26,7 +26,7 @@ export default function Finance() {
   const [showPersonInvoicesDialog, setShowPersonInvoicesDialog] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<any>(null);
   const [defaultType, setDefaultType] = useState<'einnahme' | 'ausgabe'>('ausgabe');
-  const [newPerson, setNewPerson] = useState({ name: '', email: '', phone: '', currency: 'CHF' });
+  const [newPerson, setNewPerson] = useState({ name: '', email: '', phone: '', currency: 'CHF', type: 'household' as const });
   const [activeTab, setActiveTab] = useState('overview');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [deletePersonId, setDeletePersonId] = useState<string | null>(null);
@@ -51,7 +51,7 @@ export default function Finance() {
     if (categoryFilter === 'all') return allEntries;
     return allEntries.filter(e => e.category === categoryFilter);
   }, [allEntries, categoryFilter]);
-  const { data: people = [], isLoading: peopleLoading } = usePeople();
+  const { data: people = [], isLoading: peopleLoading, refetch: refetchPeople } = usePeople();
 
   const formatDate = (date: Date | any) => {
     if (!date) return 'N/A';
@@ -125,7 +125,7 @@ export default function Finance() {
     // Aggregate data - only count PAID expenses
     allEntries.forEach(entry => {
       try {
-        const entryDate = entry.date?.toDate ? entry.date.toDate() : new Date(entry.date);
+        const entryDate = (entry.date as any)?.toDate ? (entry.date as any).toDate() : new Date(entry.date);
         if (isNaN(entryDate.getTime())) return;
         
         const key = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
@@ -201,7 +201,7 @@ export default function Finance() {
   const exportToCSV = () => {
     const headers = ['Datum', 'Typ', 'Kategorie', 'Betrag', 'Währung', 'Zahlungsmethode', 'Status', 'Notizen'];
     const rows = allEntries.map(entry => {
-      const date = entry.date?.toDate ? entry.date.toDate() : new Date(entry.date);
+      const date = (entry.date as any)?.toDate ? (entry.date as any).toDate() : new Date(entry.date);
       const dateStr = isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString('de-CH');
       const isIncome = entry.type === 'einnahme';
       // Status nur für Ausgaben, bei Einnahmen leer
@@ -291,7 +291,7 @@ export default function Finance() {
           </thead>
           <tbody>
             ${allEntries.map(entry => {
-              const date = entry.date?.toDate ? entry.date.toDate() : new Date(entry.date);
+              const date = (entry.date as any)?.toDate ? (entry.date as any).toDate() : new Date(entry.date);
               const dateStr = isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString('de-CH');
               const isIncome = entry.type === 'einnahme';
               // Status nur für Ausgaben anzeigen, nicht für Einnahmen
@@ -354,7 +354,7 @@ export default function Finance() {
     try {
       await createPerson(newPerson);
       toast.success(t('finance.personAdded'));
-      setNewPerson({ name: '', email: '', phone: '', currency: 'CHF' });
+      setNewPerson({ name: '', email: '', phone: '', currency: 'CHF', type: 'household' as const });
       setShowAddPersonDialog(false);
     } catch (error: any) {
       toast.error(t('common.error') + ': ' + error.message);

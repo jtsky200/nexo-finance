@@ -21,14 +21,15 @@ export interface Reminder {
   id: string;
   userId: string;
   title: string;
-  type: 'termin' | 'zahlung' | 'aufgabe';
-  dueDate: Date;
+  type: 'termin' | 'zahlung' | 'aufgabe' | string;
+  dueDate: Date | string;
+  date?: Date | string | null;
   isAllDay: boolean;
   amount?: number | null;
   currency?: string | null;
   notes?: string | null;
   recurrenceRule?: string | null;
-  status: 'offen' | 'erledigt' | 'überfällig';
+  status: 'offen' | 'erledigt' | 'überfällig' | 'ausstehend' | string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -219,12 +220,14 @@ export interface FinanceEntry {
   id: string;
   userId: string;
   date: Date | string;
-  type: 'einnahme' | 'ausgabe';
+  type: 'einnahme' | 'ausgabe' | 'income' | 'expense';
   category: string;
   amount: number;
   currency: string;
   paymentMethod?: string | null;
   notes?: string | null;
+  description?: string | null;
+  status?: string | null;
   isRecurring: boolean;
   recurrenceRule?: string | null;
   createdAt: Date;
@@ -378,7 +381,7 @@ export interface Person {
   name: string;
   email?: string | null;
   phone?: string | null;
-  type: 'household' | 'external'; // Haushalt oder Externe Person
+  type: 'household' | 'external' | 'child'; // Haushalt, Externe Person oder Kind
   relationship?: 'creditor' | 'debtor' | 'both' | null; // Nur für external
   notes?: string | null;
   totalOwed: number;
@@ -492,6 +495,7 @@ export interface ShoppingItem {
   estimatedPrice: number;
   actualPrice?: number | null;
   currency: string;
+  store?: string | null;
   status: 'not_bought' | 'bought';
   boughtAt?: Date | null;
   linkedExpenseId?: string | null;

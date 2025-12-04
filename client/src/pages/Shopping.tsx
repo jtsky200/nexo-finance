@@ -83,8 +83,16 @@ const categoryConfig: Record<string, { icon: any; color: string; bg: string; cha
   'Sonstiges': { icon: Package, color: 'text-gray-600', bg: 'bg-gray-100 dark:bg-gray-900/30', chartColor: '#6b7280' },
 };
 
+// Quick add template type
+interface QuickAddTemplate {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+}
+
 // Default quick add templates
-const defaultQuickAddTemplates = [
+const defaultQuickAddTemplates: QuickAddTemplate[] = [
   { id: '1', name: 'Milch', category: 'Lebensmittel', price: 1.80 },
   { id: '2', name: 'Brot', category: 'Lebensmittel', price: 3.50 },
   { id: '3', name: 'Eier (6er)', category: 'Lebensmittel', price: 4.20 },
@@ -143,7 +151,7 @@ export default function Shopping() {
   const [budgetInput, setBudgetInput] = useState('');
   
   // Quick add templates state
-  const [quickAddTemplates, setQuickAddTemplates] = useState(() => {
+  const [quickAddTemplates, setQuickAddTemplates] = useState<QuickAddTemplate[]>(() => {
     const saved = localStorage.getItem(QUICK_ADD_KEY);
     return saved ? JSON.parse(saved) : defaultQuickAddTemplates;
   });
@@ -600,15 +608,16 @@ export default function Shopping() {
         category: 'Lebensmittel',
         amount: Math.round(pendingFinanceAmount * 100),
         currency: 'CHF',
-        description: `Einkauf (${boughtItems.length} Artikel)`,
+        notes: `Einkauf (${boughtItems.length} Artikel)`,
         paymentMethod: 'Karte',
+        isRecurring: false,
       });
       toast.success(`CHF ${pendingFinanceAmount.toFixed(2)} zu Finanzen hinzugefügt`);
       setShowFinanceConfirm(false);
       
       // Update budget
       if (budget.isSet) {
-        setBudget(prev => ({
+        setBudget((prev: { amount: number; isSet: boolean }) => ({
           ...prev,
           amount: Math.max(0, prev.amount - pendingFinanceAmount)
         }));
@@ -904,10 +913,10 @@ export default function Shopping() {
     
     try {
       await createFinanceEntry({
-        type: 'expense',
+        type: 'ausgabe',
         amount: Math.round(receiptData.totals.total * 100),
         category: 'Lebensmittel',
-        description: `Einkauf bei ${receiptData.store.name}`,
+        notes: `Einkauf bei ${receiptData.store.name}`,
         date: receiptData.purchase.date || new Date().toISOString().split('T')[0],
         paymentMethod: receiptData.purchase.paymentMethod || 'Karte',
         status: 'bezahlt',

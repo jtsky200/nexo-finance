@@ -574,6 +574,109 @@ export default function Shopping() {
     }
   };
 
+  // Export list as PDF
+  const handleExportPDF = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      toast.error('Popup blockiert');
+      return;
+    }
+
+    const totalPrice = notBoughtItems.reduce((sum, i) => sum + (i.estimatedPrice * i.quantity), 0) / 100;
+    const groupedByCategory: Record<string, typeof notBoughtItems> = {};
+    notBoughtItems.forEach(item => {
+      if (!groupedByCategory[item.category]) groupedByCategory[item.category] = [];
+      groupedByCategory[item.category].push(item);
+    });
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Einkaufsliste</title>
+        <style>
+          body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+          h1 { font-size: 20px; margin-bottom: 5px; }
+          .date { color: #666; font-size: 12px; margin-bottom: 20px; }
+          .category { font-weight: bold; margin-top: 15px; padding: 5px 0; border-bottom: 1px solid #ddd; }
+          .item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dotted #eee; }
+          .item-name { flex: 1; }
+          .item-qty { color: #666; margin: 0 10px; }
+          .item-price { font-weight: 500; }
+          .total { margin-top: 20px; padding-top: 10px; border-top: 2px solid #333; font-weight: bold; display: flex; justify-content: space-between; }
+          .checkbox { width: 14px; height: 14px; border: 1px solid #333; margin-right: 10px; display: inline-block; }
+          @media print { body { padding: 10px; } }
+        </style>
+      </head>
+      <body>
+        <h1>Einkaufsliste</h1>
+        <p class="date">${new Date().toLocaleDateString('de-CH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+        ${Object.entries(groupedByCategory).map(([category, items]) => `
+          <div class="category">${category}</div>
+          ${items.map(item => `
+            <div class="item">
+              <span class="checkbox"></span>
+              <span class="item-name">${item.item}</span>
+              <span class="item-qty">${item.quantity}x</span>
+              <span class="item-price">CHF ${(item.estimatedPrice * item.quantity / 100).toFixed(2)}</span>
+            </div>
+          `).join('')}
+        `).join('')}
+        <div class="total">
+          <span>Total (${notBoughtItems.length} Artikel)</span>
+          <span>CHF ${totalPrice.toFixed(2)}</span>
+        </div>
+        <script>window.print();</script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    toast.success('PDF wird erstellt');
+  };
+
+  // Delete all not bought items
+  const handleClearAllItems = async () => {
+    if (notBoughtItems.length === 0) {
+      toast.error('Keine Artikel zum Löschen');
+      return;
+    }
+    
+    try {
+      for (const item of notBoughtItems) {
+        await deleteShoppingItem(item.id);
+      }
+      toast.success(`${notBoughtItems.length} Artikel gelöscht`);
+      refetch();
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
+  // Re-add bought items back to list
+  const handleReAddBoughtItems = async () => {
+    if (boughtItems.length === 0) {
+      toast.error('Keine gekauften Artikel vorhanden');
+      return;
+    }
+    
+    try {
+      for (const item of boughtItems) {
+        await createShoppingItem({
+          item: item.item,
+          quantity: item.quantity,
+          category: item.category,
+          estimatedPrice: item.estimatedPrice,
+          currency: 'CHF',
+          store: (item as any).store || '',
+        });
+      }
+      toast.success(`${boughtItems.length} Artikel wieder hinzugefügt`);
+      refetch();
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
   // Receipt Scanner Functions
   const startCamera = async () => {
     try {
@@ -927,6 +1030,14 @@ export default function Shopping() {
             <Share2 className="w-4 h-4 mr-2" />
             Teilen
           </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={handleExportPDF}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            PDF
+          </Button>
           {boughtItems.length > 0 && (
             <Button 
               variant="outline" 
@@ -1134,6 +1245,21 @@ export default function Shopping() {
               Filter zurücksetzen
             </Button>
           )}
+          {notBoughtItems.length > 0 && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              onClick={() => {
+                if (confirm(`Alle ${notBoughtItems.length} Artikel löschen?`)) {
+                  handleClearAllItems();
+                }
+              }}
+            >
+              <Trash2 className="w-4 h-4 mr-1" />
+              Alle löschen
+            </Button>
+          )}
         </div>
 
         {/* Shopping List */}
@@ -1272,14 +1398,24 @@ export default function Shopping() {
                       <span className="text-muted-foreground">Gesamt:</span>
                       <span className="font-bold">CHF {totalSpent.toFixed(2)}</span>
                     </div>
-                    <Button 
-                      className="w-full mt-2" 
-                      size="sm"
-                      onClick={handleSyncToFinance}
-                    >
-                      <Banknote className="w-4 h-4 mr-2" />
-                      Zu Finanzen hinzufügen
-                    </Button>
+                    <div className="flex gap-2 mt-2">
+                      <Button 
+                        className="flex-1" 
+                        size="sm"
+                        onClick={handleSyncToFinance}
+                      >
+                        <Banknote className="w-4 h-4 mr-1" />
+                        Zu Finanzen
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        size="sm"
+                        onClick={handleReAddBoughtItems}
+                        title="Artikel erneut zur Liste hinzufügen"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 )}
               </CardContent>

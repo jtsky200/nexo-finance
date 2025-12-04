@@ -45,10 +45,10 @@ export default function Dashboard() {
       .slice(0, 3);
   }, [allReminders, now]);
 
-  // Get open bills (from useAllBills which includes person invoices)
+  // Get open bills - ONLY outgoing (I owe someone) - these go to expenses when paid
   const openBills = useMemo(() => {
     return allBills
-      .filter(b => b.status !== 'paid')
+      .filter(b => b.status !== 'paid' && b.direction === 'outgoing')
       .sort((a, b) => {
         // Sort by due date if available, otherwise by creation date
         const dateA = a.dueDate ? new Date(a.dueDate).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : Infinity);
@@ -58,9 +58,35 @@ export default function Dashboard() {
       .slice(0, 5);
   }, [allBills]);
 
-  // Count overdue bills
+  // Get open claims - ONLY incoming (someone owes me) - these go to income when paid
+  const openClaims = useMemo(() => {
+    return allBills
+      .filter(b => b.status !== 'paid' && b.direction === 'incoming')
+      .sort((a, b) => {
+        const dateA = a.dueDate ? new Date(a.dueDate).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : Infinity);
+        const dateB = b.dueDate ? new Date(b.dueDate).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : Infinity);
+        return dateA - dateB;
+      })
+      .slice(0, 5);
+  }, [allBills]);
+
+  // Count overdue bills (only outgoing - what I need to pay)
   const overdueCount = useMemo(() => {
-    return allBills.filter(b => b.isOverdue && b.status !== 'paid').length;
+    return allBills.filter(b => b.isOverdue && b.status !== 'paid' && b.direction === 'outgoing').length;
+  }, [allBills]);
+
+  // Total pending bills (only outgoing)
+  const totalPendingBillsOutgoing = useMemo(() => {
+    return allBills
+      .filter(b => b.status !== 'paid' && b.direction === 'outgoing')
+      .reduce((sum, b) => sum + (b.amount || 0), 0) / 100;
+  }, [allBills]);
+
+  // Total open claims (incoming - what I should receive)
+  const totalOpenClaims = useMemo(() => {
+    return allBills
+      .filter(b => b.status !== 'paid' && b.direction === 'incoming')
+      .reduce((sum, b) => sum + (b.amount || 0), 0) / 100;
   }, [allBills]);
 
   // Show warning for bills without due date (only once per bill)
@@ -120,8 +146,6 @@ export default function Dashboard() {
 
   const balance = totalIncome - totalExpenses;
 
-  // Calculate total pending bills
-  const totalPendingBills = (billStats?.openAmount || 0) / 100;
 
   const formatDate = (date: Date | any) => {
     if (!date) return 'N/A';
@@ -246,9 +270,9 @@ export default function Dashboard() {
                 </Badge>
               )}
             </div>
-            {totalPendingBills > 0 && (
+            {totalPendingBillsOutgoing > 0 && (
               <p className="text-lg font-bold text-red-600 mt-1">
-                {formatAmount(totalPendingBills)}
+                {formatAmount(totalPendingBillsOutgoing)}
               </p>
             )}
           </CardHeader>

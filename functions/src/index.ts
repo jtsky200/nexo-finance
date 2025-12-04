@@ -946,6 +946,24 @@ export const getAllBills = onCall(async (request) => {
     for (const invoiceDoc of invoicesSnapshot.docs) {
       const invoiceData = invoiceDoc.data();
       
+      // Determine direction: 
+      // - If invoice has direction, use it
+      // - Otherwise, infer from person's relationship:
+      //   - creditor (I owe them) → outgoing
+      //   - debtor (they owe me) → incoming
+      //   - household/both → check invoice context or default to outgoing (I pay household bills)
+      let inferredDirection = invoiceData.direction;
+      if (!inferredDirection) {
+        if (personData.relationship === 'creditor') {
+          inferredDirection = 'outgoing'; // I owe this person
+        } else if (personData.relationship === 'debtor') {
+          inferredDirection = 'incoming'; // This person owes me
+        } else {
+          // household or both - default to outgoing (most bills are expenses)
+          inferredDirection = 'outgoing';
+        }
+      }
+      
       bills.push({
         id: invoiceDoc.id,
         source: 'person',
@@ -956,7 +974,7 @@ export const getAllBills = onCall(async (request) => {
         amount: invoiceData.amount,
         currency: personData.currency || 'CHF',
         status: invoiceData.status,
-        direction: invoiceData.direction || 'incoming',
+        direction: inferredDirection,
         dueDate: invoiceData.dueDate?.toDate ? invoiceData.dueDate.toDate().toISOString() : null,
         reminderDate: invoiceData.reminderDate?.toDate ? invoiceData.reminderDate.toDate().toISOString() : null,
         reminderEnabled: invoiceData.reminderEnabled || false,

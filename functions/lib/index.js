@@ -838,6 +838,25 @@ exports.getAllBills = (0, https_1.onCall)(async (request) => {
         const invoicesSnapshot = await personDoc.ref.collection('invoices').get();
         for (const invoiceDoc of invoicesSnapshot.docs) {
             const invoiceData = invoiceDoc.data();
+            // Determine direction: 
+            // - If invoice has direction, use it
+            // - Otherwise, infer from person's relationship:
+            //   - creditor (I owe them) → outgoing
+            //   - debtor (they owe me) → incoming
+            //   - household/both → check invoice context or default to outgoing (I pay household bills)
+            let inferredDirection = invoiceData.direction;
+            if (!inferredDirection) {
+                if (personData.relationship === 'creditor') {
+                    inferredDirection = 'outgoing'; // I owe this person
+                }
+                else if (personData.relationship === 'debtor') {
+                    inferredDirection = 'incoming'; // This person owes me
+                }
+                else {
+                    // household or both - default to outgoing (most bills are expenses)
+                    inferredDirection = 'outgoing';
+                }
+            }
             bills.push({
                 id: invoiceDoc.id,
                 source: 'person',
@@ -848,7 +867,7 @@ exports.getAllBills = (0, https_1.onCall)(async (request) => {
                 amount: invoiceData.amount,
                 currency: personData.currency || 'CHF',
                 status: invoiceData.status,
-                direction: invoiceData.direction || 'incoming',
+                direction: inferredDirection,
                 dueDate: ((_a = invoiceData.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) ? invoiceData.dueDate.toDate().toISOString() : null,
                 reminderDate: ((_b = invoiceData.reminderDate) === null || _b === void 0 ? void 0 : _b.toDate) ? invoiceData.reminderDate.toDate().toISOString() : null,
                 reminderEnabled: invoiceData.reminderEnabled || false,

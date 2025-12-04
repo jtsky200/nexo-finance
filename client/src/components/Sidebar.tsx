@@ -13,9 +13,11 @@ import {
   Calendar,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ScanLine
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import SidebarCalendarDayDialog from './SidebarCalendarDayDialog';
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -26,6 +28,8 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const [location, setLocation] = useLocation();
   const { t } = useTranslation();
   const [miniCalMonth, setMiniCalMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [showDayDialog, setShowDayDialog] = useState(false);
 
   const navItems = [
     { path: '/dashboard', icon: LayoutDashboard, label: t('nav.dashboard') },
@@ -34,6 +38,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     { path: '/finance', icon: Wallet, label: t('nav.finance') },
     { path: '/people', icon: Users, label: t('nav.people', 'Personen') },
     { path: '/bills', icon: ClipboardList, label: t('nav.bills', 'Rechnungen') },
+    { path: '/documents', icon: ScanLine, label: 'Dokumente' },
     { path: '/shopping', icon: ShoppingCart, label: t('nav.shopping') },
     { path: '/taxes', icon: FileText, label: t('nav.taxes') },
     { path: '/settings', icon: Settings, label: t('nav.settings') },
@@ -75,9 +80,8 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const isToday = (date: Date) => date.toDateString() === new Date().toDateString();
 
   const handleDayClick = (date: Date) => {
-    // Navigate to calendar with the selected date
-    setLocation(`/calendar?date=${date.toISOString().split('T')[0]}`);
-    onClose?.();
+    setSelectedDate(date);
+    setShowDayDialog(true);
   };
 
   const monthNames = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
@@ -213,6 +217,13 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
           </p>
         </div>
       </aside>
+
+      {/* Day Detail Dialog */}
+      <SidebarCalendarDayDialog
+        date={selectedDate}
+        open={showDayDialog}
+        onOpenChange={setShowDayDialog}
+      />
     </>
   );
 }

@@ -17,6 +17,7 @@ import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Calendar from "./pages/Calendar";
+import Documents from "./pages/Documents";
 
 function Router() {
   return (
@@ -29,6 +30,7 @@ function Router() {
       <Route path="/finance" component={Finance} />
       <Route path="/people" component={People} />
       <Route path="/bills" component={Bills} />
+      <Route path="/documents" component={Documents} />
       <Route path="/shopping" component={Shopping} />
       <Route path="/taxes" component={Taxes} />
       <Route path="/calendar" component={Calendar} />

@@ -11,8 +11,9 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Plus, Trash2, Edit2, Camera, QrCode, Copy, 
-  FileText, X, Calendar, Bell, Clock, ArrowDownLeft, ArrowUpRight, Repeat, CalendarDays
+  FileText, X, Calendar, Bell, Clock, ArrowDownLeft, ArrowUpRight, Repeat, CalendarDays, FolderOpen
 } from 'lucide-react';
+import PersonDocumentsTab from './PersonDocumentsTab';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { 
@@ -38,7 +39,7 @@ interface PersonInvoicesDialogProps {
 
 export default function PersonInvoicesDialog({ person, open, onOpenChange, onDataChanged }: PersonInvoicesDialogProps) {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'invoices' | 'appointments'>('invoices');
+  const [activeTab, setActiveTab] = useState<'invoices' | 'appointments' | 'documents'>('invoices');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showAddAppointmentDialog, setShowAddAppointmentDialog] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
@@ -52,7 +53,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     dueDate: new Date().toISOString().split('T')[0],
     isAllDay: true,
     notes: '',
-    recurrenceRule: '' as '' | 'daily' | 'weekly' | 'monthly' | 'yearly',
+    recurrenceRule: 'none' as 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly',
   });
   const [newInvoice, setNewInvoice] = useState({
     amount: '',
@@ -105,7 +106,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         dueDate: new Date(newAppointment.dueDate),
         isAllDay: newAppointment.isAllDay,
         notes: newAppointment.notes || undefined,
-        recurrenceRule: newAppointment.recurrenceRule || undefined,
+        recurrenceRule: newAppointment.recurrenceRule !== 'none' ? newAppointment.recurrenceRule : undefined,
         personId: person.id,
         personName: person.name,
       } as any);
@@ -117,7 +118,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         dueDate: new Date().toISOString().split('T')[0],
         isAllDay: true,
         notes: '',
-        recurrenceRule: '',
+        recurrenceRule: 'none',
       });
       setShowAddAppointmentDialog(false);
       await refreshData();
@@ -139,7 +140,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         dueDate: new Date(editingAppointment.dueDate),
         isAllDay: editingAppointment.isAllDay,
         notes: editingAppointment.notes || undefined,
-        recurrenceRule: editingAppointment.recurrenceRule || undefined,
+        recurrenceRule: editingAppointment.recurrenceRule !== 'none' ? editingAppointment.recurrenceRule : undefined,
       });
       
       toast.success('Termin aktualisiert');
@@ -333,44 +334,47 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       <Dialog open={open} onOpenChange={handleClose}>
         <DialogContent className="max-w-[700px] w-[95vw] max-h-[90vh] p-0 gap-0 overflow-hidden" showCloseButton={false}>
           {/* Header with custom close button */}
-          <div className="bg-slate-50 dark:bg-slate-900 px-6 py-6 border-b relative">
-            <button
-              onClick={() => handleClose(false)}
-              className="absolute top-4 right-4 p-2 rounded-md opacity-70 hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="bg-slate-50 dark:bg-slate-900 px-6 py-5 border-b">
+            {/* Top row: Name and Close button */}
+            <div className="flex items-start justify-between gap-4 mb-4">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xl font-bold shrink-0">
+                <div className="w-12 h-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-lg font-bold shrink-0">
                   {person?.name?.charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold">{person?.name}</h2>
+                  <h2 className="text-lg font-bold">{person?.name}</h2>
                   <p className="text-sm text-muted-foreground">
                     {invoices.length} Rechnungen · {appointments.length} Termine
                   </p>
                 </div>
               </div>
-              <div className="flex gap-2 w-full sm:w-auto">
-                {activeTab === 'invoices' ? (
-                  <>
-                    <Button variant="outline" onClick={() => setShowScanner(true)} className="flex-1 sm:flex-none h-10">
-                      <Camera className="w-4 h-4 mr-2" />
-                      Scannen
-                    </Button>
-                    <Button onClick={() => setShowAddDialog(true)} className="flex-1 sm:flex-none h-10">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Rechnung
-                    </Button>
-                  </>
-                ) : (
-                  <Button onClick={() => setShowAddAppointmentDialog(true)} className="flex-1 sm:flex-none h-10">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Termin
+              <button
+                onClick={() => handleClose(false)}
+                className="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-all shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Bottom row: Action buttons */}
+            <div className="flex gap-2">
+              {activeTab === 'invoices' ? (
+                <>
+                  <Button variant="outline" onClick={() => setShowScanner(true)} size="sm">
+                    <Camera className="w-4 h-4 mr-2" />
+                    Scannen
                   </Button>
-                )}
-              </div>
+                  <Button onClick={() => setShowAddDialog(true)} size="sm">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Rechnung
+                  </Button>
+                </>
+              ) : (
+                <Button onClick={() => setShowAddAppointmentDialog(true)} size="sm">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Termin
+                </Button>
+              )}
             </div>
           </div>
 
@@ -378,7 +382,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
           <div className="px-6 py-6 overflow-y-auto flex-1">
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsList className="grid w-full grid-cols-3 mb-6">
                 <TabsTrigger value="invoices" className="gap-2">
                   <FileText className="w-4 h-4" />
                   Rechnungen ({invoices.length})
@@ -386,6 +390,10 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 <TabsTrigger value="appointments" className="gap-2">
                   <CalendarDays className="w-4 h-4" />
                   Termine ({appointments.length})
+                </TabsTrigger>
+                <TabsTrigger value="documents" className="gap-2">
+                  <FolderOpen className="w-4 h-4" />
+                  Dokumente
                 </TabsTrigger>
               </TabsList>
 
@@ -598,6 +606,22 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                     </Button>
                   </div>
                 )}
+              </TabsContent>
+
+              {/* Documents Tab */}
+              <TabsContent value="documents" className="mt-0">
+                <PersonDocumentsTab
+                  personId={person?.id}
+                  personName={person?.name}
+                  onInvoiceCreated={() => {
+                    refetch();
+                    onDataChanged?.();
+                  }}
+                  onReminderCreated={() => {
+                    refetchAppointments();
+                    onDataChanged?.();
+                  }}
+                />
               </TabsContent>
             </Tabs>
           </div>
@@ -1143,7 +1167,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   <SelectValue placeholder="Keine Wiederholung" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Keine</SelectItem>
+                  <SelectItem value="none">Keine</SelectItem>
                   <SelectItem value="daily">Täglich</SelectItem>
                   <SelectItem value="weekly">Wöchentlich</SelectItem>
                   <SelectItem value="monthly">Monatlich</SelectItem>
@@ -1232,14 +1256,14 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               <div>
                 <Label>Wiederholung</Label>
                 <Select
-                  value={editingAppointment.recurrenceRule || ''}
+                  value={editingAppointment.recurrenceRule || 'none'}
                   onValueChange={(value) => setEditingAppointment({ ...editingAppointment, recurrenceRule: value })}
                 >
                   <SelectTrigger className="mt-2 h-10">
                     <SelectValue placeholder="Keine Wiederholung" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Keine</SelectItem>
+                    <SelectItem value="none">Keine</SelectItem>
                     <SelectItem value="daily">Täglich</SelectItem>
                     <SelectItem value="weekly">Wöchentlich</SelectItem>
                     <SelectItem value="monthly">Monatlich</SelectItem>

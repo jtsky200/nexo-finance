@@ -45,7 +45,7 @@ var __rest = (this && this.__rest) || function (s, e) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = exports.createSchoolSchedule = exports.getChildren = exports.deleteVacation = exports.updateVacation = exports.createVacation = exports.getVacations = exports.deleteWorkSchedule = exports.updateWorkSchedule = exports.createWorkSchedule = exports.getWorkSchedules = exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.getAllBills = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
-exports.deleteSchoolHoliday = exports.getSchoolHolidays = void 0;
+exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
@@ -95,11 +95,26 @@ exports.createReminder = (0, https_1.onCall)(async (request) => {
     }
     const userId = request.auth.uid;
     const { title, type, dueDate, isAllDay, amount, currency, notes, recurrenceRule, personId, personName } = request.data;
+    // Parse and validate dueDate
+    let parsedDueDate = null;
+    if (dueDate) {
+        const dateObj = new Date(dueDate);
+        if (!isNaN(dateObj.getTime())) {
+            parsedDueDate = admin.firestore.Timestamp.fromDate(dateObj);
+        }
+        else {
+            // If date string parsing fails, try to create from current date
+            parsedDueDate = admin.firestore.Timestamp.fromDate(new Date());
+        }
+    }
+    else {
+        parsedDueDate = admin.firestore.Timestamp.fromDate(new Date());
+    }
     const reminderData = {
         userId,
-        title,
-        type,
-        dueDate: admin.firestore.Timestamp.fromDate(new Date(dueDate)),
+        title: title || 'Neuer Termin',
+        type: type || 'termin',
+        dueDate: parsedDueDate,
         isAllDay: isAllDay || false,
         amount: amount || null,
         currency: currency || null,
@@ -901,7 +916,7 @@ exports.getAllBills = (0, https_1.onCall)(async (request) => {
 });
 // ========== Calendar Functions ==========
 exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
@@ -1040,47 +1055,261 @@ exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
         const workSchedulesSnapshot = await db.collection('workSchedules').where('userId', '==', userId).get();
         console.log(`Found ${workSchedulesSnapshot.docs.length} work schedules`);
         for (const scheduleDoc of workSchedulesSnapshot.docs) {
-            const scheduleData = scheduleDoc.data();
-            // Skip if no date
-            if (!scheduleData.date)
-                continue;
-            // Parse date safely
-            const scheduleDate = new Date(scheduleData.date);
-            if (isNaN(scheduleDate.getTime())) {
-                console.log(`Invalid date for schedule ${scheduleDoc.id}: ${scheduleData.date}`);
-                continue;
-            }
-            // Filter by date range if provided
-            if (startDate && endDate) {
-                const start = new Date(startDate);
-                start.setHours(0, 0, 0, 0);
-                const end = new Date(endDate);
-                end.setHours(23, 59, 59, 999);
-                if (scheduleDate < start || scheduleDate > end)
+            try {
+                const scheduleData = scheduleDoc.data();
+                // Skip if no date
+                if (!scheduleData.date)
                     continue;
+                // Parse date safely - handle both string format "2025-12-08" and Date format
+                let scheduleDate;
+                if (typeof scheduleData.date === 'string') {
+                    // For string dates like "2025-12-08", parse as local date
+                    const parts = scheduleData.date.split('-');
+                    if (parts.length === 3) {
+                        const [year, month, day] = parts.map(Number);
+                        scheduleDate = new Date(year, month - 1, day);
+                    }
+                    else {
+                        scheduleDate = new Date(scheduleData.date);
+                    }
+                }
+                else if ((_f = scheduleData.date) === null || _f === void 0 ? void 0 : _f.toDate) {
+                    scheduleDate = scheduleData.date.toDate();
+                }
+                else {
+                    scheduleDate = new Date(scheduleData.date);
+                }
+                if (isNaN(scheduleDate.getTime()))
+                    continue;
+                // Filter by date range if provided
+                if (startDate && endDate) {
+                    const start = new Date(startDate);
+                    start.setHours(0, 0, 0, 0);
+                    const end = new Date(endDate);
+                    end.setHours(23, 59, 59, 999);
+                    // Normalize scheduleDate to start of day for comparison
+                    const scheduleDateNormalized = new Date(scheduleDate);
+                    scheduleDateNormalized.setHours(0, 0, 0, 0);
+                    if (scheduleDateNormalized < start || scheduleDateNormalized > end)
+                        continue;
+                }
+                // Map work type to readable label (support both old and new values)
+                const typeLabels = {
+                    'full': 'Vollzeit',
+                    'half-am': 'Morgen',
+                    'half-pm': 'Nachmittag',
+                    'morning': 'Vormittag',
+                    'afternoon': 'Nachmittag',
+                    'off': 'Frei'
+                };
+                events.push({
+                    id: `work-${scheduleDoc.id}`,
+                    type: 'work',
+                    title: `${scheduleData.personName || 'Unbekannt'}: ${typeLabels[scheduleData.type] || scheduleData.type}`,
+                    date: scheduleDate.toISOString(),
+                    personId: scheduleData.personId,
+                    personName: scheduleData.personName,
+                    workType: scheduleData.type,
+                    startTime: scheduleData.startTime,
+                    endTime: scheduleData.endTime,
+                });
             }
-            // Map work type to readable label
-            const typeLabels = {
-                'full': 'Vollzeit',
-                'half-am': 'Morgen',
-                'half-pm': 'Nachmittag',
-                'off': 'Frei'
-            };
-            events.push({
-                id: `work-${scheduleDoc.id}`,
-                type: 'work',
-                title: `${scheduleData.personName || 'Unbekannt'}: ${typeLabels[scheduleData.type] || scheduleData.type}`,
-                date: scheduleDate.toISOString(),
-                personId: scheduleData.personId,
-                personName: scheduleData.personName,
-                workType: scheduleData.type,
-                startTime: scheduleData.startTime,
-                endTime: scheduleData.endTime,
-            });
+            catch (scheduleError) {
+                console.error(`Error processing schedule ${scheduleDoc.id}:`, scheduleError);
+            }
         }
     }
     catch (workError) {
         console.error('Error fetching work schedules:', workError);
+    }
+    // Get vacations
+    try {
+        const vacationsSnapshot = await db.collection('vacations').where('userId', '==', userId).get();
+        for (const vacationDoc of vacationsSnapshot.docs) {
+            try {
+                const vacationData = vacationDoc.data();
+                if (!vacationData.startDate)
+                    continue;
+                let vacStartDate;
+                let vacEndDate;
+                if ((_g = vacationData.startDate) === null || _g === void 0 ? void 0 : _g.toDate) {
+                    vacStartDate = vacationData.startDate.toDate();
+                }
+                else {
+                    vacStartDate = new Date(vacationData.startDate);
+                }
+                if ((_h = vacationData.endDate) === null || _h === void 0 ? void 0 : _h.toDate) {
+                    vacEndDate = vacationData.endDate.toDate();
+                }
+                else {
+                    vacEndDate = vacationData.endDate ? new Date(vacationData.endDate) : vacStartDate;
+                }
+                if (isNaN(vacStartDate.getTime()))
+                    continue;
+                // Filter by date range
+                if (startDate && endDate) {
+                    const start = new Date(startDate);
+                    start.setHours(0, 0, 0, 0);
+                    const end = new Date(endDate);
+                    end.setHours(23, 59, 59, 999);
+                    if (vacEndDate < start || vacStartDate > end)
+                        continue;
+                }
+                const typeLabels = {
+                    'vacation': 'Ferien',
+                    'sick': 'Krank',
+                    'special': 'Sonderurlaub'
+                };
+                events.push({
+                    id: `vacation-${vacationDoc.id}`,
+                    type: 'vacation',
+                    title: `${vacationData.personName || 'Unbekannt'}: ${typeLabels[vacationData.type] || 'Ferien'}`,
+                    date: vacStartDate.toISOString(),
+                    endDate: vacEndDate.toISOString(),
+                    personId: vacationData.personId,
+                    personName: vacationData.personName,
+                    vacationType: vacationData.type,
+                    notes: vacationData.notes,
+                });
+            }
+            catch (vacError) {
+                console.error(`Error processing vacation ${vacationDoc.id}:`, vacError);
+            }
+        }
+    }
+    catch (vacationsError) {
+        console.error('Error fetching vacations:', vacationsError);
+    }
+    // Get school schedules
+    try {
+        const schoolSchedulesSnapshot = await db.collection('schoolSchedules').where('userId', '==', userId).get();
+        for (const scheduleDoc of schoolSchedulesSnapshot.docs) {
+            try {
+                const scheduleData = scheduleDoc.data();
+                if (!scheduleData.date)
+                    continue;
+                let scheduleDate;
+                if (typeof scheduleData.date === 'string') {
+                    const parts = scheduleData.date.split('-');
+                    if (parts.length === 3) {
+                        const [year, month, day] = parts.map(Number);
+                        scheduleDate = new Date(year, month - 1, day);
+                    }
+                    else {
+                        scheduleDate = new Date(scheduleData.date);
+                    }
+                }
+                else if ((_j = scheduleData.date) === null || _j === void 0 ? void 0 : _j.toDate) {
+                    scheduleDate = scheduleData.date.toDate();
+                }
+                else {
+                    scheduleDate = new Date(scheduleData.date);
+                }
+                if (isNaN(scheduleDate.getTime()))
+                    continue;
+                // Filter by date range
+                if (startDate && endDate) {
+                    const start = new Date(startDate);
+                    start.setHours(0, 0, 0, 0);
+                    const end = new Date(endDate);
+                    end.setHours(23, 59, 59, 999);
+                    const normalized = new Date(scheduleDate);
+                    normalized.setHours(0, 0, 0, 0);
+                    if (normalized < start || normalized > end)
+                        continue;
+                }
+                // School event
+                if (scheduleData.schoolType && scheduleData.schoolType !== 'none') {
+                    const schoolLabels = {
+                        'full': 'Ganztag',
+                        'morning': 'Vormittag',
+                        'afternoon': 'Nachmittag'
+                    };
+                    events.push({
+                        id: `school-${scheduleDoc.id}`,
+                        type: 'school',
+                        title: `${scheduleData.childName || 'Kind'}: Schule ${schoolLabels[scheduleData.schoolType] || scheduleData.schoolType}`,
+                        date: scheduleDate.toISOString(),
+                        childId: scheduleData.childId,
+                        childName: scheduleData.childName,
+                        schoolType: scheduleData.schoolType,
+                    });
+                }
+                // Hort event
+                if (scheduleData.hortType && scheduleData.hortType !== 'none') {
+                    const hortLabels = {
+                        'before': 'Vor Schule',
+                        'after': 'Nach Schule',
+                        'both': 'Vor & Nach Schule'
+                    };
+                    events.push({
+                        id: `hort-${scheduleDoc.id}`,
+                        type: 'hort',
+                        title: `${scheduleData.childName || 'Kind'}: Hort ${hortLabels[scheduleData.hortType] || scheduleData.hortType}`,
+                        date: scheduleDate.toISOString(),
+                        childId: scheduleData.childId,
+                        childName: scheduleData.childName,
+                        hortType: scheduleData.hortType,
+                    });
+                }
+            }
+            catch (schedError) {
+                console.error(`Error processing school schedule ${scheduleDoc.id}:`, schedError);
+            }
+        }
+    }
+    catch (schoolError) {
+        console.error('Error fetching school schedules:', schoolError);
+    }
+    // Get school holidays
+    try {
+        const holidaysSnapshot = await db.collection('schoolHolidays').where('userId', '==', userId).get();
+        for (const holidayDoc of holidaysSnapshot.docs) {
+            try {
+                const holidayData = holidayDoc.data();
+                if (!holidayData.startDate)
+                    continue;
+                let holidayStartDate;
+                let holidayEndDate;
+                if ((_k = holidayData.startDate) === null || _k === void 0 ? void 0 : _k.toDate) {
+                    holidayStartDate = holidayData.startDate.toDate();
+                }
+                else {
+                    holidayStartDate = new Date(holidayData.startDate);
+                }
+                if ((_l = holidayData.endDate) === null || _l === void 0 ? void 0 : _l.toDate) {
+                    holidayEndDate = holidayData.endDate.toDate();
+                }
+                else {
+                    holidayEndDate = holidayData.endDate ? new Date(holidayData.endDate) : holidayStartDate;
+                }
+                if (isNaN(holidayStartDate.getTime()))
+                    continue;
+                // Filter by date range
+                if (startDate && endDate) {
+                    const start = new Date(startDate);
+                    start.setHours(0, 0, 0, 0);
+                    const end = new Date(endDate);
+                    end.setHours(23, 59, 59, 999);
+                    if (holidayEndDate < start || holidayStartDate > end)
+                        continue;
+                }
+                events.push({
+                    id: `school-holiday-${holidayDoc.id}`,
+                    type: 'school-holiday',
+                    title: holidayData.name || 'Schulferien',
+                    date: holidayStartDate.toISOString(),
+                    endDate: holidayEndDate.toISOString(),
+                    holidayType: holidayData.type,
+                });
+            }
+            catch (holError) {
+                console.error(`Error processing school holiday ${holidayDoc.id}:`, holError);
+            }
+        }
+    }
+    catch (holidaysError) {
+        console.error('Error fetching school holidays:', holidaysError);
     }
     console.log(`Total events: ${events.length}`);
     // Sort by date
@@ -1821,5 +2050,448 @@ exports.deleteSchoolHoliday = (0, https_1.onCall)(async (request) => {
     }
     await docRef.delete();
     return { success: true };
+});
+// ========== Document Management Functions ==========
+const storage = admin.storage();
+// Get User Settings (including OCR provider)
+exports.getUserSettings = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const settingsDoc = await db.collection('userSettings').doc(userId).get();
+    if (!settingsDoc.exists) {
+        // Return default settings
+        return {
+            ocrProvider: 'google', // google, openai, regex
+            openaiApiKey: null,
+            autoConfirmDocuments: false,
+            defaultFolder: 'Sonstiges',
+            language: 'de',
+            theme: 'system',
+        };
+    }
+    return settingsDoc.data();
+});
+// Update User Settings
+exports.updateUserSettings = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const settings = request.data;
+    await db.collection('userSettings').doc(userId).set(Object.assign(Object.assign({}, settings), { updatedAt: admin.firestore.FieldValue.serverTimestamp() }), { merge: true });
+    return { success: true };
+});
+// Upload Document
+exports.uploadDocument = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { personId, fileName, fileData, fileType, folder } = request.data;
+    // Validate person belongs to user
+    const personDoc = await db.collection('people').doc(personId).get();
+    if (!personDoc.exists || ((_a = personDoc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized to upload to this person');
+    }
+    // Create document record
+    const docData = {
+        userId,
+        personId,
+        fileName,
+        fileType,
+        folder: folder || 'Sonstiges',
+        status: 'uploaded', // uploaded, analyzed, processed
+        analysisResult: null,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    const docRef = await db.collection('people').doc(personId).collection('documents').add(docData);
+    // Upload file to Storage
+    const bucket = storage.bucket();
+    const filePath = `documents/${userId}/${personId}/${docRef.id}/${fileName}`;
+    const file = bucket.file(filePath);
+    // Decode base64 and upload
+    const buffer = Buffer.from(fileData, 'base64');
+    await file.save(buffer, {
+        metadata: {
+            contentType: fileType,
+        },
+    });
+    // Get download URL
+    const [url] = await file.getSignedUrl({
+        action: 'read',
+        expires: '03-01-2500',
+    });
+    // Update document with file URL
+    await docRef.update({
+        fileUrl: url,
+        filePath,
+    });
+    return Object.assign(Object.assign({ id: docRef.id }, docData), { fileUrl: url, filePath });
+});
+// Analyze Document (OCR/AI)
+exports.analyzeDocument = (0, https_1.onCall)(async (request) => {
+    var _a, _b;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { documentId, personId, fileData, fileType } = request.data;
+    // Get user settings for OCR provider
+    const settingsDoc = await db.collection('userSettings').doc(userId).get();
+    const settings = settingsDoc.exists ? settingsDoc.data() : { ocrProvider: 'regex' };
+    const ocrProvider = (settings === null || settings === void 0 ? void 0 : settings.ocrProvider) || 'regex';
+    let analysisResult = {
+        type: 'unknown',
+        confidence: 0,
+        extractedData: {},
+        rawText: '',
+    };
+    try {
+        if (ocrProvider === 'google') {
+            // Google Cloud Vision API
+            const vision = require('@google-cloud/vision');
+            const client = new vision.ImageAnnotatorClient();
+            const buffer = Buffer.from(fileData, 'base64');
+            const [result] = await client.textDetection(buffer);
+            const detections = result.textAnnotations;
+            const fullText = detections && detections.length > 0 ? detections[0].description : '';
+            analysisResult.rawText = fullText;
+            analysisResult = analyzeText(fullText, analysisResult);
+        }
+        else if (ocrProvider === 'openai' && (settings === null || settings === void 0 ? void 0 : settings.openaiApiKey)) {
+            // OpenAI GPT-4 Vision
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${settings.openaiApiKey}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: 'gpt-4-vision-preview',
+                    messages: [
+                        {
+                            role: 'user',
+                            content: [
+                                {
+                                    type: 'text',
+                                    text: `Analysiere dieses Dokument und extrahiere strukturierte Daten. 
+                  Antworte NUR mit JSON in diesem Format:
+                  {
+                    "type": "rechnung" | "termin" | "vertrag" | "sonstiges",
+                    "confidence": 0-100,
+                    "extractedData": {
+                      // Für Rechnungen: amount, currency, dueDate, iban, description, creditor
+                      // Für Termine: date, time, location, description, title
+                      // Für Verträge: parties, startDate, endDate, subject
+                    }
+                  }`
+                                },
+                                {
+                                    type: 'image_url',
+                                    image_url: {
+                                        url: `data:${fileType};base64,${fileData}`
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    max_tokens: 1000,
+                }),
+            });
+            const data = await response.json();
+            if (data.choices && ((_b = (_a = data.choices[0]) === null || _a === void 0 ? void 0 : _a.message) === null || _b === void 0 ? void 0 : _b.content)) {
+                try {
+                    const parsed = JSON.parse(data.choices[0].message.content);
+                    analysisResult = Object.assign(Object.assign({}, analysisResult), parsed);
+                }
+                catch (e) {
+                    // If JSON parsing fails, use regex fallback
+                    analysisResult = analyzeText(data.choices[0].message.content, analysisResult);
+                }
+            }
+        }
+        else {
+            // Regex-based analysis (fallback)
+            // For images, we can't do much without OCR
+            // This is mainly for text-based documents
+            analysisResult.type = 'unknown';
+            analysisResult.confidence = 10;
+            analysisResult.message = 'Regex-Analyse kann nur Text-Dokumente verarbeiten. Bitte wähle Google Cloud Vision oder OpenAI in den Einstellungen.';
+        }
+        // Update document with analysis result
+        if (documentId && personId) {
+            await db.collection('people').doc(personId).collection('documents').doc(documentId).update({
+                analysisResult,
+                status: 'analyzed',
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+        }
+    }
+    catch (error) {
+        console.error('Analysis error:', error);
+        analysisResult.error = error.message;
+    }
+    return analysisResult;
+});
+// Helper function to analyze text with regex patterns
+function analyzeText(text, result) {
+    // Check for invoice patterns
+    const invoicePatterns = [
+        /RECHNUNG/i,
+        /INVOICE/i,
+        /ZAHLBAR BIS/i,
+        /FÄLLIG/i,
+        /BETRAG/i,
+        /TOTAL/i,
+        /MWST/i,
+        /QR-RECHNUNG/i,
+    ];
+    // Check for appointment patterns
+    const appointmentPatterns = [
+        /TERMIN/i,
+        /EINLADUNG/i,
+        /MEETING/i,
+        /BESPRECHUNG/i,
+        /VERANSTALTUNG/i,
+        /RESERVIERUNG/i,
+    ];
+    // Check for contract patterns
+    const contractPatterns = [
+        /VERTRAG/i,
+        /VEREINBARUNG/i,
+        /KONTRAKT/i,
+        /MIETVERTRAG/i,
+        /ARBEITSVERTRAG/i,
+    ];
+    let invoiceScore = 0;
+    let appointmentScore = 0;
+    let contractScore = 0;
+    invoicePatterns.forEach(p => { if (p.test(text))
+        invoiceScore += 15; });
+    appointmentPatterns.forEach(p => { if (p.test(text))
+        appointmentScore += 15; });
+    contractPatterns.forEach(p => { if (p.test(text))
+        contractScore += 15; });
+    // Determine type
+    const maxScore = Math.max(invoiceScore, appointmentScore, contractScore);
+    if (maxScore === 0) {
+        result.type = 'sonstiges';
+        result.confidence = 20;
+    }
+    else if (invoiceScore === maxScore) {
+        result.type = 'rechnung';
+        result.confidence = Math.min(invoiceScore, 95);
+        // Extract invoice data
+        const amountMatch = text.match(/(?:CHF|EUR|USD|Fr\.?)\s*([\d',.]+)/i) ||
+            text.match(/([\d',.]+)\s*(?:CHF|EUR|USD|Fr\.?)/i);
+        const ibanMatch = text.match(/[A-Z]{2}\d{2}\s?[\dA-Z]{4}\s?[\dA-Z]{4}\s?[\dA-Z]{4}\s?[\dA-Z]{4}\s?[\dA-Z]{0,4}/);
+        const dateMatch = text.match(/(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})/);
+        result.extractedData = {
+            amount: amountMatch ? parseFloat(amountMatch[1].replace(/[',]/g, '')) : null,
+            currency: 'CHF',
+            iban: ibanMatch ? ibanMatch[0].replace(/\s/g, '') : null,
+            dueDate: dateMatch ? `${dateMatch[3].length === 2 ? '20' + dateMatch[3] : dateMatch[3]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[1].padStart(2, '0')}` : null,
+        };
+    }
+    else if (appointmentScore === maxScore) {
+        result.type = 'termin';
+        result.confidence = Math.min(appointmentScore, 95);
+        // Extract appointment data
+        const dateMatch = text.match(/(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})/);
+        const timeMatch = text.match(/(\d{1,2})[:\.](\d{2})\s*(?:Uhr)?/i);
+        result.extractedData = {
+            date: dateMatch ? `${dateMatch[3].length === 2 ? '20' + dateMatch[3] : dateMatch[3]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[1].padStart(2, '0')}` : null,
+            time: timeMatch ? `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}` : null,
+        };
+    }
+    else if (contractScore === maxScore) {
+        result.type = 'vertrag';
+        result.confidence = Math.min(contractScore, 95);
+        const dateMatch = text.match(/(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})/);
+        result.extractedData = {
+            startDate: dateMatch ? `${dateMatch[3].length === 2 ? '20' + dateMatch[3] : dateMatch[3]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[1].padStart(2, '0')}` : null,
+        };
+    }
+    result.rawText = text.substring(0, 500); // Limit raw text
+    return result;
+}
+// Get Person Documents
+exports.getPersonDocuments = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { personId, folder } = request.data;
+    // Validate person belongs to user
+    const personDoc = await db.collection('people').doc(personId).get();
+    if (!personDoc.exists || ((_a = personDoc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized');
+    }
+    let query = db.collection('people').doc(personId).collection('documents');
+    if (folder) {
+        query = query.where('folder', '==', folder);
+    }
+    const snapshot = await query.orderBy('createdAt', 'desc').get();
+    const documents = snapshot.docs.map(doc => {
+        var _a, _b, _c, _d, _e, _f;
+        const data = doc.data();
+        return Object.assign(Object.assign({ id: doc.id }, data), { createdAt: ((_c = (_b = (_a = data.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null, updatedAt: ((_f = (_e = (_d = data.updatedAt) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null });
+    });
+    return { documents };
+});
+// Update Document (move to folder, change category)
+exports.updateDocument = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { documentId, personId, folder, status } = request.data;
+    // Validate person belongs to user
+    const personDoc = await db.collection('people').doc(personId).get();
+    if (!personDoc.exists || ((_a = personDoc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized');
+    }
+    const updateData = {
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (folder !== undefined)
+        updateData.folder = folder;
+    if (status !== undefined)
+        updateData.status = status;
+    await db.collection('people').doc(personId).collection('documents').doc(documentId).update(updateData);
+    return { success: true };
+});
+// Delete Document
+exports.deleteDocument = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { documentId, personId } = request.data;
+    // Validate person belongs to user
+    const personDoc = await db.collection('people').doc(personId).get();
+    if (!personDoc.exists || ((_a = personDoc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized');
+    }
+    // Get document to find file path
+    const docRef = db.collection('people').doc(personId).collection('documents').doc(documentId);
+    const doc = await docRef.get();
+    if (doc.exists) {
+        const data = doc.data();
+        // Delete file from Storage
+        if (data === null || data === void 0 ? void 0 : data.filePath) {
+            try {
+                const bucket = storage.bucket();
+                await bucket.file(data.filePath).delete();
+            }
+            catch (e) {
+                console.error('Error deleting file:', e);
+            }
+        }
+        // Delete document record
+        await docRef.delete();
+    }
+    return { success: true };
+});
+// Process Document (create invoice/reminder from analyzed document)
+exports.processDocument = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { documentId, personId, type, data } = request.data;
+    // Validate person belongs to user
+    const personDoc = await db.collection('people').doc(personId).get();
+    if (!personDoc.exists || ((_a = personDoc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized');
+    }
+    const personData = personDoc.data();
+    let result = { success: true };
+    if (type === 'rechnung') {
+        // Create invoice
+        const invoiceData = {
+            description: data.description || 'Rechnung',
+            amount: data.amount || 0,
+            status: 'open',
+            direction: data.direction || 'outgoing',
+            dueDate: data.dueDate ? admin.firestore.Timestamp.fromDate(new Date(data.dueDate)) : null,
+            iban: data.iban || null,
+            documentId,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+        const invoiceRef = await db.collection('people').doc(personId).collection('invoices').add(invoiceData);
+        result.invoiceId = invoiceRef.id;
+        result.type = 'rechnung';
+    }
+    else if (type === 'termin') {
+        // Create reminder/appointment
+        const reminderData = {
+            userId,
+            title: data.title || 'Termin',
+            type: 'termin',
+            dueDate: data.date ? admin.firestore.Timestamp.fromDate(new Date(data.date + (data.time ? `T${data.time}` : 'T12:00'))) : admin.firestore.Timestamp.fromDate(new Date()),
+            notes: data.description || null,
+            personId,
+            personName: personData === null || personData === void 0 ? void 0 : personData.name,
+            status: 'offen',
+            documentId,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+        const reminderRef = await db.collection('reminders').add(reminderData);
+        result.reminderId = reminderRef.id;
+        result.type = 'termin';
+    }
+    // Update document status and folder
+    const folder = type === 'rechnung' ? 'Rechnungen' : type === 'termin' ? 'Termine' : 'Sonstiges';
+    await db.collection('people').doc(personId).collection('documents').doc(documentId).update({
+        status: 'processed',
+        folder,
+        processedType: type,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return result;
+});
+// Get All Documents (across all persons for the user)
+exports.getAllDocuments = (0, https_1.onCall)(async (request) => {
+    var _a, _b, _c, _d, _e, _f;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { folder, limit: queryLimit } = request.data || {};
+    // Get all people for this user
+    const peopleSnapshot = await db.collection('people').where('userId', '==', userId).get();
+    const allDocuments = [];
+    for (const personDoc of peopleSnapshot.docs) {
+        const personData = personDoc.data();
+        let docsQuery = personDoc.ref.collection('documents');
+        if (folder && folder !== 'all') {
+            docsQuery = docsQuery.where('folder', '==', folder);
+        }
+        const docsSnapshot = await docsQuery.orderBy('createdAt', 'desc').get();
+        for (const doc of docsSnapshot.docs) {
+            const data = doc.data();
+            allDocuments.push(Object.assign(Object.assign({ id: doc.id, personId: personDoc.id, personName: personData.name }, data), { createdAt: ((_c = (_b = (_a = data.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null, updatedAt: ((_f = (_e = (_d = data.updatedAt) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null }));
+        }
+    }
+    // Sort by createdAt descending
+    allDocuments.sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+    });
+    // Apply limit if specified
+    const limitedDocs = queryLimit ? allDocuments.slice(0, queryLimit) : allDocuments;
+    return { documents: limitedDocs, total: allDocuments.length };
 });
 //# sourceMappingURL=index.js.map

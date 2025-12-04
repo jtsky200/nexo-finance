@@ -18,7 +18,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/lib/firebase';
-import { User, Mail, Globe, Wallet, MapPin, Bell, Moon, Sun, Loader2 } from 'lucide-react';
+import { User, Mail, Globe, Wallet, MapPin, Bell, Moon, Sun, Loader2, FileSearch, Eye, EyeOff } from 'lucide-react';
 import i18n from '@/lib/i18n';
 
 const swissCantons = [
@@ -63,12 +63,39 @@ export default function Settings() {
   const [currency, setCurrency] = useState('CHF');
   const [canton, setCanton] = useState('');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  
+  // Document Analysis Settings
+  const [ocrProvider, setOcrProvider] = useState('google');
+  const [openaiApiKey, setOpenaiApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [autoConfirmDocuments, setAutoConfirmDocuments] = useState(false);
+  const [isLoadingOcrSettings, setIsLoadingOcrSettings] = useState(true);
 
   // Load user data
   useEffect(() => {
     if (user) {
       setDisplayName(user.displayName || '');
       setEmail(user.email || '');
+      
+      // Load OCR settings from Firebase
+      const loadOcrSettings = async () => {
+        try {
+          const getUserSettings = httpsCallable(functions, 'getUserSettings');
+          const result: any = await getUserSettings({});
+          if (result.data) {
+            setOcrProvider(result.data.ocrProvider || 'google');
+            setOpenaiApiKey(result.data.openaiApiKey || '');
+            setAutoConfirmDocuments(result.data.autoConfirmDocuments || false);
+          }
+        } catch (error) {
+          console.error('Error loading OCR settings:', error);
+        } finally {
+          setIsLoadingOcrSettings(false);
+        }
+      };
+      loadOcrSettings();
+    } else {
+      setIsLoadingOcrSettings(false);
     }
     
     // Load saved preferences from localStorage
@@ -124,6 +151,14 @@ export default function Settings() {
             locale: language,
             defaultCurrency: currency,
             canton: canton,
+          });
+          
+          // Save OCR settings
+          const updateUserSettings = httpsCallable(functions, 'updateUserSettings');
+          await updateUserSettings({
+            ocrProvider,
+            openaiApiKey: ocrProvider === 'openai' ? openaiApiKey : null,
+            autoConfirmDocuments,
           });
         } catch (firebaseError) {
           console.error('Error saving to Firebase:', firebaseError);
@@ -259,6 +294,91 @@ export default function Settings() {
                 {t('settings.cantonHint', 'Wird für Steuerberechnungen verwendet')}
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Document Analysis Settings */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <FileSearch className="w-5 h-5 text-muted-foreground" />
+              <CardTitle>{t('settings.documentAnalysis', 'Dokumenten-Analyse')}</CardTitle>
+            </div>
+            <CardDescription>
+              {t('settings.documentAnalysisDescription', 'Einstellungen für die automatische Dokumentenerkennung')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {isLoadingOcrSettings ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <>
+                {/* OCR Provider */}
+                <div className="space-y-2">
+                  <Label>{t('settings.ocrProvider', 'Analyse-Methode')}</Label>
+                  <Select value={ocrProvider} onValueChange={setOcrProvider}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="google">Google Cloud Vision (empfohlen)</SelectItem>
+                      <SelectItem value="openai">OpenAI GPT-4 Vision</SelectItem>
+                      <SelectItem value="regex">Einfache Texterkennung (kostenlos)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {ocrProvider === 'google' && 'Google Cloud Vision - Kostenlos bis 1000 Anfragen/Monat, sehr genau'}
+                    {ocrProvider === 'openai' && 'OpenAI GPT-4 Vision - Kostenpflichtig, höchste Genauigkeit'}
+                    {ocrProvider === 'regex' && 'Einfache Mustererkennung - Kostenlos, weniger genau (nur für Text-PDFs)'}
+                  </p>
+                </div>
+
+                {/* OpenAI API Key */}
+                {ocrProvider === 'openai' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="openaiKey">{t('settings.openaiApiKey', 'OpenAI API Key')}</Label>
+                    <div className="relative">
+                      <Input
+                        id="openaiKey"
+                        type={showApiKey ? 'text' : 'password'}
+                        value={openaiApiKey}
+                        onChange={(e) => setOpenaiApiKey(e.target.value)}
+                        placeholder="sk-..."
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {t('settings.openaiApiKeyHint', 'API Key von platform.openai.com - Wird verschlüsselt gespeichert')}
+                    </p>
+                  </div>
+                )}
+
+                <Separator />
+
+                {/* Auto-Confirm */}
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label>{t('settings.autoConfirm', 'Automatische Bestätigung')}</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {t('settings.autoConfirmHint', 'Erkannte Daten automatisch übernehmen ohne Bestätigung')}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={autoConfirmDocuments}
+                    onCheckedChange={setAutoConfirmDocuments}
+                  />
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 

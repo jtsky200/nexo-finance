@@ -60,11 +60,25 @@ export const createReminder = onCall(async (request) => {
   const userId = request.auth.uid;
   const { title, type, dueDate, isAllDay, amount, currency, notes, recurrenceRule, personId, personName } = request.data;
 
+  // Parse and validate dueDate
+  let parsedDueDate: admin.firestore.Timestamp | null = null;
+  if (dueDate) {
+    const dateObj = new Date(dueDate);
+    if (!isNaN(dateObj.getTime())) {
+      parsedDueDate = admin.firestore.Timestamp.fromDate(dateObj);
+    } else {
+      // If date string parsing fails, try to create from current date
+      parsedDueDate = admin.firestore.Timestamp.fromDate(new Date());
+    }
+  } else {
+    parsedDueDate = admin.firestore.Timestamp.fromDate(new Date());
+  }
+
   const reminderData = {
     userId,
-    title,
-    type,
-    dueDate: admin.firestore.Timestamp.fromDate(new Date(dueDate)),
+    title: title || 'Neuer Termin',
+    type: type || 'termin',
+    dueDate: parsedDueDate,
     isAllDay: isAllDay || false,
     amount: amount || null,
     currency: currency || null,
@@ -1176,49 +1190,272 @@ export const getCalendarEvents = onCall(async (request) => {
     console.log(`Found ${workSchedulesSnapshot.docs.length} work schedules`);
     
     for (const scheduleDoc of workSchedulesSnapshot.docs) {
-      const scheduleData = scheduleDoc.data();
-      
-      // Skip if no date
-      if (!scheduleData.date) continue;
-      
-      // Parse date safely
-      const scheduleDate = new Date(scheduleData.date);
-      if (isNaN(scheduleDate.getTime())) {
-        console.log(`Invalid date for schedule ${scheduleDoc.id}: ${scheduleData.date}`);
-        continue;
+      try {
+        const scheduleData = scheduleDoc.data();
+        
+        // Skip if no date
+        if (!scheduleData.date) continue;
+        
+        // Parse date safely - handle both string format "2025-12-08" and Date format
+        let scheduleDate: Date;
+        if (typeof scheduleData.date === 'string') {
+          // For string dates like "2025-12-08", parse as local date
+          const parts = scheduleData.date.split('-');
+          if (parts.length === 3) {
+            const [year, month, day] = parts.map(Number);
+            scheduleDate = new Date(year, month - 1, day);
+          } else {
+            scheduleDate = new Date(scheduleData.date);
+          }
+        } else if (scheduleData.date?.toDate) {
+          scheduleDate = scheduleData.date.toDate();
+        } else {
+          scheduleDate = new Date(scheduleData.date);
+        }
+        
+        if (isNaN(scheduleDate.getTime())) continue;
+        
+        // Filter by date range if provided
+        if (startDate && endDate) {
+          const start = new Date(startDate);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          
+          // Normalize scheduleDate to start of day for comparison
+          const scheduleDateNormalized = new Date(scheduleDate);
+          scheduleDateNormalized.setHours(0, 0, 0, 0);
+          
+          if (scheduleDateNormalized < start || scheduleDateNormalized > end) continue;
+        }
+        
+        // Map work type to readable label (support both old and new values)
+        const typeLabels: { [key: string]: string } = {
+          'full': 'Vollzeit',
+          'half-am': 'Morgen',
+          'half-pm': 'Nachmittag',
+          'morning': 'Vormittag',
+          'afternoon': 'Nachmittag',
+          'off': 'Frei'
+        };
+        
+        events.push({
+          id: `work-${scheduleDoc.id}`,
+          type: 'work',
+          title: `${scheduleData.personName || 'Unbekannt'}: ${typeLabels[scheduleData.type] || scheduleData.type}`,
+          date: scheduleDate.toISOString(),
+          personId: scheduleData.personId,
+          personName: scheduleData.personName,
+          workType: scheduleData.type,
+          startTime: scheduleData.startTime,
+          endTime: scheduleData.endTime,
+        });
+      } catch (scheduleError) {
+        console.error(`Error processing schedule ${scheduleDoc.id}:`, scheduleError);
       }
-      
-      // Filter by date range if provided
-      if (startDate && endDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        if (scheduleDate < start || scheduleDate > end) continue;
-      }
-      
-      // Map work type to readable label
-      const typeLabels: { [key: string]: string } = {
-        'full': 'Vollzeit',
-        'half-am': 'Morgen',
-        'half-pm': 'Nachmittag',
-        'off': 'Frei'
-      };
-      
-      events.push({
-        id: `work-${scheduleDoc.id}`,
-        type: 'work',
-        title: `${scheduleData.personName || 'Unbekannt'}: ${typeLabels[scheduleData.type] || scheduleData.type}`,
-        date: scheduleDate.toISOString(),
-        personId: scheduleData.personId,
-        personName: scheduleData.personName,
-        workType: scheduleData.type,
-        startTime: scheduleData.startTime,
-        endTime: scheduleData.endTime,
-      });
     }
   } catch (workError) {
     console.error('Error fetching work schedules:', workError);
+  }
+  
+  // Get vacations
+  try {
+    const vacationsSnapshot = await db.collection('vacations').where('userId', '==', userId).get();
+    
+    for (const vacationDoc of vacationsSnapshot.docs) {
+      try {
+        const vacationData = vacationDoc.data();
+        
+        if (!vacationData.startDate) continue;
+        
+        let vacStartDate: Date;
+        let vacEndDate: Date;
+        
+        if (vacationData.startDate?.toDate) {
+          vacStartDate = vacationData.startDate.toDate();
+        } else {
+          vacStartDate = new Date(vacationData.startDate);
+        }
+        
+        if (vacationData.endDate?.toDate) {
+          vacEndDate = vacationData.endDate.toDate();
+        } else {
+          vacEndDate = vacationData.endDate ? new Date(vacationData.endDate) : vacStartDate;
+        }
+        
+        if (isNaN(vacStartDate.getTime())) continue;
+        
+        // Filter by date range
+        if (startDate && endDate) {
+          const start = new Date(startDate);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          
+          if (vacEndDate < start || vacStartDate > end) continue;
+        }
+        
+        const typeLabels: { [key: string]: string } = {
+          'vacation': 'Ferien',
+          'sick': 'Krank',
+          'special': 'Sonderurlaub'
+        };
+        
+        events.push({
+          id: `vacation-${vacationDoc.id}`,
+          type: 'vacation',
+          title: `${vacationData.personName || 'Unbekannt'}: ${typeLabels[vacationData.type] || 'Ferien'}`,
+          date: vacStartDate.toISOString(),
+          endDate: vacEndDate.toISOString(),
+          personId: vacationData.personId,
+          personName: vacationData.personName,
+          vacationType: vacationData.type,
+          notes: vacationData.notes,
+        });
+      } catch (vacError) {
+        console.error(`Error processing vacation ${vacationDoc.id}:`, vacError);
+      }
+    }
+  } catch (vacationsError) {
+    console.error('Error fetching vacations:', vacationsError);
+  }
+  
+  // Get school schedules
+  try {
+    const schoolSchedulesSnapshot = await db.collection('schoolSchedules').where('userId', '==', userId).get();
+    
+    for (const scheduleDoc of schoolSchedulesSnapshot.docs) {
+      try {
+        const scheduleData = scheduleDoc.data();
+        
+        if (!scheduleData.date) continue;
+        
+        let scheduleDate: Date;
+        if (typeof scheduleData.date === 'string') {
+          const parts = scheduleData.date.split('-');
+          if (parts.length === 3) {
+            const [year, month, day] = parts.map(Number);
+            scheduleDate = new Date(year, month - 1, day);
+          } else {
+            scheduleDate = new Date(scheduleData.date);
+          }
+        } else if (scheduleData.date?.toDate) {
+          scheduleDate = scheduleData.date.toDate();
+        } else {
+          scheduleDate = new Date(scheduleData.date);
+        }
+        
+        if (isNaN(scheduleDate.getTime())) continue;
+        
+        // Filter by date range
+        if (startDate && endDate) {
+          const start = new Date(startDate);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          
+          const normalized = new Date(scheduleDate);
+          normalized.setHours(0, 0, 0, 0);
+          
+          if (normalized < start || normalized > end) continue;
+        }
+        
+        // School event
+        if (scheduleData.schoolType && scheduleData.schoolType !== 'none') {
+          const schoolLabels: { [key: string]: string } = {
+            'full': 'Ganztag',
+            'morning': 'Vormittag',
+            'afternoon': 'Nachmittag'
+          };
+          
+          events.push({
+            id: `school-${scheduleDoc.id}`,
+            type: 'school',
+            title: `${scheduleData.childName || 'Kind'}: Schule ${schoolLabels[scheduleData.schoolType] || scheduleData.schoolType}`,
+            date: scheduleDate.toISOString(),
+            childId: scheduleData.childId,
+            childName: scheduleData.childName,
+            schoolType: scheduleData.schoolType,
+          });
+        }
+        
+        // Hort event
+        if (scheduleData.hortType && scheduleData.hortType !== 'none') {
+          const hortLabels: { [key: string]: string } = {
+            'before': 'Vor Schule',
+            'after': 'Nach Schule',
+            'both': 'Vor & Nach Schule'
+          };
+          
+          events.push({
+            id: `hort-${scheduleDoc.id}`,
+            type: 'hort',
+            title: `${scheduleData.childName || 'Kind'}: Hort ${hortLabels[scheduleData.hortType] || scheduleData.hortType}`,
+            date: scheduleDate.toISOString(),
+            childId: scheduleData.childId,
+            childName: scheduleData.childName,
+            hortType: scheduleData.hortType,
+          });
+        }
+      } catch (schedError) {
+        console.error(`Error processing school schedule ${scheduleDoc.id}:`, schedError);
+      }
+    }
+  } catch (schoolError) {
+    console.error('Error fetching school schedules:', schoolError);
+  }
+  
+  // Get school holidays
+  try {
+    const holidaysSnapshot = await db.collection('schoolHolidays').where('userId', '==', userId).get();
+    
+    for (const holidayDoc of holidaysSnapshot.docs) {
+      try {
+        const holidayData = holidayDoc.data();
+        
+        if (!holidayData.startDate) continue;
+        
+        let holidayStartDate: Date;
+        let holidayEndDate: Date;
+        
+        if (holidayData.startDate?.toDate) {
+          holidayStartDate = holidayData.startDate.toDate();
+        } else {
+          holidayStartDate = new Date(holidayData.startDate);
+        }
+        
+        if (holidayData.endDate?.toDate) {
+          holidayEndDate = holidayData.endDate.toDate();
+        } else {
+          holidayEndDate = holidayData.endDate ? new Date(holidayData.endDate) : holidayStartDate;
+        }
+        
+        if (isNaN(holidayStartDate.getTime())) continue;
+        
+        // Filter by date range
+        if (startDate && endDate) {
+          const start = new Date(startDate);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          
+          if (holidayEndDate < start || holidayStartDate > end) continue;
+        }
+        
+        events.push({
+          id: `school-holiday-${holidayDoc.id}`,
+          type: 'school-holiday',
+          title: holidayData.name || 'Schulferien',
+          date: holidayStartDate.toISOString(),
+          endDate: holidayEndDate.toISOString(),
+          holidayType: holidayData.type,
+        });
+      } catch (holError) {
+        console.error(`Error processing school holiday ${holidayDoc.id}:`, holError);
+      }
+    }
+  } catch (holidaysError) {
+    console.error('Error fetching school holidays:', holidaysError);
   }
   
   console.log(`Total events: ${events.length}`);
@@ -2120,4 +2357,543 @@ export const deleteSchoolHoliday = onCall(async (request) => {
 
   await docRef.delete();
   return { success: true };
+});
+
+// ========== Document Management Functions ==========
+
+const storage = admin.storage();
+
+// Get User Settings (including OCR provider)
+export const getUserSettings = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const settingsDoc = await db.collection('userSettings').doc(userId).get();
+  
+  if (!settingsDoc.exists) {
+    // Return default settings
+    return {
+      ocrProvider: 'google', // google, openai, regex
+      openaiApiKey: null,
+      autoConfirmDocuments: false,
+      defaultFolder: 'Sonstiges',
+      language: 'de',
+      theme: 'system',
+    };
+  }
+  
+  return settingsDoc.data();
+});
+
+// Update User Settings
+export const updateUserSettings = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const settings = request.data;
+
+  await db.collection('userSettings').doc(userId).set({
+    ...settings,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  return { success: true };
+});
+
+// Upload Document
+export const uploadDocument = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { personId, fileName, fileData, fileType, folder } = request.data;
+
+  // Validate person belongs to user
+  const personDoc = await db.collection('people').doc(personId).get();
+  if (!personDoc.exists || personDoc.data()?.userId !== userId) {
+    throw new HttpsError('permission-denied', 'Not authorized to upload to this person');
+  }
+
+  // Create document record
+  const docData = {
+    userId,
+    personId,
+    fileName,
+    fileType,
+    folder: folder || 'Sonstiges',
+    status: 'uploaded', // uploaded, analyzed, processed
+    analysisResult: null,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  const docRef = await db.collection('people').doc(personId).collection('documents').add(docData);
+
+  // Upload file to Storage
+  const bucket = storage.bucket();
+  const filePath = `documents/${userId}/${personId}/${docRef.id}/${fileName}`;
+  const file = bucket.file(filePath);
+  
+  // Decode base64 and upload
+  const buffer = Buffer.from(fileData, 'base64');
+  await file.save(buffer, {
+    metadata: {
+      contentType: fileType,
+    },
+  });
+
+  // Get download URL
+  const [url] = await file.getSignedUrl({
+    action: 'read',
+    expires: '03-01-2500',
+  });
+
+  // Update document with file URL
+  await docRef.update({
+    fileUrl: url,
+    filePath,
+  });
+
+  return { 
+    id: docRef.id, 
+    ...docData,
+    fileUrl: url,
+    filePath,
+  };
+});
+
+// Analyze Document (OCR/AI)
+export const analyzeDocument = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { documentId, personId, fileData, fileType } = request.data;
+
+  // Get user settings for OCR provider
+  const settingsDoc = await db.collection('userSettings').doc(userId).get();
+  const settings = settingsDoc.exists ? settingsDoc.data() : { ocrProvider: 'regex' };
+  const ocrProvider = settings?.ocrProvider || 'regex';
+
+  let analysisResult: any = {
+    type: 'unknown',
+    confidence: 0,
+    extractedData: {},
+    rawText: '',
+  };
+
+  try {
+    if (ocrProvider === 'google') {
+      // Google Cloud Vision API
+      const vision = require('@google-cloud/vision');
+      const client = new vision.ImageAnnotatorClient();
+      
+      const buffer = Buffer.from(fileData, 'base64');
+      const [result] = await client.textDetection(buffer);
+      const detections = result.textAnnotations;
+      const fullText = detections && detections.length > 0 ? detections[0].description : '';
+      
+      analysisResult.rawText = fullText;
+      analysisResult = analyzeText(fullText, analysisResult);
+      
+    } else if (ocrProvider === 'openai' && settings?.openaiApiKey) {
+      // OpenAI GPT-4 Vision
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${settings.openaiApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4-vision-preview',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `Analysiere dieses Dokument und extrahiere strukturierte Daten. 
+                  Antworte NUR mit JSON in diesem Format:
+                  {
+                    "type": "rechnung" | "termin" | "vertrag" | "sonstiges",
+                    "confidence": 0-100,
+                    "extractedData": {
+                      // Für Rechnungen: amount, currency, dueDate, iban, description, creditor
+                      // Für Termine: date, time, location, description, title
+                      // Für Verträge: parties, startDate, endDate, subject
+                    }
+                  }`
+                },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:${fileType};base64,${fileData}`
+                  }
+                }
+              ]
+            }
+          ],
+          max_tokens: 1000,
+        }),
+      });
+
+      const data = await response.json();
+      if (data.choices && data.choices[0]?.message?.content) {
+        try {
+          const parsed = JSON.parse(data.choices[0].message.content);
+          analysisResult = {
+            ...analysisResult,
+            ...parsed,
+          };
+        } catch (e) {
+          // If JSON parsing fails, use regex fallback
+          analysisResult = analyzeText(data.choices[0].message.content, analysisResult);
+        }
+      }
+      
+    } else {
+      // Regex-based analysis (fallback)
+      // For images, we can't do much without OCR
+      // This is mainly for text-based documents
+      analysisResult.type = 'unknown';
+      analysisResult.confidence = 10;
+      analysisResult.message = 'Regex-Analyse kann nur Text-Dokumente verarbeiten. Bitte wähle Google Cloud Vision oder OpenAI in den Einstellungen.';
+    }
+
+    // Update document with analysis result
+    if (documentId && personId) {
+      await db.collection('people').doc(personId).collection('documents').doc(documentId).update({
+        analysisResult,
+        status: 'analyzed',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+  } catch (error: any) {
+    console.error('Analysis error:', error);
+    analysisResult.error = error.message;
+  }
+
+  return analysisResult;
+});
+
+// Helper function to analyze text with regex patterns
+function analyzeText(text: string, result: any): any {
+  
+  // Check for invoice patterns
+  const invoicePatterns = [
+    /RECHNUNG/i,
+    /INVOICE/i,
+    /ZAHLBAR BIS/i,
+    /FÄLLIG/i,
+    /BETRAG/i,
+    /TOTAL/i,
+    /MWST/i,
+    /QR-RECHNUNG/i,
+  ];
+  
+  // Check for appointment patterns
+  const appointmentPatterns = [
+    /TERMIN/i,
+    /EINLADUNG/i,
+    /MEETING/i,
+    /BESPRECHUNG/i,
+    /VERANSTALTUNG/i,
+    /RESERVIERUNG/i,
+  ];
+  
+  // Check for contract patterns
+  const contractPatterns = [
+    /VERTRAG/i,
+    /VEREINBARUNG/i,
+    /KONTRAKT/i,
+    /MIETVERTRAG/i,
+    /ARBEITSVERTRAG/i,
+  ];
+  
+  let invoiceScore = 0;
+  let appointmentScore = 0;
+  let contractScore = 0;
+  
+  invoicePatterns.forEach(p => { if (p.test(text)) invoiceScore += 15; });
+  appointmentPatterns.forEach(p => { if (p.test(text)) appointmentScore += 15; });
+  contractPatterns.forEach(p => { if (p.test(text)) contractScore += 15; });
+  
+  // Determine type
+  const maxScore = Math.max(invoiceScore, appointmentScore, contractScore);
+  
+  if (maxScore === 0) {
+    result.type = 'sonstiges';
+    result.confidence = 20;
+  } else if (invoiceScore === maxScore) {
+    result.type = 'rechnung';
+    result.confidence = Math.min(invoiceScore, 95);
+    
+    // Extract invoice data
+    const amountMatch = text.match(/(?:CHF|EUR|USD|Fr\.?)\s*([\d',.]+)/i) || 
+                        text.match(/([\d',.]+)\s*(?:CHF|EUR|USD|Fr\.?)/i);
+    const ibanMatch = text.match(/[A-Z]{2}\d{2}\s?[\dA-Z]{4}\s?[\dA-Z]{4}\s?[\dA-Z]{4}\s?[\dA-Z]{4}\s?[\dA-Z]{0,4}/);
+    const dateMatch = text.match(/(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})/);
+    
+    result.extractedData = {
+      amount: amountMatch ? parseFloat(amountMatch[1].replace(/[',]/g, '')) : null,
+      currency: 'CHF',
+      iban: ibanMatch ? ibanMatch[0].replace(/\s/g, '') : null,
+      dueDate: dateMatch ? `${dateMatch[3].length === 2 ? '20' + dateMatch[3] : dateMatch[3]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[1].padStart(2, '0')}` : null,
+    };
+    
+  } else if (appointmentScore === maxScore) {
+    result.type = 'termin';
+    result.confidence = Math.min(appointmentScore, 95);
+    
+    // Extract appointment data
+    const dateMatch = text.match(/(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})/);
+    const timeMatch = text.match(/(\d{1,2})[:\.](\d{2})\s*(?:Uhr)?/i);
+    
+    result.extractedData = {
+      date: dateMatch ? `${dateMatch[3].length === 2 ? '20' + dateMatch[3] : dateMatch[3]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[1].padStart(2, '0')}` : null,
+      time: timeMatch ? `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}` : null,
+    };
+    
+  } else if (contractScore === maxScore) {
+    result.type = 'vertrag';
+    result.confidence = Math.min(contractScore, 95);
+    
+    const dateMatch = text.match(/(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})/);
+    
+    result.extractedData = {
+      startDate: dateMatch ? `${dateMatch[3].length === 2 ? '20' + dateMatch[3] : dateMatch[3]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[1].padStart(2, '0')}` : null,
+    };
+  }
+  
+  result.rawText = text.substring(0, 500); // Limit raw text
+  return result;
+}
+
+// Get Person Documents
+export const getPersonDocuments = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { personId, folder } = request.data;
+
+  // Validate person belongs to user
+  const personDoc = await db.collection('people').doc(personId).get();
+  if (!personDoc.exists || personDoc.data()?.userId !== userId) {
+    throw new HttpsError('permission-denied', 'Not authorized');
+  }
+
+  let query: admin.firestore.Query = db.collection('people').doc(personId).collection('documents');
+  
+  if (folder) {
+    query = query.where('folder', '==', folder);
+  }
+
+  const snapshot = await query.orderBy('createdAt', 'desc').get();
+  
+  const documents = snapshot.docs.map(doc => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      ...data,
+      createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+      updatedAt: data.updatedAt?.toDate?.()?.toISOString() || null,
+    };
+  });
+
+  return { documents };
+});
+
+// Update Document (move to folder, change category)
+export const updateDocument = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { documentId, personId, folder, status } = request.data;
+
+  // Validate person belongs to user
+  const personDoc = await db.collection('people').doc(personId).get();
+  if (!personDoc.exists || personDoc.data()?.userId !== userId) {
+    throw new HttpsError('permission-denied', 'Not authorized');
+  }
+
+  const updateData: any = {
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  if (folder !== undefined) updateData.folder = folder;
+  if (status !== undefined) updateData.status = status;
+
+  await db.collection('people').doc(personId).collection('documents').doc(documentId).update(updateData);
+
+  return { success: true };
+});
+
+// Delete Document
+export const deleteDocument = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { documentId, personId } = request.data;
+
+  // Validate person belongs to user
+  const personDoc = await db.collection('people').doc(personId).get();
+  if (!personDoc.exists || personDoc.data()?.userId !== userId) {
+    throw new HttpsError('permission-denied', 'Not authorized');
+  }
+
+  // Get document to find file path
+  const docRef = db.collection('people').doc(personId).collection('documents').doc(documentId);
+  const doc = await docRef.get();
+  
+  if (doc.exists) {
+    const data = doc.data();
+    
+    // Delete file from Storage
+    if (data?.filePath) {
+      try {
+        const bucket = storage.bucket();
+        await bucket.file(data.filePath).delete();
+      } catch (e) {
+        console.error('Error deleting file:', e);
+      }
+    }
+    
+    // Delete document record
+    await docRef.delete();
+  }
+
+  return { success: true };
+});
+
+// Process Document (create invoice/reminder from analyzed document)
+export const processDocument = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { documentId, personId, type, data } = request.data;
+
+  // Validate person belongs to user
+  const personDoc = await db.collection('people').doc(personId).get();
+  if (!personDoc.exists || personDoc.data()?.userId !== userId) {
+    throw new HttpsError('permission-denied', 'Not authorized');
+  }
+
+  const personData = personDoc.data();
+  let result: any = { success: true };
+
+  if (type === 'rechnung') {
+    // Create invoice
+    const invoiceData = {
+      description: data.description || 'Rechnung',
+      amount: data.amount || 0,
+      status: 'open',
+      direction: data.direction || 'outgoing',
+      dueDate: data.dueDate ? admin.firestore.Timestamp.fromDate(new Date(data.dueDate)) : null,
+      iban: data.iban || null,
+      documentId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    const invoiceRef = await db.collection('people').doc(personId).collection('invoices').add(invoiceData);
+    result.invoiceId = invoiceRef.id;
+    result.type = 'rechnung';
+
+  } else if (type === 'termin') {
+    // Create reminder/appointment
+    const reminderData = {
+      userId,
+      title: data.title || 'Termin',
+      type: 'termin',
+      dueDate: data.date ? admin.firestore.Timestamp.fromDate(new Date(data.date + (data.time ? `T${data.time}` : 'T12:00'))) : admin.firestore.Timestamp.fromDate(new Date()),
+      notes: data.description || null,
+      personId,
+      personName: personData?.name,
+      status: 'offen',
+      documentId,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    const reminderRef = await db.collection('reminders').add(reminderData);
+    result.reminderId = reminderRef.id;
+    result.type = 'termin';
+  }
+
+  // Update document status and folder
+  const folder = type === 'rechnung' ? 'Rechnungen' : type === 'termin' ? 'Termine' : 'Sonstiges';
+  await db.collection('people').doc(personId).collection('documents').doc(documentId).update({
+    status: 'processed',
+    folder,
+    processedType: type,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return result;
+});
+
+// Get All Documents (across all persons for the user)
+export const getAllDocuments = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { folder, limit: queryLimit } = request.data || {};
+
+  // Get all people for this user
+  const peopleSnapshot = await db.collection('people').where('userId', '==', userId).get();
+  
+  const allDocuments: any[] = [];
+  
+  for (const personDoc of peopleSnapshot.docs) {
+    const personData = personDoc.data();
+    
+    let docsQuery: admin.firestore.Query = personDoc.ref.collection('documents');
+    
+    if (folder && folder !== 'all') {
+      docsQuery = docsQuery.where('folder', '==', folder);
+    }
+    
+    const docsSnapshot = await docsQuery.orderBy('createdAt', 'desc').get();
+    
+    for (const doc of docsSnapshot.docs) {
+      const data = doc.data();
+      allDocuments.push({
+        id: doc.id,
+        personId: personDoc.id,
+        personName: personData.name,
+        ...data,
+        createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+        updatedAt: data.updatedAt?.toDate?.()?.toISOString() || null,
+      });
+    }
+  }
+  
+  // Sort by createdAt descending
+  allDocuments.sort((a, b) => {
+    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return dateB - dateA;
+  });
+  
+  // Apply limit if specified
+  const limitedDocs = queryLimit ? allDocuments.slice(0, queryLimit) : allDocuments;
+  
+  return { documents: limitedDocs, total: allDocuments.length };
 });

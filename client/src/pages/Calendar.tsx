@@ -517,7 +517,10 @@ export default function Calendar() {
     }
 
     try {
-      const baseDate = new Date(newEvent.date + (newEvent.time ? `T${newEvent.time}` : 'T12:00'));
+      // Parse date parts to avoid timezone issues
+      const [year, month, day] = newEvent.date.split('-').map(Number);
+      const [hours, minutes] = newEvent.time ? newEvent.time.split(':').map(Number) : [12, 0];
+      const baseDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
       
       if (newEvent.isRecurring) {
         // Create multiple events for recurring
@@ -534,27 +537,27 @@ export default function Calendar() {
         for (const date of dates) {
           await createReminder({
             title: newEvent.title,
-            description: newEvent.description,
-            date,
-            category: newEvent.category,
+            notes: newEvent.description,
+            dueDate: date.toISOString(),
+            type: newEvent.category || 'termin',
             priority: newEvent.priority,
-            completed: false,
           });
         }
         toast.success(`${dates.length} wiederkehrende Termine erstellt`);
       } else {
         await createReminder({
           title: newEvent.title,
-          description: newEvent.description,
-          date: baseDate,
-          category: newEvent.category,
+          notes: newEvent.description,
+          dueDate: baseDate.toISOString(),
+          type: newEvent.category || 'termin',
           priority: newEvent.priority,
-          completed: false,
         });
         toast.success('Termin erstellt');
       }
 
-      setNewEvent({ title: '', description: '', date: new Date().toISOString().split('T')[0], time: '', category: 'general', priority: 'medium', isRecurring: false, recurrenceRule: 'weekly', recurrenceCount: 4 });
+      const today = new Date();
+      const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      setNewEvent({ title: '', description: '', date: localDate, time: '', category: 'general', priority: 'medium', isRecurring: false, recurrenceRule: 'weekly', recurrenceCount: 4 });
       setShowAddDialog(false);
       await refreshAll();
     } catch (error: any) {
@@ -909,7 +912,9 @@ export default function Calendar() {
         {/* Header Row 2: Actions */}
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" onClick={() => {
-            setNewEvent({ ...newEvent, date: new Date().toISOString().split('T')[0] });
+            const today = new Date();
+            const localDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            setNewEvent({ ...newEvent, date: localDate });
             setShowAddDialog(true);
           }}>
             <Plus className="w-4 h-4 mr-1" />
@@ -1703,7 +1708,8 @@ export default function Calendar() {
                         variant="outline" 
                         className="h-auto py-3 flex-col gap-1"
                         onClick={() => {
-                          setNewEvent({ ...newEvent, date: selectedDate.toISOString().split('T')[0] });
+                          const localDate = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+                          setNewEvent({ ...newEvent, date: localDate });
                           setShowDayDialog(false);
                           setShowAddDialog(true);
                         }}
@@ -1716,9 +1722,9 @@ export default function Calendar() {
                         variant="outline" 
                         className="h-auto py-3 flex-col gap-1"
                         onClick={() => {
-                          setShowDayDialog(false);
-                          setLocation('/people');
                           toast.info('Wähle eine Person und füge eine Rechnung hinzu');
+                          setShowDayDialog(false);
+                          setTimeout(() => setLocation('/people'), 100);
                         }}
                       >
                         <FileText className="w-4 h-4" />
@@ -1729,9 +1735,9 @@ export default function Calendar() {
                         variant="outline" 
                         className="h-auto py-3 flex-col gap-1"
                         onClick={() => {
-                          setShowDayDialog(false);
-                          setLocation('/finance');
                           toast.info('Erfasse eine neue Ausgabe oder Einnahme');
+                          setShowDayDialog(false);
+                          setTimeout(() => setLocation('/finance'), 100);
                         }}
                       >
                         <ArrowDownLeft className="w-4 h-4" />
@@ -1742,9 +1748,9 @@ export default function Calendar() {
                         variant="outline" 
                         className="h-auto py-3 flex-col gap-1"
                         onClick={() => {
-                          setShowDayDialog(false);
-                          setLocation('/reminders');
                           toast.info('Erstelle eine neue Erinnerung');
+                          setShowDayDialog(false);
+                          setTimeout(() => setLocation('/reminders'), 100);
                         }}
                       >
                         <Bell className="w-4 h-4" />
@@ -1760,28 +1766,28 @@ export default function Calendar() {
                       <Button 
                         variant="ghost" 
                         size="sm"
-                        onClick={() => { setShowDayDialog(false); setLocation('/bills'); }}
+                        onClick={() => { setShowDayDialog(false); setTimeout(() => setLocation('/bills'), 100); }}
                       >
                         Rechnungen
                       </Button>
                       <Button 
                         variant="ghost" 
                         size="sm"
-                        onClick={() => { setShowDayDialog(false); setLocation('/people'); }}
+                        onClick={() => { setShowDayDialog(false); setTimeout(() => setLocation('/people'), 100); }}
                       >
                         Personen
                       </Button>
                       <Button 
                         variant="ghost" 
                         size="sm"
-                        onClick={() => { setShowDayDialog(false); setLocation('/finance'); }}
+                        onClick={() => { setShowDayDialog(false); setTimeout(() => setLocation('/finance'), 100); }}
                       >
                         Finanzen
                       </Button>
                       <Button 
                         variant="ghost" 
                         size="sm"
-                        onClick={() => { setShowDayDialog(false); setLocation('/reminders'); }}
+                        onClick={() => { setShowDayDialog(false); setTimeout(() => setLocation('/reminders'), 100); }}
                       >
                         Erinnerungen
                       </Button>
@@ -1931,9 +1937,9 @@ export default function Calendar() {
                         size="sm"
                         className="w-full"
                         onClick={() => {
-                          setShowEventDialog(false);
-                          setLocation('/people');
                           toast.info('Öffne Person um Rechnung zu bearbeiten');
+                          setShowEventDialog(false);
+                          setTimeout(() => setLocation('/people'), 100);
                         }}
                       >
                         <Edit2 className="w-4 h-4 mr-2" />
@@ -1944,9 +1950,9 @@ export default function Calendar() {
                         size="sm"
                         className="w-full"
                         onClick={() => {
-                          setShowEventDialog(false);
-                          setLocation('/finance');
                           toast.info('Erfasse die Zahlung als Ausgabe');
+                          setShowEventDialog(false);
+                          setTimeout(() => setLocation('/finance'), 100);
                         }}
                       >
                         <ArrowUpRight className="w-4 h-4 mr-2" />
@@ -1961,9 +1967,9 @@ export default function Calendar() {
                         size="sm"
                         className="w-full"
                         onClick={() => {
-                          setShowEventDialog(false);
-                          setLocation('/reminders');
                           toast.info('Öffne Erinnerungen zum Bearbeiten');
+                          setShowEventDialog(false);
+                          setTimeout(() => setLocation('/reminders'), 100);
                         }}
                       >
                         <Edit2 className="w-4 h-4 mr-2" />
@@ -1998,21 +2004,21 @@ export default function Calendar() {
                 <Button 
                   variant="ghost" 
                   size="sm"
-                  onClick={() => { setShowEventDialog(false); setLocation('/bills'); }}
+                  onClick={() => { setShowEventDialog(false); setTimeout(() => setLocation('/bills'), 100); }}
                 >
                   Alle Rechnungen
                 </Button>
                 <Button 
                   variant="ghost" 
                   size="sm"
-                  onClick={() => { setShowEventDialog(false); setLocation('/people'); }}
+                  onClick={() => { setShowEventDialog(false); setTimeout(() => setLocation('/people'), 100); }}
                 >
                   Personen
                 </Button>
                 <Button 
                   variant="ghost" 
                   size="sm"
-                  onClick={() => { setShowEventDialog(false); setLocation('/finance'); }}
+                  onClick={() => { setShowEventDialog(false); setTimeout(() => setLocation('/finance'), 100); }}
                 >
                   Finanzen
                 </Button>

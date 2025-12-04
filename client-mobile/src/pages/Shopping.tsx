@@ -9,17 +9,57 @@ import {
   Camera,
   ScanLine,
   Upload,
-  FileText
+  FileText,
+  Store,
+  Calendar,
+  Clock,
+  CreditCard,
+  Receipt,
+  ChevronDown,
+  ChevronUp,
+  Save,
+  Banknote
 } from 'lucide-react';
 import MobileLayout from '@/components/MobileLayout';
-import { useShoppingList, createShoppingItem, markShoppingItemAsBought, deleteShoppingItem } from '@/lib/firebaseHooks';
+import { useShoppingList, createShoppingItem, markShoppingItemAsBought, deleteShoppingItem, createFinanceEntry } from '@/lib/firebaseHooks';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { functions } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
+
+interface ReceiptItem {
+  name: string;
+  articleNumber?: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  taxCategory?: string;
+  selected?: boolean;
+}
+
+interface ReceiptData {
+  store: {
+    name: string;
+    address?: string;
+    city?: string;
+    postalCode?: string;
+  };
+  purchase: {
+    date?: string;
+    time?: string;
+    paymentMethod?: string;
+  };
+  items: ReceiptItem[];
+  totals: {
+    subtotal?: number;
+    rounding?: number;
+    total: number;
+    itemCount?: number;
+  };
+  confidence: number;
+}
 
 const categories = [
   'Lebensmittel',
@@ -45,7 +85,11 @@ export default function MobileShopping() {
   const [showScanner, setShowScanner] = useState(false);
   const [scannerMode, setScannerMode] = useState<'camera' | 'upload'>('camera');
   const [isScanning, setIsScanning] = useState(false);
-  const [scannedItems, setScannedItems] = useState<Array<{ name: string; quantity?: number; category?: string; selected: boolean }>>([]);
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [scannedItems, setScannedItems] = useState<ReceiptItem[]>([]);
+  const [showStoreSection, setShowStoreSection] = useState(true);
+  const [showItemsSection, setShowItemsSection] = useState(true);
+  const [showPaymentSection, setShowPaymentSection] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -170,14 +214,16 @@ export default function MobileShopping() {
   const analyzeShoppingList = async (file: File) => {
     setIsScanning(true);
     setScannedItems([]);
+    setReceiptData(null);
     
     try {
       const reader = new FileReader();
       reader.onload = async () => {
         const base64 = (reader.result as string).split(',')[1];
         
-        const analyzeList = httpsCallable(functions, 'analyzeShoppingList');
-        const result = await analyzeList({
+        // Use the intelligent receipt analyzer
+        const analyzeReceipt = httpsCallable(functions, 'analyzeReceipt');
+        const result = await analyzeReceipt({
           fileData: base64,
           fileType: file.type,
           fileName: file.name,
@@ -185,11 +231,20 @@ export default function MobileShopping() {
         
         const data = result.data as any;
         
-        if (data.success && data.items.length > 0) {
-          setScannedItems(data.items.map((item: any) => ({ ...item, selected: true })));
-          toast.success(`${data.items.length} Artikel erkannt!`);
+        if (data.success && data.items && data.items.length > 0) {
+          // Store full receipt data
+          setReceiptData({
+            store: data.store,
+            purchase: data.purchase,
+            items: data.items,
+            totals: data.totals,
+            confidence: data.confidence,
+          });
+          // Mark all items as selected
+          setScannedItems(data.items.map((item: ReceiptItem) => ({ ...item, selected: true })));
+          toast.success(`${data.items.length} Artikel erkannt (${data.confidence}% Konfidenz)`);
         } else {
-          toast.error('Keine Artikel erkannt');
+          toast.error(data.error || 'Keine Artikel erkannt');
         }
         
         setIsScanning(false);
@@ -213,18 +268,77 @@ export default function MobileShopping() {
         await createShoppingItem({
           name: item.name,
           quantity: item.quantity || 1,
-          category: item.category || 'Lebensmittel',
+          category: categorizeItem(item.name),
+          store: receiptData?.store?.name || '',
           bought: false
         });
       }
       
       toast.success(`${selected.length} Artikel hinzugefügt!`);
-      setShowScanner(false);
-      setScannedItems([]);
+      closeScanner();
       await refetch();
     } catch (error: any) {
       toast.error('Fehler: ' + error.message);
     }
+  };
+
+  // Save receipt and add to finance
+  const handleSaveReceipt = async () => {
+    if (!receiptData) return;
+
+    try {
+      // Save receipt to database
+      const saveReceipt = httpsCallable(functions, 'saveReceipt');
+      await saveReceipt({
+        receiptData,
+      });
+
+      toast.success('Quittung gespeichert!');
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
+  // Add receipt total to finance as expense
+  const handleAddToFinance = async () => {
+    if (!receiptData) return;
+
+    try {
+      await createFinanceEntry({
+        type: 'expense',
+        amount: receiptData.totals.total * 100, // Convert to cents
+        category: 'Lebensmittel',
+        description: `Einkauf bei ${receiptData.store.name}`,
+        date: receiptData.purchase.date || new Date().toISOString().split('T')[0],
+        paymentMethod: receiptData.purchase.paymentMethod || 'Karte',
+        status: 'bezahlt',
+      });
+
+      toast.success('Zu Finanzen hinzugefügt!');
+      closeScanner();
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
+  // Helper function to categorize items
+  const categorizeItem = (name: string): string => {
+    const lowerName = name.toLowerCase();
+    const categories: Record<string, string[]> = {
+      'Getränke': ['bier', 'wein', 'saft', 'wasser', 'cola', 'fanta', 'sprite', 'energy', 'shot', 'drink'],
+      'Obst & Gemüse': ['apfel', 'orange', 'banane', 'tomate', 'salat', 'gurke', 'karotte', 'bio oran', 'gemüse'],
+      'Milchprodukte': ['milch', 'joghurt', 'käse', 'butter', 'sahne', 'quark', 'naturejog'],
+      'Fleisch': ['fleisch', 'steak', 'wurst', 'schinken', 'poulet', 'rind', 'schwein', 'ragout'],
+      'Backwaren': ['brot', 'brötchen', 'toast', 'croissant', 'kuchen', 'keks', 'butterkeks'],
+      'Süsswaren': ['schoko', 'bonbon', 'gummi', 'chips', 'zucker', 'gelatine'],
+    };
+
+    for (const [category, keywords] of Object.entries(categories)) {
+      if (keywords.some(kw => lowerName.includes(kw))) {
+        return category;
+      }
+    }
+    return 'Lebensmittel';
   };
 
   const openScanner = () => {
@@ -238,6 +352,7 @@ export default function MobileShopping() {
     stopCamera();
     setShowScanner(false);
     setScannedItems([]);
+    setReceiptData(null);
   };
 
   return (
@@ -518,50 +633,181 @@ export default function MobileShopping() {
             </div>
           )}
 
-          {/* Scanned Items */}
-          {scannedItems.length > 0 && (
+          {/* Structured Receipt Results */}
+          {receiptData && scannedItems.length > 0 && (
             <div className="flex-1 bg-background overflow-y-auto">
-              <div className="p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <p className="font-medium">{scannedItems.filter(i => i.selected).length} von {scannedItems.length} ausgewählt</p>
+              <div className="p-4 space-y-4">
+                
+                {/* Store Section */}
+                <div className="bg-muted rounded-xl overflow-hidden">
                   <button
-                    onClick={() => setScannedItems(items => items.map(i => ({ ...i, selected: !scannedItems.every(x => x.selected) })))}
-                    className="text-sm text-primary"
+                    onClick={() => setShowStoreSection(!showStoreSection)}
+                    className="w-full p-3 flex items-center justify-between"
                   >
-                    {scannedItems.every(i => i.selected) ? 'Alle abwählen' : 'Alle auswählen'}
+                    <div className="flex items-center gap-2">
+                      <Store className="w-4 h-4 text-primary" />
+                      <span className="font-medium">Geschäft</span>
+                    </div>
+                    {showStoreSection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </button>
-                </div>
-
-                <div className="space-y-2">
-                  {scannedItems.map((item, idx) => (
-                    <div 
-                      key={idx}
-                      className={`p-3 rounded-lg border ${item.selected ? 'bg-primary/10 border-primary' : 'bg-muted border-border'}`}
-                      onClick={() => setScannedItems(items => items.map((i, j) => j === idx ? { ...i, selected: !i.selected } : i))}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`w-5 h-5 rounded border ${item.selected ? 'bg-primary border-primary' : 'border-border'} flex items-center justify-center`}>
-                          {item.selected && <Check className="w-3 h-3 text-white" />}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium">{item.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {item.quantity && item.quantity > 1 && `${item.quantity}x • `}
-                            {item.category || 'Sonstiges'}
-                          </p>
-                        </div>
+                  {showStoreSection && (
+                    <div className="px-3 pb-3 space-y-1">
+                      <p className="font-semibold text-lg">{receiptData.store.name}</p>
+                      {receiptData.store.address && (
+                        <p className="text-sm text-muted-foreground">{receiptData.store.address}</p>
+                      )}
+                      {receiptData.store.city && (
+                        <p className="text-sm text-muted-foreground">
+                          {receiptData.store.postalCode} {receiptData.store.city}
+                        </p>
+                      )}
+                      <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+                        {receiptData.purchase.date && (
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(receiptData.purchase.date).toLocaleDateString('de-CH')}
+                          </span>
+                        )}
+                        {receiptData.purchase.time && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {receiptData.purchase.time}
+                          </span>
+                        )}
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
 
-                <Button
-                  onClick={handleAddScannedItems}
-                  className="w-full mt-4"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  {scannedItems.filter(i => i.selected).length} Artikel hinzufügen
-                </Button>
+                {/* Items Section */}
+                <div className="bg-muted rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => setShowItemsSection(!showItemsSection)}
+                    className="w-full p-3 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2">
+                      <ShoppingCart className="w-4 h-4 text-primary" />
+                      <span className="font-medium">Artikel ({scannedItems.length})</span>
+                      <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full">
+                        {scannedItems.filter(i => i.selected).length} ausgewählt
+                      </span>
+                    </div>
+                    {showItemsSection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {showItemsSection && (
+                    <div className="px-3 pb-3">
+                      <div className="flex justify-end mb-2">
+                        <button
+                          onClick={() => setScannedItems(items => items.map(i => ({ ...i, selected: !scannedItems.every(x => x.selected) })))}
+                          className="text-xs text-primary"
+                        >
+                          {scannedItems.every(i => i.selected) ? 'Alle abwählen' : 'Alle auswählen'}
+                        </button>
+                      </div>
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {scannedItems.map((item, idx) => (
+                          <div 
+                            key={idx}
+                            className={`p-2.5 rounded-lg border ${item.selected ? 'bg-background border-primary' : 'bg-background/50 border-border'}`}
+                            onClick={() => setScannedItems(items => items.map((i, j) => j === idx ? { ...i, selected: !i.selected } : i))}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className={`w-5 h-5 rounded border-2 ${item.selected ? 'bg-primary border-primary' : 'border-border'} flex items-center justify-center shrink-0`}>
+                                {item.selected && <Check className="w-3 h-3 text-white" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">{item.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {item.articleNumber && <span className="mr-2">#{item.articleNumber}</span>}
+                                  {item.quantity}x à CHF {item.unitPrice.toFixed(2)}
+                                </p>
+                              </div>
+                              <p className="font-semibold text-sm shrink-0">
+                                CHF {item.totalPrice.toFixed(2)}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Payment Section */}
+                <div className="bg-muted rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => setShowPaymentSection(!showPaymentSection)}
+                    className="w-full p-3 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="w-4 h-4 text-primary" />
+                      <span className="font-medium">Zahlung</span>
+                    </div>
+                    {showPaymentSection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {showPaymentSection && (
+                    <div className="px-3 pb-3 space-y-2">
+                      {receiptData.totals.subtotal && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Zwischensumme</span>
+                          <span>CHF {receiptData.totals.subtotal.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {receiptData.totals.rounding && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Rundung</span>
+                          <span>CHF {receiptData.totals.rounding.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-semibold text-lg pt-2 border-t">
+                        <span>Total</span>
+                        <span>CHF {receiptData.totals.total.toFixed(2)}</span>
+                      </div>
+                      {receiptData.purchase.paymentMethod && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <CreditCard className="w-3 h-3" />
+                          {receiptData.purchase.paymentMethod}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Confidence indicator */}
+                <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                  <div className={`w-2 h-2 rounded-full ${receiptData.confidence >= 70 ? 'bg-green-500' : receiptData.confidence >= 40 ? 'bg-yellow-500' : 'bg-red-500'}`} />
+                  Erkennungsqualität: {receiptData.confidence}%
+                </div>
+
+                {/* Action Buttons */}
+                <div className="space-y-2 pt-2">
+                  <Button
+                    onClick={handleAddScannedItems}
+                    className="w-full"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    {scannedItems.filter(i => i.selected).length} Artikel zur Liste
+                  </Button>
+                  
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={handleSaveReceipt}
+                      className="flex-1"
+                    >
+                      <Save className="w-4 h-4 mr-1" />
+                      Speichern
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleAddToFinance}
+                      className="flex-1"
+                    >
+                      <Banknote className="w-4 h-4 mr-1" />
+                      Zu Finanzen
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

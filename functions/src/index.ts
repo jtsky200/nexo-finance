@@ -3294,3 +3294,676 @@ export const useShoppingListTemplate = onCall(async (request) => {
     addedItems,
   };
 });
+
+// ============================================
+// INTELLIGENT RECEIPT SCANNER SYSTEM
+// ============================================
+
+interface ReceiptItem {
+  name: string;
+  articleNumber?: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  taxCategory?: string;
+}
+
+interface ReceiptData {
+  store: {
+    name: string;
+    address?: string;
+    city?: string;
+    postalCode?: string;
+  };
+  purchase: {
+    date?: string;
+    time?: string;
+    paymentMethod?: string;
+  };
+  items: ReceiptItem[];
+  totals: {
+    subtotal?: number;
+    rounding?: number;
+    total: number;
+    itemCount?: number;
+  };
+  tax?: {
+    categoryA?: { rate: number; net: number; tax: number };
+    categoryB?: { rate: number; net: number; tax: number };
+  };
+  rawText: string;
+  confidence: number;
+}
+
+// Analyze Receipt with intelligent parsing
+export const analyzeReceipt = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { fileData, fileType, fileName } = request.data;
+  const buffer = Buffer.from(fileData, 'base64');
+  let extractedText = '';
+
+  // Step 1: Extract text using OCR
+  try {
+    const mimeType = fileType?.toLowerCase() || '';
+    const fileExt = fileName?.toLowerCase().split('.').pop() || '';
+
+    if (mimeType.includes('pdf') || fileExt === 'pdf') {
+      const pdfParse = require('pdf-parse');
+      const pdfData = await pdfParse(buffer);
+      extractedText = (pdfData.text || '').trim();
+    } else if (mimeType.includes('image')) {
+      // Use Google Vision for images
+      try {
+        const vision = require('@google-cloud/vision');
+        const client = new vision.ImageAnnotatorClient();
+        const [result] = await client.textDetection(buffer);
+        const detections = result.textAnnotations;
+        extractedText = detections && detections.length > 0 ? detections[0].description : '';
+      } catch (e) {
+        console.error('Vision OCR error:', e);
+        return { success: false, error: 'OCR fehlgeschlagen. Bitte Google Cloud Vision aktivieren.' };
+      }
+    } else {
+      extractedText = buffer.toString('utf8').trim();
+    }
+
+    if (!extractedText || extractedText.length < 20) {
+      return { success: false, error: 'Kein Text erkannt' };
+    }
+
+    // Step 2: Parse the receipt intelligently
+    const receiptData = parseSwissReceipt(extractedText);
+
+    return {
+      success: true,
+      ...receiptData,
+    };
+
+  } catch (error: any) {
+    console.error('Receipt analysis error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Intelligent Swiss receipt parser
+function parseSwissReceipt(text: string): ReceiptData {
+  const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(l => l.length > 0);
+  
+  const result: ReceiptData = {
+    store: { name: '' },
+    purchase: {},
+    items: [],
+    totals: { total: 0 },
+    rawText: text,
+    confidence: 0,
+  };
+
+  // Known Swiss stores for better recognition
+  const knownStores: Record<string, string> = {
+    'ALDI': 'ALDI SUISSE AG',
+    'MIGROS': 'Migros',
+    'COOP': 'Coop',
+    'LIDL': 'Lidl Schweiz',
+    'DENNER': 'Denner',
+    'SPAR': 'Spar',
+    'VOLG': 'Volg',
+    'MANOR': 'Manor',
+  };
+
+  // Patterns
+  const patterns = {
+    // Store detection
+    storeNames: /^(ALDI|MIGROS|COOP|LIDL|DENNER|SPAR|VOLG|MANOR|MIGROLINO|AVEC)/i,
+    storeFull: /(ALDI\s*SUISSE|MIGROS\s*\w*|COOP\s*\w*|LIDL\s*SCHWEIZ)/i,
+    
+    // Address patterns
+    postalCity: /(\d{4})\s+([A-Za-zäöüÄÖÜ\-\s]+?)(?:\s+[A-Z]{2})?$/,
+    street: /([A-Za-zäöüÄÖÜ]+(?:strasse|str\.|weg|platz|gasse)\s*\d*)/i,
+    
+    // Item patterns - Swiss receipt format
+    // Format: [qty x] [articleNo] name price [taxCat]
+    itemLine: /^(\d+)\s*[x×]?\s+(\d{3,})\s+(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/,
+    itemLineAlt: /^(\d+)\s*[x×]\s+(\d+[.,]\d{2})\s*$/,
+    itemSimple: /^(\d{3,})?\s*(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/,
+    
+    // Quantity at start
+    qtyPrefix: /^(\d+)\s*[x×]\s+/,
+    
+    // Price at end
+    priceEnd: /(\d+[.,]\d{2})\s*([AB])?$/,
+    
+    // Total patterns
+    total: /(Total|PREIS|TOTAL|Summe|SUMME|Total-EFT)\s*(?:CHF)?\s*(\d+[.,]\d{2})/i,
+    subtotal: /(Zwischensumme|Subtotal|ZWISCHENSUMME)\s*(\d+[.,]\d{2})/i,
+    rounding: /(Rundung|RUNDUNG)\s*(-?\d+[.,]\d{2})/i,
+    
+    // Payment
+    payment: /(Kartenzahlung|Barzahlung|TWINT|Karte|Bar|Debit|Kredit|Mastercard|Visa)/i,
+    
+    // Date/Time
+    datePattern: /(\d{2})[.\/](\d{2})[.\/](\d{2,4})/,
+    timePattern: /(\d{2}):(\d{2})/,
+    
+    // Tax
+    mwstA: /A\s*(\d+[.,]\d+)%?\s*(?:Netto)?\s*(\d+[.,]\d{2})\s*(?:MwSt)?\s*(\d+[.,]\d{2})/i,
+    mwstB: /B\s*(\d+[.,]\d+)%?\s*(?:Netto)?\s*(\d+[.,]\d{2})\s*(?:MwSt)?\s*(\d+[.,]\d{2})/i,
+    
+    // Article count
+    articleCount: /(\d+)\s*(Artikel|Art\.|Pos\.)/i,
+    
+    // Skip patterns (non-item lines)
+    skipPatterns: [
+      /^CHF$/i,
+      /^(Vielen\s*Dank|Danke|Thank)/i,
+      /^(Bitte\s*scanne|Barcode)/i,
+      /^(MwSt|MWST|Steuer)/i,
+      /^(Netto|Brutto)/i,
+      /^\d{10,}$/, // Long numbers (barcodes)
+      /^[#*\-=]+$/, // Separators
+      /^(Debit|Kredit|Karte).*\d{4}/i, // Card numbers
+      /^(CHE|UID|MWST-Nr)/i, // Tax IDs
+    ],
+  };
+
+  let headerSection = true;
+  let footerSection = false;
+  let confidencePoints = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const nextLine = lines[i + 1] || '';
+    
+    // Skip empty or separator lines
+    if (patterns.skipPatterns.some(p => p.test(line))) continue;
+
+    // === HEADER SECTION ===
+    if (headerSection) {
+      // Detect known store
+      const storeMatch = line.match(patterns.storeNames) || line.match(patterns.storeFull);
+      if (storeMatch) {
+        const storeName = storeMatch[0].toUpperCase();
+        for (const [key, fullName] of Object.entries(knownStores)) {
+          if (storeName.includes(key)) {
+            result.store.name = fullName;
+            confidencePoints += 20;
+            break;
+          }
+        }
+        if (!result.store.name) result.store.name = storeMatch[0];
+        continue;
+      }
+
+      // Detect postal code and city
+      const postalMatch = line.match(patterns.postalCity);
+      if (postalMatch) {
+        result.store.postalCode = postalMatch[1];
+        result.store.city = postalMatch[2].trim();
+        confidencePoints += 10;
+        continue;
+      }
+
+      // Detect street
+      const streetMatch = line.match(patterns.street);
+      if (streetMatch && !result.store.address) {
+        result.store.address = streetMatch[1];
+        confidencePoints += 5;
+        continue;
+      }
+
+      // Check if we're entering item section (usually after "CHF" header)
+      if (line === 'CHF' || line.match(/^\s*CHF\s+CHF\s*$/)) {
+        headerSection = false;
+        continue;
+      }
+    }
+
+    // === ITEM SECTION ===
+    if (!footerSection) {
+      // Check for total (signals end of items)
+      const totalMatch = line.match(patterns.total);
+      if (totalMatch) {
+        result.totals.total = parseFloat(totalMatch[2].replace(',', '.'));
+        footerSection = true;
+        confidencePoints += 15;
+        continue;
+      }
+
+      // Check for subtotal
+      const subtotalMatch = line.match(patterns.subtotal);
+      if (subtotalMatch) {
+        result.totals.subtotal = parseFloat(subtotalMatch[2].replace(',', '.'));
+        footerSection = true;
+        continue;
+      }
+
+      // Try to parse as item
+      const item = parseReceiptItem(line, nextLine);
+      if (item) {
+        result.items.push(item);
+        headerSection = false;
+        confidencePoints += 3;
+      }
+    }
+
+    // === FOOTER SECTION ===
+    if (footerSection) {
+      // Rounding
+      const roundingMatch = line.match(patterns.rounding);
+      if (roundingMatch) {
+        result.totals.rounding = parseFloat(roundingMatch[2].replace(',', '.'));
+      }
+
+      // Payment method
+      const paymentMatch = line.match(patterns.payment);
+      if (paymentMatch) {
+        result.purchase.paymentMethod = paymentMatch[1];
+        confidencePoints += 5;
+      }
+
+      // Date
+      const dateMatch = line.match(patterns.datePattern);
+      if (dateMatch && !result.purchase.date) {
+        const year = dateMatch[3].length === 2 ? '20' + dateMatch[3] : dateMatch[3];
+        result.purchase.date = `${year}-${dateMatch[2]}-${dateMatch[1]}`;
+        confidencePoints += 10;
+      }
+
+      // Time
+      const timeMatch = line.match(patterns.timePattern);
+      if (timeMatch && !result.purchase.time) {
+        result.purchase.time = `${timeMatch[1]}:${timeMatch[2]}`;
+        confidencePoints += 5;
+      }
+
+      // Tax info
+      const mwstAMatch = line.match(patterns.mwstA);
+      if (mwstAMatch) {
+        result.tax = result.tax || {};
+        result.tax.categoryA = {
+          rate: parseFloat(mwstAMatch[1].replace(',', '.')),
+          net: parseFloat(mwstAMatch[2].replace(',', '.')),
+          tax: parseFloat(mwstAMatch[3].replace(',', '.')),
+        };
+      }
+
+      const mwstBMatch = line.match(patterns.mwstB);
+      if (mwstBMatch) {
+        result.tax = result.tax || {};
+        result.tax.categoryB = {
+          rate: parseFloat(mwstBMatch[1].replace(',', '.')),
+          net: parseFloat(mwstBMatch[2].replace(',', '.')),
+          tax: parseFloat(mwstBMatch[3].replace(',', '.')),
+        };
+      }
+
+      // Article count
+      const countMatch = line.match(patterns.articleCount);
+      if (countMatch) {
+        result.totals.itemCount = parseInt(countMatch[1]);
+      }
+    }
+  }
+
+  // Calculate confidence
+  result.confidence = Math.min(100, confidencePoints);
+  result.totals.itemCount = result.totals.itemCount || result.items.length;
+
+  return result;
+}
+
+// Parse a single receipt item line
+function parseReceiptItem(line: string, nextLine: string): ReceiptItem | null {
+  // Skip non-item patterns
+  const skipPatterns = [
+    /^(Zwischensumme|Subtotal|Total|PREIS|Summe|Rundung)/i,
+    /^(MwSt|MWST|Steuer|Netto|Brutto)/i,
+    /^(Vielen\s*Dank|Danke|Bitte)/i,
+    /^(Kartenzahlung|Barzahlung|TWINT|Debit)/i,
+    /^\d{10,}$/, // Barcodes
+    /^[A-Z]{2,3}-?\d{3}/i, // Tax IDs
+  ];
+
+  if (skipPatterns.some(p => p.test(line))) return null;
+
+  let item: ReceiptItem | null = null;
+
+  // Pattern 1: Full format - qty articleNo name price taxCat
+  // Example: "2 x 825076 Bio Oran./Apfel 1l 3.98 A"
+  const fullMatch = line.match(/^(\d+)\s*[x×]\s+(\d{3,})\s+(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
+  if (fullMatch) {
+    item = {
+      quantity: parseInt(fullMatch[1]),
+      articleNumber: fullMatch[2],
+      name: fullMatch[3].trim(),
+      totalPrice: parseFloat(fullMatch[4].replace(',', '.')),
+      unitPrice: parseFloat(fullMatch[4].replace(',', '.')) / parseInt(fullMatch[1]),
+      taxCategory: fullMatch[5],
+    };
+    return item;
+  }
+
+  // Pattern 2: articleNo name price taxCat (qty=1)
+  // Example: "60517 Naturejog. 500g 0.85 A"
+  const simpleMatch = line.match(/^(\d{3,})\s+(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
+  if (simpleMatch) {
+    item = {
+      quantity: 1,
+      articleNumber: simpleMatch[1],
+      name: simpleMatch[2].trim(),
+      totalPrice: parseFloat(simpleMatch[3].replace(',', '.')),
+      unitPrice: parseFloat(simpleMatch[3].replace(',', '.')),
+      taxCategory: simpleMatch[4],
+    };
+    return item;
+  }
+
+  // Pattern 3: Quantity line followed by price line
+  // Example: "2 x    1.99"
+  // Followed by item name
+  const qtyPriceMatch = line.match(/^(\d+)\s*[x×]\s+(\d+[.,]\d{2})\s*$/);
+  if (qtyPriceMatch && nextLine) {
+    const nameMatch = nextLine.match(/^(\d{3,})?\s*(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
+    if (nameMatch) {
+      item = {
+        quantity: parseInt(qtyPriceMatch[1]),
+        articleNumber: nameMatch[1],
+        name: nameMatch[2].trim(),
+        totalPrice: parseFloat(nameMatch[3].replace(',', '.')),
+        unitPrice: parseFloat(qtyPriceMatch[2].replace(',', '.')),
+        taxCategory: nameMatch[4],
+      };
+      return item;
+    }
+  }
+
+  // Pattern 4: Just name and price
+  // Example: "Gelatine 1.19 A"
+  const basicMatch = line.match(/^([A-Za-zäöüÄÖÜ][A-Za-zäöüÄÖÜ0-9\s\.\-\/]+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
+  if (basicMatch && basicMatch[1].length >= 3) {
+    // Make sure it's not a metadata line
+    const name = basicMatch[1].trim();
+    if (name.length >= 3 && !name.match(/^(CHF|Total|Summe|MwSt|Netto)/i)) {
+      item = {
+        quantity: 1,
+        name: name,
+        totalPrice: parseFloat(basicMatch[2].replace(',', '.')),
+        unitPrice: parseFloat(basicMatch[2].replace(',', '.')),
+        taxCategory: basicMatch[3],
+      };
+      return item;
+    }
+  }
+
+  return null;
+}
+
+// Save Receipt to database
+export const saveReceipt = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { receiptData, imageData } = request.data;
+
+  try {
+    // 1. Find or create store
+    let storeId: string;
+    const storesQuery = await db.collection('stores')
+      .where('userId', '==', userId)
+      .where('name', '==', receiptData.store.name)
+      .limit(1)
+      .get();
+
+    if (storesQuery.empty) {
+      // Create new store
+      const storeRef = await db.collection('stores').add({
+        userId,
+        name: receiptData.store.name,
+        address: receiptData.store.address || null,
+        city: receiptData.store.city || null,
+        postalCode: receiptData.store.postalCode || null,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      storeId = storeRef.id;
+    } else {
+      storeId = storesQuery.docs[0].id;
+    }
+
+    // 2. Save receipt
+    const receiptRef = await db.collection('receipts').add({
+      userId,
+      storeId,
+      storeName: receiptData.store.name,
+      storeAddress: receiptData.store.address || null,
+      purchaseDate: receiptData.purchase.date || null,
+      purchaseTime: receiptData.purchase.time || null,
+      paymentMethod: receiptData.purchase.paymentMethod || null,
+      subtotal: receiptData.totals.subtotal || null,
+      rounding: receiptData.totals.rounding || null,
+      total: receiptData.totals.total,
+      itemCount: receiptData.items.length,
+      items: receiptData.items,
+      tax: receiptData.tax || null,
+      rawText: receiptData.rawText,
+      confidence: receiptData.confidence,
+      imageData: imageData || null,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // 3. Update store items with price history
+    const batch = db.batch();
+    for (const item of receiptData.items) {
+      // Find existing item in store
+      const existingQuery = await db.collection('stores').doc(storeId)
+        .collection('items')
+        .where('name', '==', item.name)
+        .limit(1)
+        .get();
+
+      if (existingQuery.empty) {
+        // Create new item
+        const itemRef = db.collection('stores').doc(storeId).collection('items').doc();
+        batch.set(itemRef, {
+          name: item.name,
+          articleNumber: item.articleNumber || null,
+          category: categorizeItem(item.name),
+          lastPrice: item.unitPrice,
+          priceHistory: [{
+            price: item.unitPrice,
+            date: receiptData.purchase.date || new Date().toISOString().split('T')[0],
+          }],
+          purchaseCount: 1,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      } else {
+        // Update existing item
+        const existingDoc = existingQuery.docs[0];
+        const existingData = existingDoc.data();
+        const priceHistory = existingData.priceHistory || [];
+        
+        // Only add to history if price changed
+        if (priceHistory.length === 0 || priceHistory[priceHistory.length - 1].price !== item.unitPrice) {
+          priceHistory.push({
+            price: item.unitPrice,
+            date: receiptData.purchase.date || new Date().toISOString().split('T')[0],
+          });
+        }
+
+        batch.update(existingDoc.ref, {
+          lastPrice: item.unitPrice,
+          priceHistory: priceHistory.slice(-10), // Keep last 10 prices
+          purchaseCount: admin.firestore.FieldValue.increment(1),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
+    await batch.commit();
+
+    return {
+      success: true,
+      receiptId: receiptRef.id,
+      storeId,
+      itemsSaved: receiptData.items.length,
+    };
+
+  } catch (error: any) {
+    console.error('Save receipt error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Helper function to categorize items
+function categorizeItem(name: string): string {
+  const lowerName = name.toLowerCase();
+  
+  const categories: Record<string, string[]> = {
+    'Getränke': ['bier', 'wein', 'saft', 'wasser', 'cola', 'fanta', 'sprite', 'energy', 'shot', 'drink', 'limo'],
+    'Obst & Gemüse': ['apfel', 'orange', 'banane', 'tomate', 'salat', 'gurke', 'karotte', 'zwiebel', 'bio oran', 'gemüse', 'obst', 'früchte'],
+    'Milchprodukte': ['milch', 'joghurt', 'käse', 'butter', 'sahne', 'quark', 'rahm', 'naturejog', 'jogurt'],
+    'Fleisch & Fisch': ['fleisch', 'steak', 'wurst', 'schinken', 'lachs', 'fisch', 'poulet', 'huhn', 'rind', 'schwein', 'hackfleisch', 'ragout'],
+    'Backwaren': ['brot', 'brötchen', 'toast', 'croissant', 'gipfel', 'gebäck', 'kuchen', 'keks', 'butterkeks'],
+    'Süsswaren': ['schoko', 'schokolade', 'bonbon', 'gummi', 'chips', 'snack', 'zucker', 'eis', 'gelatine'],
+    'Tiefkühl': ['tiefkühl', 'frozen', 'pizza', 'pommes'],
+    'Haushalt': ['waschmittel', 'spülmittel', 'reiniger', 'papier', 'müll', 'tüte', 'beutel'],
+    'Hygiene': ['shampoo', 'duschgel', 'seife', 'zahnpasta', 'deo', 'creme'],
+  };
+
+  for (const [category, keywords] of Object.entries(categories)) {
+    if (keywords.some(kw => lowerName.includes(kw))) {
+      return category;
+    }
+  }
+
+  return 'Sonstiges';
+}
+
+// Get store items for suggestions
+export const getStoreItems = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { storeId, storeName } = request.data;
+
+  try {
+    let targetStoreId = storeId;
+
+    // Find store by name if no ID provided
+    if (!targetStoreId && storeName) {
+      const storeQuery = await db.collection('stores')
+        .where('userId', '==', userId)
+        .where('name', '==', storeName)
+        .limit(1)
+        .get();
+
+      if (!storeQuery.empty) {
+        targetStoreId = storeQuery.docs[0].id;
+      }
+    }
+
+    if (!targetStoreId) {
+      return { success: true, items: [] };
+    }
+
+    // Get items sorted by purchase count
+    const itemsSnapshot = await db.collection('stores').doc(targetStoreId)
+      .collection('items')
+      .orderBy('purchaseCount', 'desc')
+      .limit(50)
+      .get();
+
+    const items = itemsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    return { success: true, items, storeId: targetStoreId };
+
+  } catch (error: any) {
+    console.error('Get store items error:', error);
+    return { success: false, error: error.message, items: [] };
+  }
+});
+
+// Get user's stores
+export const getStores = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+
+  try {
+    const storesSnapshot = await db.collection('stores')
+      .where('userId', '==', userId)
+      .get();
+
+    const stores = storesSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toDate?.()?.toISOString() || null,
+    }));
+
+    return { success: true, stores };
+
+  } catch (error: any) {
+    console.error('Get stores error:', error);
+    return { success: false, error: error.message, stores: [] };
+  }
+});
+
+// Get user's receipts
+export const getReceipts = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { limit: queryLimit, storeId } = request.data || {};
+
+  try {
+    let query: admin.firestore.Query = db.collection('receipts')
+      .where('userId', '==', userId);
+
+    if (storeId) {
+      query = query.where('storeId', '==', storeId);
+    }
+
+    const receiptsSnapshot = await query.get();
+
+    let receipts: any[] = receiptsSnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+        // Don't include full image data in list view
+        imageData: undefined,
+      };
+    });
+
+    // Sort by date descending
+    receipts.sort((a, b) => {
+      const dateA = a.purchaseDate || a.createdAt || '';
+      const dateB = b.purchaseDate || b.createdAt || '';
+      return dateB.localeCompare(dateA);
+    });
+
+    if (queryLimit) {
+      receipts = receipts.slice(0, queryLimit);
+    }
+
+    return { success: true, receipts };
+
+  } catch (error: any) {
+    console.error('Get receipts error:', error);
+    return { success: false, error: error.message, receipts: [] };
+  }
+});

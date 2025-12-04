@@ -541,21 +541,25 @@ export default function MobileShopping() {
                   const rawText = data.rawText || '';
                   const lines = rawText.split(/[\n\r]+/);
                   
-                  // Find items with their approximate position in text
+                  // Find items with robust position signatures
                   const itemsWithPositions = data.items.map((item: any, idx: number) => {
+                    const itemName = (item.name || 'Unbekannt').toLowerCase().trim();
+                    const itemPrice = (item.unitPrice || item.totalPrice || 0).toFixed(2);
+                    const articleNum = item.articleNumber || '';
+                    
                     // Find line number where this item appears
-                    const itemName = item.name || '';
                     let lineIndex = -1;
                     for (let i = 0; i < lines.length; i++) {
-                      if (lines[i].includes(itemName) || 
-                          (item.articleNumber && lines[i].includes(item.articleNumber))) {
+                      if (lines[i].includes(item.name || '') || 
+                          (articleNum && lines[i].includes(articleNum))) {
                         lineIndex = i;
                         break;
                       }
                     }
                     
-                    // Create position ID: name + approximate Y position (line number)
-                    const positionId = `${itemName.toLowerCase().trim()}_${lineIndex >= 0 ? lineIndex : idx}`;
+                    // Create robust position ID: name + price + articleNumber + lineIndex + itemIndex
+                    // This ensures uniqueness even if same item appears multiple times
+                    const positionId = `${itemName}_${itemPrice}_${articleNum}_${lineIndex >= 0 ? lineIndex : idx}_${idx}`;
                     
                     return {
                       item: {
@@ -583,49 +587,74 @@ export default function MobileShopping() {
                     });
                     setScannedPositions(newPositions);
                     
-                    // Add items to list (merge with existing by name/articleNumber)
+                    // Add items to list - STRICT duplicate prevention
                     setLiveScannedItems(prev => {
+                      // Create signature set for existing items
+                      const existingSignatures = new Set(
+                        prev.map(item => {
+                          const name = item.name.toLowerCase().trim();
+                          const price = item.unitPrice.toFixed(2);
+                          const articleNum = item.articleNumber || '';
+                          return `${name}_${price}_${articleNum}`;
+                        })
+                      );
+                      
                       const merged = [...prev];
                       let addedCount = 0;
                       
-                      newItemsToAdd.forEach(({ item: newItem }) => {
-                        const existingIndex = merged.findIndex(item => 
-                          (item.articleNumber && item.articleNumber === newItem.articleNumber && item.articleNumber) ||
-                          (item.name.toLowerCase().trim() === newItem.name.toLowerCase().trim() && 
-                           Math.abs(item.unitPrice - newItem.unitPrice) < 0.01) // Same price = same item
+                      newItemsToAdd.forEach(({ item: newItem, positionId }) => {
+                        const name = newItem.name.toLowerCase().trim();
+                        const price = newItem.unitPrice.toFixed(2);
+                        const articleNum = newItem.articleNumber || '';
+                        const signature = `${name}_${price}_${articleNum}`;
+                        
+                        // Check if already in list (by signature)
+                        if (existingSignatures.has(signature)) {
+                          // Already exists - skip completely
+                          return;
+                        }
+                        
+                        // Check if articleNumber matches any existing item
+                        if (articleNum && prev.some(item => item.articleNumber === articleNum)) {
+                          return; // Same article number already exists
+                        }
+                        
+                        // Check if name+price matches (even without articleNumber)
+                        const namePriceMatch = prev.some(item => 
+                          item.name.toLowerCase().trim() === name &&
+                          Math.abs(item.unitPrice - newItem.unitPrice) < 0.01
                         );
                         
-                        if (existingIndex >= 0) {
-                          // Same item already exists - don't add duplicate
-                          // Just update if quantity is different
-                          if (merged[existingIndex].quantity < newItem.quantity) {
-                            const oldTotal = merged[existingIndex].totalPrice;
-                            merged[existingIndex].quantity = newItem.quantity;
-                            merged[existingIndex].totalPrice = newItem.totalPrice;
-                            setLiveTotal(t => t - oldTotal + newItem.totalPrice);
-                          }
-                        } else {
-                          // New item
-                          merged.push(newItem);
-                          addedCount++;
+                        if (namePriceMatch) {
+                          return; // Same item already exists
                         }
+                        
+                        // Truly new item - add it
+                        merged.push(newItem);
+                        addedCount++;
+                        existingSignatures.add(signature); // Prevent duplicates in this batch
                       });
                       
                       // Recalculate total
                       const newTotal = merged.reduce((sum, item) => sum + item.totalPrice, 0);
                       setLiveTotal(newTotal);
                       
+                      if (addedCount > 0) {
+                        toast.success(`${addedCount} neue Artikel erkannt!`, { duration: 1500 });
+                        
+                        // Vibration feedback
+                        if (navigator.vibrate) {
+                          navigator.vibrate(200);
+                        }
+                      } else if (newItemsToAdd.length > 0) {
+                        // Items were found but all are duplicates
+                        if (!autoScanEnabled) {
+                          toast.info('Alle Artikel bereits in Liste', { duration: 1000 });
+                        }
+                      }
+                      
                       return merged;
                     });
-                    
-                    if (addedCount > 0) {
-                      toast.success(`${addedCount} neue Artikel erkannt!`, { duration: 1500 });
-                      
-                      // Vibration feedback
-                      if (navigator.vibrate) {
-                        navigator.vibrate(200);
-                      }
-                    }
                   } else {
                     // All items already scanned
                     if (!autoScanEnabled) {
@@ -1260,8 +1289,8 @@ export default function MobileShopping() {
           {/* IMPROVED SINGLE ITEM SCANNER */}
           {scannerMode === 'camera' && scannerType === 'single' && (
             <div className="flex-1 flex flex-col bg-background">
-              {/* Camera Section - Smaller */}
-              <div className="relative bg-black" style={{ height: '25%', minHeight: '160px' }}>
+              {/* Camera Section - Larger */}
+              <div className="relative bg-black" style={{ height: '40%', minHeight: '240px' }}>
                 <video
                   ref={videoRef}
                   autoPlay
@@ -1284,48 +1313,48 @@ export default function MobileShopping() {
                   </div>
                 )}
                 
-                {/* Auto-Scan Toggle */}
+                {/* Auto-Scan Toggle - Larger */}
                 {cameraStream && (
-                  <div className="absolute top-3 left-3 right-3 z-20 flex justify-between items-center">
-                    <div className="bg-black/70 rounded-lg px-2.5 py-1.5">
-                      <p className="text-white text-xs">
+                  <div className="absolute top-4 left-4 right-4 z-20 flex justify-between items-center">
+                    <div className="bg-black/80 rounded-xl px-4 py-2.5">
+                      <p className="text-white text-sm font-medium">
                         {isScanning ? 'Scanne...' : 
-                         autoScanEnabled ? `Auto-Scan (${scannedPositions.size} Positionen)` : 
+                         autoScanEnabled ? `Auto-Scan aktiv (${scannedPositions.size} Positionen)` : 
                          'Quittung in Rahmen halten'}
                       </p>
                     </div>
                     <button
                       onClick={() => setAutoScanEnabled(!autoScanEnabled)}
-                      className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${
+                      className={`px-4 py-2.5 rounded-xl flex items-center gap-2 ${
                         autoScanEnabled ? 'bg-green-500' : 'bg-white/20'
                       }`}
                     >
-                      <div className={`w-2.5 h-2.5 rounded-full ${autoScanEnabled ? 'bg-white' : 'bg-white/50'}`} />
-                      <span className="text-white text-xs font-medium">Auto</span>
+                      <div className={`w-3 h-3 rounded-full ${autoScanEnabled ? 'bg-white' : 'bg-white/50'}`} />
+                      <span className="text-white text-sm font-semibold">Auto</span>
                     </button>
                   </div>
                 )}
                 
-                {/* Scan Button - Compact */}
+                {/* Scan Button - Larger */}
                 {cameraStream && !pendingItem && (
-                  <div className="absolute bottom-3 left-0 right-0 z-20 flex flex-col items-center gap-1.5">
+                  <div className="absolute bottom-4 left-0 right-0 z-20 flex flex-col items-center gap-2">
                     <button
                       onClick={scanAllItems}
                       disabled={isScanning}
-                      className={`px-8 py-3 rounded-full shadow-xl flex items-center justify-center gap-2.5 active:scale-95 transition-transform ${
+                      className={`px-12 py-4 rounded-full shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-transform ${
                         isScanning ? 'bg-gray-600' : 'bg-green-500'
                       }`}
                     >
                       {isScanning ? (
-                        <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <div className="w-8 h-8 border-3 border-white/30 border-t-white rounded-full animate-spin" />
                       ) : (
-                        <ScanLine className="w-6 h-6 text-white" />
+                        <ScanLine className="w-8 h-8 text-white" />
                       )}
-                      <span className="font-bold text-white text-lg">{isScanning ? 'Scanne...' : 'ALLE SCANNEN'}</span>
+                      <span className="font-bold text-white text-xl">{isScanning ? 'Scanne...' : 'ALLE SCANNEN'}</span>
                     </button>
                     {!autoScanEnabled && (
-                      <p className="text-white/60 text-xs text-center px-4">
-                        Quittung in Rahmen → "ALLE SCANNEN"
+                      <p className="text-white/70 text-sm text-center px-4">
+                        Quittung in Rahmen halten<br/>und "ALLE SCANNEN" drücken
                       </p>
                     )}
                   </div>
@@ -1421,79 +1450,82 @@ export default function MobileShopping() {
                   </div>
                 )}
                 
-                {/* Scanned Items List - Compact Design */}
+                {/* Scanned Items List - Larger Design */}
                 {liveScannedItems.length > 0 && (
-                  <div className="mt-2">
-                    {/* Compact Header */}
-                    <div className="flex items-center justify-between mb-2 px-2 py-2 bg-green-500/10 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <ShoppingCart className="w-4 h-4 text-green-600" />
-                        <span className="text-sm font-semibold">{liveScannedItems.reduce((sum, i) => sum + i.quantity, 0)} Artikel</span>
+                  <div className="mt-3">
+                    {/* Larger Header */}
+                    <div className="flex items-center justify-between mb-3 px-4 py-3 bg-green-500/10 rounded-xl border border-green-500/30">
+                      <div className="flex items-center gap-3">
+                        <ShoppingCart className="w-6 h-6 text-green-600" />
+                        <span className="text-base font-bold">{liveScannedItems.reduce((sum, i) => sum + i.quantity, 0)} Artikel</span>
                       </div>
-                      <span className="text-lg font-bold text-green-600">CHF {liveTotal.toFixed(2)}</span>
+                      <span className="text-2xl font-bold text-green-600">CHF {liveTotal.toFixed(2)}</span>
                     </div>
                     
-                    {/* Compact Items List */}
-                    <div className="space-y-1.5 mb-3">
+                    {/* Larger Items List */}
+                    <div className="space-y-3 mb-4">
                       {liveScannedItems.map((item, idx) => (
                         <div 
                           key={idx}
-                          className="p-2.5 bg-muted rounded-lg flex items-center gap-2"
+                          className="p-4 bg-muted rounded-xl"
                         >
-                          {/* Quantity Badge */}
-                          <div className="w-8 h-8 rounded-full bg-green-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
-                            {item.quantity}
-                          </div>
-                          
-                          {/* Item Info */}
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{item.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              CHF {item.unitPrice.toFixed(2)} × {item.quantity}
-                            </p>
-                          </div>
-                          
-                          {/* Quantity Controls - Compact */}
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-start justify-between mb-3">
+                            {/* Quantity Badge - Larger */}
+                            <div className="w-10 h-10 rounded-full bg-green-500 text-white text-base font-bold flex items-center justify-center flex-shrink-0 mr-3">
+                              {item.quantity}
+                            </div>
+                            
+                            {/* Item Info - Larger */}
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-base mb-1">{item.name}</p>
+                              <p className="text-sm text-muted-foreground">
+                                CHF {item.unitPrice.toFixed(2)} pro Stück
+                              </p>
+                            </div>
+                            
+                            {/* Remove Button - Larger */}
                             <button
-                              onClick={() => updateItemQuantity(idx, item.quantity - 1)}
-                              className="w-7 h-7 rounded-full bg-background flex items-center justify-center text-sm font-bold active:bg-background/80"
+                              onClick={() => removeLiveItem(idx)}
+                              className="w-9 h-9 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0"
                             >
-                              −
-                            </button>
-                            <button
-                              onClick={() => updateItemQuantity(idx, item.quantity + 1)}
-                              className="w-7 h-7 rounded-full bg-background flex items-center justify-center text-sm font-bold active:bg-background/80"
-                            >
-                              +
+                              <X className="w-5 h-5 text-red-500" />
                             </button>
                           </div>
                           
-                          {/* Total Price */}
-                          <span className="font-bold text-sm w-16 text-right">CHF {item.totalPrice.toFixed(2)}</span>
-                          
-                          {/* Remove Button */}
-                          <button
-                            onClick={() => removeLiveItem(idx)}
-                            className="w-7 h-7 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0"
-                          >
-                            <X className="w-3.5 h-3.5 text-red-500" />
-                          </button>
+                          {/* Quantity Controls - Larger */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <button
+                                onClick={() => updateItemQuantity(idx, item.quantity - 1)}
+                                className="w-12 h-12 rounded-full bg-background flex items-center justify-center text-2xl font-bold active:bg-background/80"
+                              >
+                                −
+                              </button>
+                              <span className="text-3xl font-bold w-16 text-center">{item.quantity}</span>
+                              <button
+                                onClick={() => updateItemQuantity(idx, item.quantity + 1)}
+                                className="w-12 h-12 rounded-full bg-background flex items-center justify-center text-2xl font-bold active:bg-background/80"
+                              >
+                                +
+                              </button>
+                            </div>
+                            <span className="font-bold text-xl">CHF {item.totalPrice.toFixed(2)}</span>
+                          </div>
                         </div>
                       ))}
                     </div>
                     
-                    {/* Action Buttons - Compact */}
-                    <div className="flex gap-2">
+                    {/* Action Buttons - Larger */}
+                    <div className="flex gap-3">
                       <button
                         onClick={() => { 
                           setScannedPositions(new Set()); 
                           toast.success('Positionen zurückgesetzt - kann neu scannen');
                         }}
-                        className="px-3 py-2 rounded-lg bg-muted flex items-center justify-center gap-1.5 text-xs font-medium"
+                        className="px-4 py-3 rounded-xl bg-muted flex items-center justify-center gap-2 text-sm font-semibold"
                         title="Positionen zurücksetzen (für neue Quittung)"
                       >
-                        <RotateCcw className="w-4 h-4" />
+                        <RotateCcw className="w-5 h-5" />
                         Reset
                       </button>
                       <button
@@ -1502,16 +1534,16 @@ export default function MobileShopping() {
                           setLiveTotal(0); 
                           setScannedPositions(new Set());
                         }}
-                        className="flex-1 py-2.5 rounded-lg bg-muted flex items-center justify-center gap-2 text-sm font-semibold"
+                        className="flex-1 py-4 rounded-xl bg-muted flex items-center justify-center gap-2 text-base font-bold"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-5 h-5" />
                         Alle löschen
                       </button>
                       <button
                         onClick={addLiveItemsToList}
-                        className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground flex items-center justify-center gap-2 text-sm font-semibold"
+                        className="flex-1 py-4 rounded-xl bg-primary text-primary-foreground flex items-center justify-center gap-2 text-base font-bold"
                       >
-                        <Check className="w-4 h-4" />
+                        <Check className="w-5 h-5" />
                         Fertig
                       </button>
                     </div>

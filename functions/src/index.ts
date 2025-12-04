@@ -3788,45 +3788,42 @@ function parseSwissReceipt(text: string): ReceiptData {
   
   console.log(`[parseSwissReceipt] After filtering: ${result.items.length} items`);
   
-  // Search for total in all lines (even if parser didn't find it earlier)
+  // Use subtotal as total for ALDI (ALDI PREIS ≈ Zwischensumme)
+  if (result.totals.subtotal && (!result.totals.total || result.totals.total === 0)) {
+    result.totals.total = result.totals.subtotal;
+    console.log(`[parseSwissReceipt] Using subtotal as total: ${result.totals.total}`);
+  }
+  
+  // Search for total in full text
   const fullText = lines.join(' ');
   
-  // Try multiple total patterns
-  const totalPatterns = [
-    /ALDI\s*PREIS\s+(\d+[.,]\d{2})/i,
-    /Total-EFT\s+(?:CHF)?\s*(\d+[.,]\d{2})/i,
-    /Kartenzahlung\s+(?:CHF)?\s*(\d+[.,]\d{2})/i,
-    /(?:Total|TOTAL|Summe|SUMME)\s+(?:CHF)?\s*(\d+[.,]\d{2})/i,
-    /(?:CHF|Fr\.)\s*(\d+[.,]\d{2})\s*$/i,
-  ];
-  
-  for (const pattern of totalPatterns) {
-    const match = fullText.match(pattern);
-    if (match) {
-      const foundTotal = parseFloat(match[1].replace(',', '.'));
-      // Use this total if we don't have one yet, or if it's more reasonable
-      if (!result.totals.total || result.totals.total === 0 || 
-          (foundTotal > 0 && foundTotal < result.totals.total)) {
-        result.totals.total = foundTotal;
+  // Only search if no total found yet
+  if (!result.totals.total || result.totals.total === 0) {
+    const totalPatterns = [
+      /ALDI\s*PREIS\s+(\d+[.,]\d{2})/i,
+      /Total-EFT\s+(?:CHF)?\s*(\d+[.,]\d{2})/i,
+      /Kartenzahlung\s+(?:CHF)?\s*(\d+[.,]\d{2})/i,
+      /Zwischensumme\s+(\d+[.,]\d{2})/i,
+      /(?:Total|TOTAL|Summe|SUMME)\s+(?:CHF)?\s*(\d+[.,]\d{2})/i,
+    ];
+    
+    for (const pattern of totalPatterns) {
+      const match = fullText.match(pattern);
+      if (match) {
+        result.totals.total = parseFloat(match[1].replace(',', '.'));
         console.log(`[parseSwissReceipt] Found total via pattern: ${result.totals.total}`);
         break;
       }
     }
   }
   
-  // If STILL no total, calculate from items
+  // LAST RESORT: Calculate from items (but this is often wrong)
   if (!result.totals.total || result.totals.total === 0) {
     if (result.items.length > 0) {
       const calculatedTotal = result.items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
       result.totals.total = Math.round(calculatedTotal * 100) / 100;
-      console.log(`[parseSwissReceipt] Calculated total from ${result.items.length} items: ${result.totals.total}`);
+      console.log(`[parseSwissReceipt] WARNING: Calculated total from items: ${result.totals.total} (may be inaccurate)`);
     }
-  }
-  
-  // Mark as potentially incomplete if total seems too high compared to items
-  const itemSum = result.items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
-  if (result.totals.total > itemSum * 1.5) {
-    console.log(`[parseSwissReceipt] Warning: Total ${result.totals.total} seems high compared to items sum ${itemSum}`);
   }
   
   // Add detected category

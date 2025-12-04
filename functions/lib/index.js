@@ -3041,9 +3041,23 @@ function parseSwissReceipt(text) {
                 confidencePoints += 5;
                 continue;
             }
-            // Check if we're entering item section (usually after "CHF" header)
-            if (line === 'CHF' || line.match(/^\s*CHF\s+CHF\s*$/)) {
+            // Check if we're entering item section (usually after "CHF" header or store name)
+            if (line === 'CHF' || line.match(/^\s*CHF\s+CHF\s*$/) || line.match(/^\s*CHF\s*$/)) {
                 headerSection = false;
+                continue;
+            }
+            // Also check if this line looks like an item (exit header early)
+            if (line.match(/^\d{4,6}\s+[A-Za-z]/)) {
+                headerSection = false;
+                // Don't continue - process this line as item
+                const item = parseReceiptItem(line, nextLine);
+                if (item) {
+                    result.items.push(item);
+                    confidencePoints += 3;
+                    if (/^\d+[.,]\d{2}\s*[AB]?$/.test(nextLine)) {
+                        i++;
+                    }
+                }
                 continue;
             }
         }
@@ -3064,12 +3078,20 @@ function parseSwissReceipt(text) {
                 footerSection = true;
                 continue;
             }
+            // Skip if this line is just a price (it was combined with previous line)
+            if (/^\d+[.,]\d{2}\s*[AB]?$/.test(line)) {
+                continue;
+            }
             // Try to parse as item
             const item = parseReceiptItem(line, nextLine);
             if (item) {
                 result.items.push(item);
                 headerSection = false;
                 confidencePoints += 3;
+                // Skip next line if it was a price-only line that was combined
+                if (/^\d+[.,]\d{2}\s*[AB]?$/.test(nextLine)) {
+                    i++; // Skip the next iteration
+                }
             }
         }
         // === FOOTER SECTION ===
@@ -3139,10 +3161,44 @@ function parseReceiptItem(line, nextLine) {
         /^(Kartenzahlung|Barzahlung|TWINT|Debit)/i,
         /^\d{10,}$/, // Barcodes
         /^[A-Z]{2,3}-?\d{3}/i, // Tax IDs
+        /^CHF$/i,
+        /^[x×]\s*$/i, // Standalone x
     ];
     if (skipPatterns.some(p => p.test(line)))
         return null;
+    if (line.length < 3)
+        return null;
     let item = null;
+    // Combine line with nextLine if nextLine is just a price
+    const priceOnlyMatch = nextLine.match(/^(\d+[.,]\d{2})\s*([AB])?$/);
+    const combinedLine = priceOnlyMatch ? `${line} ${nextLine}` : line;
+    // Pattern 0: ALDI format - articleNo name price taxCat (on same or combined line)
+    // Example: "12055 Super Bock 6x0.331 7.95 B"
+    const aldiMatch = combinedLine.match(/^(\d{4,6})\s+(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
+    if (aldiMatch) {
+        item = {
+            quantity: 1,
+            articleNumber: aldiMatch[1],
+            name: aldiMatch[2].trim(),
+            unitPrice: parseFloat(aldiMatch[3].replace(',', '.')),
+            totalPrice: parseFloat(aldiMatch[3].replace(',', '.')),
+            taxCategory: aldiMatch[4] || undefined,
+        };
+        return item;
+    }
+    // Pattern 0b: Name + price without article number
+    // Example: "Bio Apfel 3.98 A"
+    const nameOnlyMatch = combinedLine.match(/^([A-Za-zäöüÄÖÜ][A-Za-zäöüÄÖÜ0-9\s\/.\-]+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
+    if (nameOnlyMatch && nameOnlyMatch[1].length > 2) {
+        item = {
+            quantity: 1,
+            name: nameOnlyMatch[1].trim(),
+            unitPrice: parseFloat(nameOnlyMatch[2].replace(',', '.')),
+            totalPrice: parseFloat(nameOnlyMatch[2].replace(',', '.')),
+            taxCategory: nameOnlyMatch[3] || undefined,
+        };
+        return item;
+    }
     // Pattern 1: Full format - qty articleNo name price taxCat
     // Example: "2 x 825076 Bio Oran./Apfel 1l 3.98 A"
     const fullMatch = line.match(/^(\d+)\s*[x×]\s+(\d{3,})\s+(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);

@@ -349,12 +349,11 @@ export default function MobileShopping() {
             setScannerStatus('detected');
             
             if (stableFrames >= requiredStableFrames) {
-              isRunning = false;
-              setScannerStatus('capturing');
-              toast.success('Quittung erkannt! Bitte stillhalten...');
-              // Längere Verzögerung für bessere Bildqualität
-              setTimeout(() => capturePhoto(), 800);
-              return;
+              // Auto-Capture DEAKTIVIERT - User muss manuell scannen
+              // Zeige nur "Bereit" Status
+              setScannerStatus('detected');
+              setDetectionProgress(100);
+              // KEIN automatischer Scan mehr - User muss Button drücken
             }
           } else {
             stableFrames = Math.max(0, stableFrames - 1);
@@ -996,9 +995,9 @@ export default function MobileShopping() {
                 }`}>
                   <p className="text-white text-sm font-medium">
                     {scannerStatus === 'capturing' && 'Aufnahme...'}
-                    {scannerStatus === 'detected' && `Quittung erkannt! ${Math.round(detectionProgress)}%`}
+                    {scannerStatus === 'detected' && 'Bereit! Drücke den Scan-Button'}
                     {scannerStatus === 'adjusting' && 'Ecke anpassen...'}
-                    {scannerStatus === 'scanning' && 'Suche Quittung automatisch...'}
+                    {scannerStatus === 'scanning' && 'Positioniere die Quittung...'}
                     {scannerStatus === 'idle' && 'Tippe auf Start'}
                   </p>
                 </div>

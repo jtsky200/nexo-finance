@@ -3762,11 +3762,55 @@ function parseSwissReceipt(text: string): ReceiptData {
   result.confidence = Math.min(100, confidencePoints);
   result.totals.itemCount = result.totals.itemCount || result.items.length;
   
+  // FALLBACK: If no items found, try aggressive pattern matching
+  if (result.items.length === 0) {
+    console.log('[parseSwissReceipt] No items found, trying aggressive parsing...');
+    
+    // Try to find ANY line with text + price
+    for (const line of lines) {
+      // Match any line with text followed by a number with decimal
+      const aggressiveMatch = line.match(/^(.{3,}?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
+      if (aggressiveMatch) {
+        const name = aggressiveMatch[1].trim();
+        // Skip obvious metadata
+        if (!name.match(/^(CHF|Total|Summe|Subtotal|MwSt|Netto|Bar|Karte|Zahlung|Rückgeld|Vielen Dank|Bon|Nr|UID|Tel|Fax|www|http)/i) && 
+            name.length >= 3) {
+          result.items.push({
+            quantity: 1,
+            name: name,
+            unitPrice: parseFloat(aggressiveMatch[2].replace(',', '.')),
+            totalPrice: parseFloat(aggressiveMatch[2].replace(',', '.')),
+            taxCategory: aggressiveMatch[3] || undefined,
+          });
+        }
+      }
+    }
+    
+    console.log(`[parseSwissReceipt] Aggressive parsing found ${result.items.length} items`);
+  }
+  
   // If no total was found, calculate from items
   if (!result.totals.total && result.items.length > 0) {
     result.totals.total = result.items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
     // Round to 2 decimal places
     result.totals.total = Math.round(result.totals.total * 100) / 100;
+    console.log(`[parseSwissReceipt] Calculated total from items: ${result.totals.total}`);
+  }
+  
+  // If STILL no total, look for the largest price in the text
+  if (!result.totals.total || result.totals.total === 0) {
+    const allPrices: number[] = [];
+    for (const line of lines) {
+      const priceMatches = line.matchAll(/(\d+[.,]\d{2})/g);
+      for (const match of priceMatches) {
+        allPrices.push(parseFloat(match[1].replace(',', '.')));
+      }
+    }
+    if (allPrices.length > 0) {
+      // The total is usually the largest price
+      result.totals.total = Math.max(...allPrices);
+      console.log(`[parseSwissReceipt] Set total as largest price: ${result.totals.total}`);
+    }
   }
   
   // Add detected category

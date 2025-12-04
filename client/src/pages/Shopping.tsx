@@ -912,12 +912,10 @@ export default function Shopping() {
             setScannerStatus('detected');
             
             if (stableFrames >= requiredStableFrames) {
-              isRunning = false;
-              setScannerStatus('capturing');
-              toast.success('Quittung erkannt! Bitte stillhalten...');
-              // Längere Verzögerung für bessere Bildqualität
-              setTimeout(() => capturePhoto(), 800);
-              return;
+              // Auto-Capture DEAKTIVIERT - User muss manuell scannen
+              setScannerStatus('detected');
+              setDetectionProgress(100);
+              // KEIN automatischer Scan - User muss Button drücken
             }
           } else {
             stableFrames = Math.max(0, stableFrames - 1);

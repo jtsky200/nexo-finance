@@ -753,6 +753,14 @@ export default function Shopping() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
   
+  // Auto-detected corners (percentage based)
+  const [detectedCorners, setDetectedCorners] = useState({
+    topLeft: { x: 10, y: 10 },
+    topRight: { x: 90, y: 10 },
+    bottomLeft: { x: 10, y: 90 },
+    bottomRight: { x: 90, y: 90 }
+  });
+  
   const startCamera = async () => {
     try {
       // Check if camera is available
@@ -793,10 +801,82 @@ export default function Shopping() {
     }
   };
   
-  // Edge detection for automatic receipt capture
+  // Intelligent receipt corner detection using Sobel edge detection
+  const findReceiptCorners = (imageData: ImageData, width: number, height: number) => {
+    const data = imageData.data;
+    
+    // Step 1: Convert to grayscale
+    const gray = new Uint8ClampedArray(width * height);
+    for (let i = 0; i < data.length; i += 4) {
+      gray[i / 4] = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+    }
+    
+    // Step 2: Sobel edge detection
+    const edges = new Uint8ClampedArray(width * height);
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = y * width + x;
+        const gx = 
+          -gray[(y-1)*width + (x-1)] + gray[(y-1)*width + (x+1)] +
+          -2*gray[y*width + (x-1)] + 2*gray[y*width + (x+1)] +
+          -gray[(y+1)*width + (x-1)] + gray[(y+1)*width + (x+1)];
+        const gy = 
+          -gray[(y-1)*width + (x-1)] - 2*gray[(y-1)*width + x] - gray[(y-1)*width + (x+1)] +
+          gray[(y+1)*width + (x-1)] + 2*gray[(y+1)*width + x] + gray[(y+1)*width + (x+1)];
+        edges[idx] = Math.min(255, Math.sqrt(gx*gx + gy*gy));
+      }
+    }
+    
+    // Step 3: Find receipt boundaries by scanning for strong edges
+    const threshold = 50;
+    let minX = width, maxX = 0, minY = height, maxY = 0;
+    let foundEdges = false;
+    
+    // Scan columns for vertical edges
+    for (let x = 0; x < width; x++) {
+      let edgeCount = 0;
+      for (let y = 0; y < height; y++) {
+        if (edges[y * width + x] > threshold) edgeCount++;
+      }
+      if (edgeCount > height * 0.1) {
+        if (x < width / 2 && x < minX) { minX = x; foundEdges = true; }
+        if (x > width / 2 && x > maxX) { maxX = x; foundEdges = true; }
+      }
+    }
+    
+    // Scan rows for horizontal edges
+    for (let y = 0; y < height; y++) {
+      let edgeCount = 0;
+      for (let x = 0; x < width; x++) {
+        if (edges[y * width + x] > threshold) edgeCount++;
+      }
+      if (edgeCount > width * 0.1) {
+        if (y < height / 2 && y < minY) { minY = y; foundEdges = true; }
+        if (y > height / 2 && y > maxY) { maxY = y; foundEdges = true; }
+      }
+    }
+    
+    if (foundEdges && maxX > minX && maxY > minY) {
+      const padX = (maxX - minX) * 0.02;
+      const padY = (maxY - minY) * 0.02;
+      
+      return {
+        topLeft: { x: Math.max(0, minX - padX), y: Math.max(0, minY - padY) },
+        topRight: { x: Math.min(width, maxX + padX), y: Math.max(0, minY - padY) },
+        bottomLeft: { x: Math.max(0, minX - padX), y: Math.min(height, maxY + padY) },
+        bottomRight: { x: Math.min(width, maxX + padX), y: Math.min(height, maxY + padY) },
+        confidence: Math.min(100, ((maxX - minX) * (maxY - minY)) / (width * height) * 200)
+      };
+    }
+    
+    return null;
+  };
+
+  // Edge detection for automatic receipt capture with corner finding
   const startEdgeDetection = () => {
     let stableFrames = 0;
-    const requiredStableFrames = 15; // ~0.5 seconds of stable detection
+    const requiredStableFrames = 12;
+    let lastCorners: typeof detectedCorners | null = null;
     
     const detectEdges = () => {
       if (!videoRef.current || !canvasRef.current || !isCameraActive) return;
@@ -810,67 +890,65 @@ export default function Shopping() {
         return;
       }
       
-      // Set canvas size to match video
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      
-      // Draw current frame
       ctx.drawImage(video, 0, 0);
       
-      // Get image data for analysis
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
+      const foundCorners = findReceiptCorners(imageData, canvas.width, canvas.height);
       
-      // Simple brightness and contrast check for receipt detection
-      let brightPixels = 0;
-      let edgePixels = 0;
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
-      const scanRadius = Math.min(canvas.width, canvas.height) * 0.35;
-      
-      // Check center area for bright content (receipt is usually white)
-      for (let y = Math.floor(centerY - scanRadius); y < centerY + scanRadius; y += 4) {
-        for (let x = Math.floor(centerX - scanRadius); x < centerX + scanRadius; x += 4) {
-          const i = (y * canvas.width + x) * 4;
-          const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
-          
-          if (brightness > 180) brightPixels++;
-          
-          // Check for edges (contrast with neighbors)
-          if (x > 0 && x < canvas.width - 1) {
-            const leftBrightness = (data[i - 4] + data[i - 3] + data[i - 2]) / 3;
-            const rightBrightness = (data[i + 4] + data[i + 5] + data[i + 6]) / 3;
-            if (Math.abs(brightness - leftBrightness) > 30 || Math.abs(brightness - rightBrightness) > 30) {
-              edgePixels++;
-            }
+      if (foundCorners && foundCorners.confidence > 30) {
+        // Convert to percentage
+        const newCorners = {
+          topLeft: { 
+            x: (foundCorners.topLeft.x / canvas.width) * 100, 
+            y: (foundCorners.topLeft.y / canvas.height) * 100 
+          },
+          topRight: { 
+            x: (foundCorners.topRight.x / canvas.width) * 100, 
+            y: (foundCorners.topRight.y / canvas.height) * 100 
+          },
+          bottomLeft: { 
+            x: (foundCorners.bottomLeft.x / canvas.width) * 100, 
+            y: (foundCorners.bottomLeft.y / canvas.height) * 100 
+          },
+          bottomRight: { 
+            x: (foundCorners.bottomRight.x / canvas.width) * 100, 
+            y: (foundCorners.bottomRight.y / canvas.height) * 100 
           }
-        }
-      }
-      
-      // Calculate detection score
-      const totalPixelsChecked = (scanRadius * 2 / 4) * (scanRadius * 2 / 4);
-      const brightRatio = brightPixels / totalPixelsChecked;
-      const edgeRatio = edgePixels / totalPixelsChecked;
-      
-      // Receipt detected if enough bright area with defined edges
-      const isReceiptDetected = brightRatio > 0.3 && edgeRatio > 0.05;
-      
-      if (isReceiptDetected) {
-        stableFrames++;
-        setDetectionProgress(Math.min(100, (stableFrames / requiredStableFrames) * 100));
+        };
         
-        if (stableFrames >= requiredStableFrames && scannerStatus !== 'capturing') {
-          // Auto-capture!
-          setScannerStatus('capturing');
-          toast.info('Quittung erkannt - Aufnahme...');
-          setTimeout(() => capturePhoto(), 300);
-          return;
+        // Check stability
+        const isStable = lastCorners && 
+          Math.abs(newCorners.topLeft.x - lastCorners.topLeft.x) < 3 &&
+          Math.abs(newCorners.topLeft.y - lastCorners.topLeft.y) < 3 &&
+          Math.abs(newCorners.bottomRight.x - lastCorners.bottomRight.x) < 3 &&
+          Math.abs(newCorners.bottomRight.y - lastCorners.bottomRight.y) < 3;
+        
+        lastCorners = newCorners;
+        setDetectedCorners(newCorners);
+        
+        if (isStable) {
+          stableFrames++;
+          setDetectionProgress(Math.min(100, (stableFrames / requiredStableFrames) * 100));
+          
+          if (stableFrames >= requiredStableFrames && scannerStatus !== 'capturing') {
+            setScannerStatus('capturing');
+            toast.success('Quittung erkannt! Aufnahme...');
+            setTimeout(() => capturePhoto(), 200);
+            return;
+          }
+          setScannerStatus('detected');
+        } else {
+          stableFrames = Math.max(0, stableFrames - 1);
+          setDetectionProgress(Math.max(0, (stableFrames / requiredStableFrames) * 100));
+          setScannerStatus('scanning');
         }
-        setScannerStatus('detected');
       } else {
         stableFrames = Math.max(0, stableFrames - 2);
         setDetectionProgress(Math.max(0, (stableFrames / requiredStableFrames) * 100));
         setScannerStatus('scanning');
+        lastCorners = null;
       }
       
       animationRef.current = requestAnimationFrame(detectEdges);
@@ -2034,36 +2112,59 @@ export default function Shopping() {
                           {/* Hidden canvas for processing */}
                           <canvas ref={canvasRef} className="hidden" />
                           
-                          {/* Scanner overlay with guide frame */}
+                          {/* Scanner overlay with auto-detected corners */}
                           <div className="absolute inset-0 pointer-events-none">
-                            {/* Dark overlay outside frame */}
-                            <div className="absolute inset-0 bg-black/40" />
+                            {/* SVG overlay for detected corners */}
+                            <svg className="absolute inset-0 w-full h-full">
+                              {/* Dark overlay with cutout for detected area */}
+                              <defs>
+                                <mask id="receiptMask">
+                                  <rect width="100%" height="100%" fill="white" />
+                                  <polygon 
+                                    points={`
+                                      ${detectedCorners.topLeft.x}%,${detectedCorners.topLeft.y}% 
+                                      ${detectedCorners.topRight.x}%,${detectedCorners.topRight.y}% 
+                                      ${detectedCorners.bottomRight.x}%,${detectedCorners.bottomRight.y}% 
+                                      ${detectedCorners.bottomLeft.x}%,${detectedCorners.bottomLeft.y}%
+                                    `}
+                                    fill="black"
+                                  />
+                                </mask>
+                              </defs>
+                              <rect width="100%" height="100%" fill="rgba(0,0,0,0.5)" mask="url(#receiptMask)" />
+                              
+                              {/* Detected area outline */}
+                              <polygon 
+                                points={`
+                                  ${detectedCorners.topLeft.x}%,${detectedCorners.topLeft.y}% 
+                                  ${detectedCorners.topRight.x}%,${detectedCorners.topRight.y}% 
+                                  ${detectedCorners.bottomRight.x}%,${detectedCorners.bottomRight.y}% 
+                                  ${detectedCorners.bottomLeft.x}%,${detectedCorners.bottomLeft.y}%
+                                `}
+                                fill="none"
+                                stroke={scannerStatus === 'detected' || scannerStatus === 'capturing' ? '#22c55e' : '#ffffff'}
+                                strokeWidth="3"
+                                className="transition-colors duration-200"
+                              />
+                            </svg>
                             
-                            {/* Clear scanning area */}
-                            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[85%] h-[75%]">
-                              <div className="relative w-full h-full bg-transparent">
-                                {/* Cut out the center */}
-                                <div className="absolute inset-0 shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]" />
-                              </div>
-                            </div>
-                            
-                            {/* Corner guides */}
-                            <div className="absolute left-[7.5%] top-[12.5%] w-8 h-8">
-                              <div className={`absolute top-0 left-0 w-full h-1 rounded ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
-                              <div className={`absolute top-0 left-0 w-1 h-full rounded ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
-                            </div>
-                            <div className="absolute right-[7.5%] top-[12.5%] w-8 h-8">
-                              <div className={`absolute top-0 right-0 w-full h-1 rounded ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
-                              <div className={`absolute top-0 right-0 w-1 h-full rounded ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
-                            </div>
-                            <div className="absolute left-[7.5%] bottom-[12.5%] w-8 h-8">
-                              <div className={`absolute bottom-0 left-0 w-full h-1 rounded ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
-                              <div className={`absolute bottom-0 left-0 w-1 h-full rounded ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
-                            </div>
-                            <div className="absolute right-[7.5%] bottom-[12.5%] w-8 h-8">
-                              <div className={`absolute bottom-0 right-0 w-full h-1 rounded ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
-                              <div className={`absolute bottom-0 right-0 w-1 h-full rounded ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
-                            </div>
+                            {/* Corner markers */}
+                            <div 
+                              className={`absolute w-6 h-6 border-t-4 border-l-4 rounded-tl-lg transition-colors ${scannerStatus === 'detected' ? 'border-green-500' : 'border-white'}`}
+                              style={{ left: `${detectedCorners.topLeft.x}%`, top: `${detectedCorners.topLeft.y}%`, transform: 'translate(-50%, -50%)' }}
+                            />
+                            <div 
+                              className={`absolute w-6 h-6 border-t-4 border-r-4 rounded-tr-lg transition-colors ${scannerStatus === 'detected' ? 'border-green-500' : 'border-white'}`}
+                              style={{ left: `${detectedCorners.topRight.x}%`, top: `${detectedCorners.topRight.y}%`, transform: 'translate(-50%, -50%)' }}
+                            />
+                            <div 
+                              className={`absolute w-6 h-6 border-b-4 border-l-4 rounded-bl-lg transition-colors ${scannerStatus === 'detected' ? 'border-green-500' : 'border-white'}`}
+                              style={{ left: `${detectedCorners.bottomLeft.x}%`, top: `${detectedCorners.bottomLeft.y}%`, transform: 'translate(-50%, -50%)' }}
+                            />
+                            <div 
+                              className={`absolute w-6 h-6 border-b-4 border-r-4 rounded-br-lg transition-colors ${scannerStatus === 'detected' ? 'border-green-500' : 'border-white'}`}
+                              style={{ left: `${detectedCorners.bottomRight.x}%`, top: `${detectedCorners.bottomRight.y}%`, transform: 'translate(-50%, -50%)' }}
+                            />
                             
                             {/* Status text */}
                             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-center">
@@ -2074,7 +2175,7 @@ export default function Shopping() {
                               }`}>
                                 {scannerStatus === 'capturing' && 'Aufnahme...'}
                                 {scannerStatus === 'detected' && `Erkannt! Halte still... ${Math.round(detectionProgress)}%`}
-                                {scannerStatus === 'scanning' && 'Quittung im Rahmen positionieren'}
+                                {scannerStatus === 'scanning' && 'Suche Quittung...'}
                               </div>
                             </div>
                             

@@ -223,10 +223,86 @@ export default function MobileShopping() {
     setDetectionProgress(0);
   };
 
-  // Edge detection for auto-capture
+  // Intelligent edge detection for receipt corners
+  const findReceiptCorners = (imageData: ImageData, width: number, height: number) => {
+    const data = imageData.data;
+    
+    // Step 1: Convert to grayscale and apply threshold to find edges
+    const gray = new Uint8ClampedArray(width * height);
+    for (let i = 0; i < data.length; i += 4) {
+      gray[i / 4] = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+    }
+    
+    // Step 2: Sobel edge detection
+    const edges = new Uint8ClampedArray(width * height);
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = y * width + x;
+        // Sobel X
+        const gx = 
+          -gray[(y-1)*width + (x-1)] + gray[(y-1)*width + (x+1)] +
+          -2*gray[y*width + (x-1)] + 2*gray[y*width + (x+1)] +
+          -gray[(y+1)*width + (x-1)] + gray[(y+1)*width + (x+1)];
+        // Sobel Y
+        const gy = 
+          -gray[(y-1)*width + (x-1)] - 2*gray[(y-1)*width + x] - gray[(y-1)*width + (x+1)] +
+          gray[(y+1)*width + (x-1)] + 2*gray[(y+1)*width + x] + gray[(y+1)*width + (x+1)];
+        edges[idx] = Math.min(255, Math.sqrt(gx*gx + gy*gy));
+      }
+    }
+    
+    // Step 3: Find bright rectangle (receipt) boundaries
+    const threshold = 50;
+    let minX = width, maxX = 0, minY = height, maxY = 0;
+    let foundEdges = false;
+    
+    // Scan for vertical edges (left/right boundaries)
+    for (let x = 0; x < width; x++) {
+      let edgeCount = 0;
+      for (let y = 0; y < height; y++) {
+        if (edges[y * width + x] > threshold) edgeCount++;
+      }
+      if (edgeCount > height * 0.1) {
+        if (x < width / 2 && x < minX) { minX = x; foundEdges = true; }
+        if (x > width / 2 && x > maxX) { maxX = x; foundEdges = true; }
+      }
+    }
+    
+    // Scan for horizontal edges (top/bottom boundaries)
+    for (let y = 0; y < height; y++) {
+      let edgeCount = 0;
+      for (let x = 0; x < width; x++) {
+        if (edges[y * width + x] > threshold) edgeCount++;
+      }
+      if (edgeCount > width * 0.1) {
+        if (y < height / 2 && y < minY) { minY = y; foundEdges = true; }
+        if (y > height / 2 && y > maxY) { maxY = y; foundEdges = true; }
+      }
+    }
+    
+    // Step 4: Refine corners by finding exact edge points
+    if (foundEdges && maxX > minX && maxY > minY) {
+      // Add padding
+      const padX = (maxX - minX) * 0.02;
+      const padY = (maxY - minY) * 0.02;
+      
+      return {
+        topLeft: { x: Math.max(0, minX - padX), y: Math.max(0, minY - padY) },
+        topRight: { x: Math.min(width, maxX + padX), y: Math.max(0, minY - padY) },
+        bottomLeft: { x: Math.max(0, minX - padX), y: Math.min(height, maxY + padY) },
+        bottomRight: { x: Math.min(width, maxX + padX), y: Math.min(height, maxY + padY) },
+        confidence: Math.min(100, ((maxX - minX) * (maxY - minY)) / (width * height) * 200)
+      };
+    }
+    
+    return null;
+  };
+
+  // Edge detection for auto-capture with corner finding
   const startEdgeDetection = () => {
     let stableFrames = 0;
-    const requiredStableFrames = 15;
+    const requiredStableFrames = 12;
+    let lastCorners: typeof corners | null = null;
     
     const detectEdges = () => {
       if (!videoRef.current || !canvasRef.current || !cameraStream) return;
@@ -245,51 +321,64 @@ export default function MobileShopping() {
       ctx.drawImage(video, 0, 0);
       
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
       
-      let brightPixels = 0;
-      let edgePixels = 0;
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
-      const scanRadius = Math.min(canvas.width, canvas.height) * 0.35;
+      // Try to find receipt corners
+      const foundCorners = findReceiptCorners(imageData, canvas.width, canvas.height);
       
-      for (let y = Math.floor(centerY - scanRadius); y < centerY + scanRadius; y += 4) {
-        for (let x = Math.floor(centerX - scanRadius); x < centerX + scanRadius; x += 4) {
-          const i = (y * canvas.width + x) * 4;
-          const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
-          
-          if (brightness > 180) brightPixels++;
-          
-          if (x > 0 && x < canvas.width - 1) {
-            const leftBrightness = (data[i - 4] + data[i - 3] + data[i - 2]) / 3;
-            const rightBrightness = (data[i + 4] + data[i + 5] + data[i + 6]) / 3;
-            if (Math.abs(brightness - leftBrightness) > 30 || Math.abs(brightness - rightBrightness) > 30) {
-              edgePixels++;
-            }
+      if (foundCorners && foundCorners.confidence > 30) {
+        // Convert pixel coordinates to percentage
+        const newCorners = {
+          topLeft: { 
+            x: (foundCorners.topLeft.x / canvas.width) * 100, 
+            y: (foundCorners.topLeft.y / canvas.height) * 100 
+          },
+          topRight: { 
+            x: (foundCorners.topRight.x / canvas.width) * 100, 
+            y: (foundCorners.topRight.y / canvas.height) * 100 
+          },
+          bottomLeft: { 
+            x: (foundCorners.bottomLeft.x / canvas.width) * 100, 
+            y: (foundCorners.bottomLeft.y / canvas.height) * 100 
+          },
+          bottomRight: { 
+            x: (foundCorners.bottomRight.x / canvas.width) * 100, 
+            y: (foundCorners.bottomRight.y / canvas.height) * 100 
           }
-        }
-      }
-      
-      const totalPixelsChecked = (scanRadius * 2 / 4) * (scanRadius * 2 / 4);
-      const brightRatio = brightPixels / totalPixelsChecked;
-      const edgeRatio = edgePixels / totalPixelsChecked;
-      const isReceiptDetected = brightRatio > 0.3 && edgeRatio > 0.05;
-      
-      if (isReceiptDetected) {
-        stableFrames++;
-        setDetectionProgress(Math.min(100, (stableFrames / requiredStableFrames) * 100));
+        };
         
-        if (stableFrames >= requiredStableFrames && scannerStatus !== 'capturing') {
-          setScannerStatus('capturing');
-          toast.info('Quittung erkannt!');
-          setTimeout(() => capturePhoto(), 300);
-          return;
+        // Check if corners are stable (similar to last frame)
+        const isStable = lastCorners && 
+          Math.abs(newCorners.topLeft.x - lastCorners.topLeft.x) < 3 &&
+          Math.abs(newCorners.topLeft.y - lastCorners.topLeft.y) < 3 &&
+          Math.abs(newCorners.bottomRight.x - lastCorners.bottomRight.x) < 3 &&
+          Math.abs(newCorners.bottomRight.y - lastCorners.bottomRight.y) < 3;
+        
+        lastCorners = newCorners;
+        
+        // Update displayed corners
+        setCorners(newCorners);
+        
+        if (isStable) {
+          stableFrames++;
+          setDetectionProgress(Math.min(100, (stableFrames / requiredStableFrames) * 100));
+          
+          if (stableFrames >= requiredStableFrames && scannerStatus !== 'capturing') {
+            setScannerStatus('capturing');
+            toast.success('Quittung erkannt! Aufnahme...');
+            setTimeout(() => capturePhoto(), 200);
+            return;
+          }
+          setScannerStatus('detected');
+        } else {
+          stableFrames = Math.max(0, stableFrames - 1);
+          setDetectionProgress(Math.max(0, (stableFrames / requiredStableFrames) * 100));
+          setScannerStatus('scanning');
         }
-        setScannerStatus('detected');
       } else {
         stableFrames = Math.max(0, stableFrames - 2);
         setDetectionProgress(Math.max(0, (stableFrames / requiredStableFrames) * 100));
         setScannerStatus('scanning');
+        lastCorners = null;
       }
       
       animationRef.current = requestAnimationFrame(detectEdges);
@@ -915,9 +1004,9 @@ export default function MobileShopping() {
                 }`}>
                   <p className="text-white text-sm font-medium">
                     {scannerStatus === 'capturing' && 'Aufnahme...'}
-                    {scannerStatus === 'detected' && `Erkannt! Halte still... ${Math.round(detectionProgress)}%`}
-                    {scannerStatus === 'adjusting' && 'Ecke verschieben...'}
-                    {scannerStatus === 'scanning' && 'Ziehe die Ecken auf die Quittung'}
+                    {scannerStatus === 'detected' && `Quittung erkannt! ${Math.round(detectionProgress)}%`}
+                    {scannerStatus === 'adjusting' && 'Ecke anpassen...'}
+                    {scannerStatus === 'scanning' && 'Suche Quittung automatisch...'}
                     {scannerStatus === 'idle' && 'Tippe auf Start'}
                   </p>
                 </div>
@@ -952,7 +1041,7 @@ export default function MobileShopping() {
                     {/* Tips */}
                     <div className="bg-black/60 rounded-lg px-3 py-1.5">
                       <p className="text-white/80 text-xs text-center">
-                        Ziehe die Ecken • Dann "Scannen" drücken
+                        Auto-Erkennung aktiv • Bei Bedarf Ecken anpassen
                       </p>
                     </div>
                     

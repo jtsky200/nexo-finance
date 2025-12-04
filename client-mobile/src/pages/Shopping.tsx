@@ -279,87 +279,102 @@ export default function MobileShopping() {
     let stableFrames = 0;
     const requiredStableFrames = 12;
     let lastCorners: typeof corners | null = null;
+    let isRunning = true;
     
     const detectEdges = () => {
-      if (!videoRef.current || !canvasRef.current || !cameraStream) return;
+      if (!isRunning) return;
       
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
       
-      if (!ctx || video.videoWidth === 0) {
+      // Check if video is ready
+      if (!video || !canvas || !video.srcObject || video.videoWidth === 0) {
         animationRef.current = requestAnimationFrame(detectEdges);
         return;
       }
       
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        animationRef.current = requestAnimationFrame(detectEdges);
+        return;
+      }
+      
+      // Draw video frame to canvas
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       ctx.drawImage(video, 0, 0);
       
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      
-      // Try to find receipt corners
-      const foundCorners = findReceiptCorners(imageData, canvas.width, canvas.height);
-      
-      if (foundCorners && foundCorners.confidence > 10) {
-        // Convert pixel coordinates to percentage
-        const newCorners = {
-          topLeft: { 
-            x: (foundCorners.topLeft.x / canvas.width) * 100, 
-            y: (foundCorners.topLeft.y / canvas.height) * 100 
-          },
-          topRight: { 
-            x: (foundCorners.topRight.x / canvas.width) * 100, 
-            y: (foundCorners.topRight.y / canvas.height) * 100 
-          },
-          bottomLeft: { 
-            x: (foundCorners.bottomLeft.x / canvas.width) * 100, 
-            y: (foundCorners.bottomLeft.y / canvas.height) * 100 
-          },
-          bottomRight: { 
-            x: (foundCorners.bottomRight.x / canvas.width) * 100, 
-            y: (foundCorners.bottomRight.y / canvas.height) * 100 
-          }
-        };
+      try {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         
-        // Check if corners are stable (similar to last frame)
-        const isStable = lastCorners && 
-          Math.abs(newCorners.topLeft.x - lastCorners.topLeft.x) < 3 &&
-          Math.abs(newCorners.topLeft.y - lastCorners.topLeft.y) < 3 &&
-          Math.abs(newCorners.bottomRight.x - lastCorners.bottomRight.x) < 3 &&
-          Math.abs(newCorners.bottomRight.y - lastCorners.bottomRight.y) < 3;
+        // Try to find receipt corners
+        const foundCorners = findReceiptCorners(imageData, canvas.width, canvas.height);
         
-        lastCorners = newCorners;
-        
-        // Update displayed corners
-        setCorners(newCorners);
-        
-        if (isStable) {
-          stableFrames++;
-          setDetectionProgress(Math.min(100, (stableFrames / requiredStableFrames) * 100));
+        if (foundCorners && foundCorners.confidence > 10) {
+          // Convert pixel coordinates to percentage
+          const newCorners = {
+            topLeft: { 
+              x: (foundCorners.topLeft.x / canvas.width) * 100, 
+              y: (foundCorners.topLeft.y / canvas.height) * 100 
+            },
+            topRight: { 
+              x: (foundCorners.topRight.x / canvas.width) * 100, 
+              y: (foundCorners.topRight.y / canvas.height) * 100 
+            },
+            bottomLeft: { 
+              x: (foundCorners.bottomLeft.x / canvas.width) * 100, 
+              y: (foundCorners.bottomLeft.y / canvas.height) * 100 
+            },
+            bottomRight: { 
+              x: (foundCorners.bottomRight.x / canvas.width) * 100, 
+              y: (foundCorners.bottomRight.y / canvas.height) * 100 
+            }
+          };
           
-          if (stableFrames >= requiredStableFrames && scannerStatus !== 'capturing') {
-            setScannerStatus('capturing');
-            toast.success('Quittung erkannt! Aufnahme...');
-            setTimeout(() => capturePhoto(), 200);
-            return;
+          // Check if corners are stable
+          const isStable = lastCorners && 
+            Math.abs(newCorners.topLeft.x - lastCorners.topLeft.x) < 5 &&
+            Math.abs(newCorners.topLeft.y - lastCorners.topLeft.y) < 5 &&
+            Math.abs(newCorners.bottomRight.x - lastCorners.bottomRight.x) < 5 &&
+            Math.abs(newCorners.bottomRight.y - lastCorners.bottomRight.y) < 5;
+          
+          lastCorners = newCorners;
+          
+          // Always update corners immediately
+          setCorners(newCorners);
+          
+          if (isStable) {
+            stableFrames++;
+            setDetectionProgress(Math.min(100, (stableFrames / requiredStableFrames) * 100));
+            setScannerStatus('detected');
+            
+            if (stableFrames >= requiredStableFrames) {
+              isRunning = false;
+              setScannerStatus('capturing');
+              toast.success('Quittung erkannt! Aufnahme...');
+              setTimeout(() => capturePhoto(), 200);
+              return;
+            }
+          } else {
+            stableFrames = Math.max(0, stableFrames - 1);
+            setDetectionProgress(Math.max(0, (stableFrames / requiredStableFrames) * 100));
+            setScannerStatus('scanning');
           }
-          setScannerStatus('detected');
         } else {
-          stableFrames = Math.max(0, stableFrames - 1);
-          setDetectionProgress(Math.max(0, (stableFrames / requiredStableFrames) * 100));
+          stableFrames = Math.max(0, stableFrames - 2);
+          setDetectionProgress(0);
           setScannerStatus('scanning');
+          lastCorners = null;
         }
-      } else {
-        stableFrames = Math.max(0, stableFrames - 2);
-        setDetectionProgress(Math.max(0, (stableFrames / requiredStableFrames) * 100));
-        setScannerStatus('scanning');
-        lastCorners = null;
+      } catch (e) {
+        // Continue running even if there's an error
+        console.error('Edge detection error:', e);
       }
       
       animationRef.current = requestAnimationFrame(detectEdges);
     };
     
+    // Start immediately
     animationRef.current = requestAnimationFrame(detectEdges);
   };
 

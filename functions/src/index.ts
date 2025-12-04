@@ -2485,14 +2485,14 @@ export const uploadDocument = onCall(async (request) => {
   };
 });
 
-// Analyze Document (OCR/AI)
+// Analyze Document (OCR/AI) - Supports Images, PDF, Word, Excel with Fallback Workflow
 export const analyzeDocument = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'User must be authenticated');
   }
 
   const userId = request.auth.uid;
-  const { documentId, personId, fileData, fileType } = request.data;
+  const { documentId, personId, fileData, fileType, fileName } = request.data;
 
   // Get user settings for OCR provider
   const settingsDoc = await db.collection('userSettings').doc(userId).get();
@@ -2504,24 +2504,32 @@ export const analyzeDocument = onCall(async (request) => {
     confidence: 0,
     extractedData: {},
     rawText: '',
+    method: 'none',
   };
 
-  try {
-    if (ocrProvider === 'google') {
-      // Google Cloud Vision API
+  const buffer = Buffer.from(fileData, 'base64');
+  let extractedText = '';
+  const mimeType = fileType?.toLowerCase() || '';
+  const fileExt = fileName?.toLowerCase().split('.').pop() || '';
+
+  // Helper function to try Google Vision OCR
+  const tryGoogleVision = async (imageBuffer: Buffer): Promise<string> => {
+    try {
       const vision = require('@google-cloud/vision');
       const client = new vision.ImageAnnotatorClient();
-      
-      const buffer = Buffer.from(fileData, 'base64');
-      const [result] = await client.textDetection(buffer);
+      const [result] = await client.textDetection(imageBuffer);
       const detections = result.textAnnotations;
-      const fullText = detections && detections.length > 0 ? detections[0].description : '';
-      
-      analysisResult.rawText = fullText;
-      analysisResult = analyzeText(fullText, analysisResult);
-      
-    } else if (ocrProvider === 'openai' && settings?.openaiApiKey) {
-      // OpenAI GPT-4 Vision
+      return detections && detections.length > 0 ? detections[0].description : '';
+    } catch (e) {
+      console.error('Google Vision error:', e);
+      return '';
+    }
+  };
+
+  // Helper function to try OpenAI Vision
+  const tryOpenAIVision = async (base64Data: string, mimeType: string): Promise<any> => {
+    if (!settings?.openaiApiKey) return null;
+    try {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -2530,58 +2538,153 @@ export const analyzeDocument = onCall(async (request) => {
         },
         body: JSON.stringify({
           model: 'gpt-4-vision-preview',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: `Analysiere dieses Dokument und extrahiere strukturierte Daten. 
-                  Antworte NUR mit JSON in diesem Format:
-                  {
-                    "type": "rechnung" | "termin" | "vertrag" | "sonstiges",
-                    "confidence": 0-100,
-                    "extractedData": {
-                      // Für Rechnungen: amount, currency, dueDate, iban, description, creditor
-                      // Für Termine: date, time, location, description, title
-                      // Für Verträge: parties, startDate, endDate, subject
-                    }
-                  }`
-                },
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:${fileType};base64,${fileData}`
-                  }
-                }
-              ]
-            }
-          ],
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `Analysiere dieses Dokument und extrahiere strukturierte Daten. 
+                Antworte NUR mit JSON: {"type": "rechnung"|"termin"|"vertrag"|"sonstiges", "confidence": 0-100, "extractedData": {...}}`
+              },
+              { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}` } }
+            ]
+          }],
           max_tokens: 1000,
         }),
       });
-
       const data = await response.json();
-      if (data.choices && data.choices[0]?.message?.content) {
-        try {
-          const parsed = JSON.parse(data.choices[0].message.content);
-          analysisResult = {
-            ...analysisResult,
-            ...parsed,
-          };
-        } catch (e) {
-          // If JSON parsing fails, use regex fallback
-          analysisResult = analyzeText(data.choices[0].message.content, analysisResult);
+      if (data.choices?.[0]?.message?.content) {
+        return JSON.parse(data.choices[0].message.content);
+      }
+    } catch (e) {
+      console.error('OpenAI Vision error:', e);
+    }
+    return null;
+  };
+
+  try {
+    // ============================================
+    // STEP 1: Try direct text extraction first
+    // ============================================
+    
+    // PDF files
+    if (mimeType.includes('pdf') || fileExt === 'pdf') {
+      try {
+        const pdfParse = require('pdf-parse');
+        const pdfData = await pdfParse(buffer);
+        extractedText = (pdfData.text || '').trim();
+        analysisResult.method = 'pdf-parse';
+      } catch (e) {
+        console.log('PDF parse failed, will try OCR');
+      }
+      
+    // Word documents (.docx)
+    } else if (mimeType.includes('word') || mimeType.includes('openxmlformats-officedocument.wordprocessingml') || fileExt === 'docx' || fileExt === 'doc') {
+      try {
+        const mammoth = require('mammoth');
+        const result = await mammoth.extractRawText({ buffer });
+        extractedText = (result.value || '').trim();
+        analysisResult.method = 'mammoth';
+      } catch (e) {
+        console.log('Word parse failed');
+      }
+      
+    // Excel files (.xlsx, .xls)
+    } else if (mimeType.includes('excel') || mimeType.includes('spreadsheet') || fileExt === 'xlsx' || fileExt === 'xls') {
+      try {
+        const XLSX = require('xlsx');
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        let allText = '';
+        workbook.SheetNames.forEach((sheetName: string) => {
+          const sheet = workbook.Sheets[sheetName];
+          const text = XLSX.utils.sheet_to_txt(sheet);
+          allText += text + '\n';
+        });
+        extractedText = allText.trim();
+        analysisResult.method = 'xlsx';
+      } catch (e) {
+        console.log('Excel parse failed');
+      }
+      
+    // CSV files
+    } else if (mimeType.includes('csv') || fileExt === 'csv') {
+      extractedText = buffer.toString('utf8').trim();
+      analysisResult.method = 'csv';
+      
+    // Plain text files
+    } else if (mimeType.includes('text') || fileExt === 'txt') {
+      extractedText = buffer.toString('utf8').trim();
+      analysisResult.method = 'text';
+      
+    // Images - go directly to OCR
+    } else if (mimeType.includes('image')) {
+      analysisResult.method = 'image-ocr';
+    }
+
+    // ============================================
+    // STEP 2: If text extraction failed or too short, try OCR
+    // ============================================
+    const MIN_TEXT_LENGTH = 20; // Minimum characters to consider extraction successful
+    
+    if (extractedText.length < MIN_TEXT_LENGTH) {
+      console.log(`Text too short (${extractedText.length} chars), trying OCR fallback...`);
+      
+      // Try Google Vision first (works on images AND PDFs)
+      if (ocrProvider === 'google' || ocrProvider === 'regex') {
+        const visionText = await tryGoogleVision(buffer);
+        if (visionText && visionText.length > extractedText.length) {
+          extractedText = visionText;
+          analysisResult.method = 'google-vision';
         }
       }
       
+      // If still not enough, try OpenAI Vision
+      if (extractedText.length < MIN_TEXT_LENGTH && settings?.openaiApiKey) {
+        const openaiResult = await tryOpenAIVision(fileData, fileType);
+        if (openaiResult) {
+          analysisResult = { ...analysisResult, ...openaiResult, method: 'openai-vision' };
+          extractedText = openaiResult.rawText || '';
+        }
+      }
+    }
+
+    // ============================================
+    // STEP 3: Analyze the extracted text
+    // ============================================
+    if (extractedText.length > 0) {
+      analysisResult.rawText = extractedText;
+      analysisResult = analyzeText(extractedText, analysisResult);
     } else {
-      // Regex-based analysis (fallback)
-      // For images, we can't do much without OCR
-      // This is mainly for text-based documents
-      analysisResult.type = 'unknown';
-      analysisResult.confidence = 10;
-      analysisResult.message = 'Regex-Analyse kann nur Text-Dokumente verarbeiten. Bitte wähle Google Cloud Vision oder OpenAI in den Einstellungen.';
+      // No text could be extracted
+      analysisResult.type = 'sonstiges';
+      analysisResult.confidence = 5;
+      analysisResult.message = 'Kein Text erkannt. Bitte Google Cloud Vision in den Einstellungen aktivieren.';
+    }
+
+    // ============================================
+    // STEP 4: If confidence is still low, try OCR as final attempt
+    // ============================================
+    if (analysisResult.confidence < 30 && analysisResult.method !== 'google-vision' && analysisResult.method !== 'openai-vision') {
+      console.log('Low confidence, trying OCR as final fallback...');
+      
+      // Try Google Vision
+      if (ocrProvider === 'google') {
+        const visionText = await tryGoogleVision(buffer);
+        if (visionText && visionText.length > 50) {
+          const visionResult = analyzeText(visionText, { ...analysisResult, rawText: visionText });
+          if (visionResult.confidence > analysisResult.confidence) {
+            analysisResult = { ...visionResult, method: 'google-vision-fallback' };
+          }
+        }
+      }
+      
+      // Try OpenAI Vision as last resort
+      if (analysisResult.confidence < 30 && settings?.openaiApiKey) {
+        const openaiResult = await tryOpenAIVision(fileData, fileType);
+        if (openaiResult && (openaiResult.confidence || 0) > analysisResult.confidence) {
+          analysisResult = { ...analysisResult, ...openaiResult, method: 'openai-vision-fallback' };
+        }
+      }
     }
 
     // Update document with analysis result
@@ -2596,6 +2699,8 @@ export const analyzeDocument = onCall(async (request) => {
   } catch (error: any) {
     console.error('Analysis error:', error);
     analysisResult.error = error.message;
+    analysisResult.type = 'sonstiges';
+    analysisResult.confidence = 10;
   }
 
   return analysisResult;

@@ -119,10 +119,19 @@ export default function Documents() {
   const handleFileSelect = async (file: File) => {
     if (!file) return;
     
-    // Validate file type
-    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'application/pdf'];
-    if (!validTypes.includes(file.type)) {
-      toast.error('Ungültiges Dateiformat. Bitte JPG, PNG, PDF oder HEIC verwenden.');
+    // Validate file type - now supports Word, Excel, PDF, Images
+    const validTypes = [
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic',
+      'application/pdf',
+      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // Word
+      'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // Excel
+      'text/csv', 'text/plain'
+    ];
+    const fileExt = file.name.toLowerCase().split('.').pop();
+    const validExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt'];
+    
+    if (!validTypes.includes(file.type) && !validExts.includes(fileExt || '')) {
+      toast.error('Ungültiges Dateiformat. Unterstützt: JPG, PNG, PDF, DOCX, XLSX, CSV, TXT');
       return;
     }
     
@@ -160,13 +169,13 @@ export default function Documents() {
       setTempDocumentData(base64);
       setUploadProgress(50);
       
-      // Analyze document
+      // Analyze document - send filename for extension detection
       toast.info('Dokument wird analysiert...');
-      const analyzeDocument = httpsCallable(functions, 'analyzeDocument');
-      const result = await analyzeDocument({ 
+      const analyzeDocumentFunc = httpsCallable(functions, 'analyzeDocument');
+      const result = await analyzeDocumentFunc({ 
         fileData: base64,
         fileName: file.name,
-        fileType: file.type
+        fileType: file.type || 'application/octet-stream'
       });
       
       setUploadProgress(90);
@@ -375,7 +384,7 @@ export default function Documents() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*,application/pdf"
+              accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
               className="hidden"
               onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])}
             />
@@ -417,11 +426,14 @@ export default function Documents() {
             {/* Quick Tips */}
             <div className="bg-slate-50 rounded-lg p-3 text-sm">
               <p className="font-medium mb-2">Unterstützte Formate:</p>
-              <div className="flex flex-wrap gap-2">
-                <Badge variant="outline">JPG</Badge>
-                <Badge variant="outline">PNG</Badge>
-                <Badge variant="outline">PDF</Badge>
-                <Badge variant="outline">HEIC</Badge>
+              <div className="flex flex-wrap gap-1.5">
+                <Badge variant="outline" className="text-xs">JPG</Badge>
+                <Badge variant="outline" className="text-xs">PNG</Badge>
+                <Badge variant="outline" className="text-xs">PDF</Badge>
+                <Badge variant="outline" className="text-xs">DOCX</Badge>
+                <Badge variant="outline" className="text-xs">XLSX</Badge>
+                <Badge variant="outline" className="text-xs">CSV</Badge>
+                <Badge variant="outline" className="text-xs">TXT</Badge>
               </div>
             </div>
           </CardContent>

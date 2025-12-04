@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
   ShoppingCart, 
@@ -159,50 +159,177 @@ export default function MobileShopping() {
     }
   };
 
-  // Camera functions
+  // Scanner state
+  const [scannerStatus, setScannerStatus] = useState<'idle' | 'scanning' | 'detected' | 'capturing'>('idle');
+  const [detectionProgress, setDetectionProgress] = useState(0);
+  const animationRef = useRef<number | null>(null);
+
+  // Camera functions with auto-detection
   const startCamera = async () => {
     try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast.error('Kamera wird nicht unterstützt');
+        setScannerMode('upload');
+        return;
+      }
+      
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+        video: { 
+          facingMode: 'environment', 
+          width: { ideal: 1920 }, 
+          height: { ideal: 1080 } 
+        }
       });
       setCameraStream(stream);
+      setScannerStatus('scanning');
+      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        await videoRef.current.play();
+        toast.success('Scanner aktiv');
+        startEdgeDetection();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Camera error:', error);
-      toast.error('Kamera konnte nicht gestartet werden. Bitte Berechtigung erteilen.');
+      if (error.name === 'NotAllowedError') {
+        toast.error('Kamera-Berechtigung verweigert');
+      } else {
+        toast.error('Kamera-Fehler: ' + error.message);
+      }
       setScannerMode('upload');
     }
   };
 
   const stopCamera = () => {
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
     if (cameraStream) {
       cameraStream.getTracks().forEach(track => track.stop());
       setCameraStream(null);
     }
+    setScannerStatus('idle');
+    setDetectionProgress(0);
+  };
+
+  // Edge detection for auto-capture
+  const startEdgeDetection = () => {
+    let stableFrames = 0;
+    const requiredStableFrames = 15;
+    
+    const detectEdges = () => {
+      if (!videoRef.current || !canvasRef.current || !cameraStream) return;
+      
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx || video.videoWidth === 0) {
+        animationRef.current = requestAnimationFrame(detectEdges);
+        return;
+      }
+      
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+      
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      
+      let brightPixels = 0;
+      let edgePixels = 0;
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const scanRadius = Math.min(canvas.width, canvas.height) * 0.35;
+      
+      for (let y = Math.floor(centerY - scanRadius); y < centerY + scanRadius; y += 4) {
+        for (let x = Math.floor(centerX - scanRadius); x < centerX + scanRadius; x += 4) {
+          const i = (y * canvas.width + x) * 4;
+          const brightness = (data[i] + data[i + 1] + data[i + 2]) / 3;
+          
+          if (brightness > 180) brightPixels++;
+          
+          if (x > 0 && x < canvas.width - 1) {
+            const leftBrightness = (data[i - 4] + data[i - 3] + data[i - 2]) / 3;
+            const rightBrightness = (data[i + 4] + data[i + 5] + data[i + 6]) / 3;
+            if (Math.abs(brightness - leftBrightness) > 30 || Math.abs(brightness - rightBrightness) > 30) {
+              edgePixels++;
+            }
+          }
+        }
+      }
+      
+      const totalPixelsChecked = (scanRadius * 2 / 4) * (scanRadius * 2 / 4);
+      const brightRatio = brightPixels / totalPixelsChecked;
+      const edgeRatio = edgePixels / totalPixelsChecked;
+      const isReceiptDetected = brightRatio > 0.3 && edgeRatio > 0.05;
+      
+      if (isReceiptDetected) {
+        stableFrames++;
+        setDetectionProgress(Math.min(100, (stableFrames / requiredStableFrames) * 100));
+        
+        if (stableFrames >= requiredStableFrames && scannerStatus !== 'capturing') {
+          setScannerStatus('capturing');
+          toast.info('Quittung erkannt!');
+          setTimeout(() => capturePhoto(), 300);
+          return;
+        }
+        setScannerStatus('detected');
+      } else {
+        stableFrames = Math.max(0, stableFrames - 2);
+        setDetectionProgress(Math.max(0, (stableFrames / requiredStableFrames) * 100));
+        setScannerStatus('scanning');
+      }
+      
+      animationRef.current = requestAnimationFrame(detectEdges);
+    };
+    
+    animationRef.current = requestAnimationFrame(detectEdges);
   };
 
   const capturePhoto = () => {
     if (!videoRef.current || !canvasRef.current) return;
+    
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+    
+    setScannerStatus('capturing');
     
     const video = videoRef.current;
     const canvas = canvasRef.current;
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
+    
     if (ctx) {
+      ctx.imageSmoothingEnabled = false;
       ctx.drawImage(video, 0, 0);
+      toast.success('Foto aufgenommen!');
+      
       canvas.toBlob(async (blob) => {
         if (blob) {
           stopCamera();
           const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
           await analyzeShoppingList(file);
         }
-      }, 'image/jpeg', 0.8);
+      }, 'image/jpeg', 0.95);
     }
   };
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -575,29 +702,102 @@ export default function MobileShopping() {
               />
               <canvas ref={canvasRef} className="hidden" />
               
-              {/* Capture Button */}
-              <div className="absolute bottom-8 left-0 right-0 flex justify-center">
-                <button
-                  onClick={capturePhoto}
-                  disabled={isScanning}
-                  className="w-16 h-16 rounded-full bg-white shadow-lg flex items-center justify-center active:opacity-80"
-                >
-                  {isScanning ? (
-                    <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
-                  ) : (
-                    <Camera className="w-8 h-8 text-gray-800" />
+              {/* Scanner Overlay with Guide Frame */}
+              {cameraStream && (
+                <div className="absolute inset-0 pointer-events-none">
+                  {/* Dark overlay outside frame */}
+                  <div className="absolute inset-0 bg-black/30" />
+                  
+                  {/* Clear scanning area */}
+                  <div className="absolute left-[10%] top-[15%] right-[10%] bottom-[25%]">
+                    <div className="relative w-full h-full">
+                      <div className="absolute inset-0 shadow-[0_0_0_9999px_rgba(0,0,0,0.3)]" />
+                    </div>
+                  </div>
+                  
+                  {/* Corner guides */}
+                  <div className="absolute left-[10%] top-[15%] w-8 h-8">
+                    <div className={`absolute top-0 left-0 w-full h-1 ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
+                    <div className={`absolute top-0 left-0 w-1 h-full ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
+                  </div>
+                  <div className="absolute right-[10%] top-[15%] w-8 h-8">
+                    <div className={`absolute top-0 right-0 w-full h-1 ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
+                    <div className={`absolute top-0 right-0 w-1 h-full ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
+                  </div>
+                  <div className="absolute left-[10%] bottom-[25%] w-8 h-8">
+                    <div className={`absolute bottom-0 left-0 w-full h-1 ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
+                    <div className={`absolute bottom-0 left-0 w-1 h-full ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
+                  </div>
+                  <div className="absolute right-[10%] bottom-[25%] w-8 h-8">
+                    <div className={`absolute bottom-0 right-0 w-full h-1 ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
+                    <div className={`absolute bottom-0 right-0 w-1 h-full ${scannerStatus === 'detected' ? 'bg-green-500' : 'bg-white'}`} />
+                  </div>
+                  
+                  {/* Progress bar when detected */}
+                  {scannerStatus === 'detected' && (
+                    <div className="absolute top-[10%] left-1/2 -translate-x-1/2 w-[60%]">
+                      <div className="h-1.5 bg-white/30 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-green-500 transition-all duration-100"
+                          style={{ width: `${detectionProgress}%` }}
+                        />
+                      </div>
+                    </div>
                   )}
-                </button>
-              </div>
-
-              {/* Guide */}
+                </div>
+              )}
+              
+              {/* Status Message */}
               <div className="absolute top-4 left-4 right-4">
-                <div className="bg-black/50 rounded-lg p-3 text-center">
-                  <p className="text-white text-sm">
-                    Richte die Kamera auf deine Einkaufsliste
+                <div className={`rounded-lg p-3 text-center ${
+                  scannerStatus === 'capturing' ? 'bg-green-500' :
+                  scannerStatus === 'detected' ? 'bg-green-500/80' :
+                  'bg-black/50'
+                }`}>
+                  <p className="text-white text-sm font-medium">
+                    {scannerStatus === 'capturing' && 'Aufnahme...'}
+                    {scannerStatus === 'detected' && `Erkannt! Halte still... ${Math.round(detectionProgress)}%`}
+                    {scannerStatus === 'scanning' && 'Quittung im Rahmen positionieren'}
+                    {scannerStatus === 'idle' && 'Tippe auf Start'}
                   </p>
                 </div>
               </div>
+              
+              {/* Capture Button */}
+              <div className="absolute bottom-8 left-0 right-0 flex justify-center gap-4">
+                {!cameraStream ? (
+                  <button
+                    onClick={startCamera}
+                    className="px-6 py-3 rounded-full bg-white shadow-lg flex items-center justify-center gap-2 active:opacity-80"
+                  >
+                    <Camera className="w-5 h-5 text-gray-800" />
+                    <span className="font-medium text-gray-800">Scanner starten</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={capturePhoto}
+                    disabled={isScanning || scannerStatus === 'capturing'}
+                    className="w-16 h-16 rounded-full bg-white shadow-lg flex items-center justify-center active:opacity-80"
+                  >
+                    {isScanning || scannerStatus === 'capturing' ? (
+                      <div className="w-6 h-6 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                    ) : (
+                      <Camera className="w-8 h-8 text-gray-800" />
+                    )}
+                  </button>
+                )}
+              </div>
+              
+              {/* Tips */}
+              {cameraStream && scannerStatus === 'scanning' && (
+                <div className="absolute bottom-28 left-4 right-4">
+                  <div className="bg-black/60 rounded-lg p-2 text-center">
+                    <p className="text-white/80 text-xs">
+                      Flach halten • Gute Beleuchtung • Auto-Foto bei Erkennung
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

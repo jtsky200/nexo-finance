@@ -3214,6 +3214,12 @@ function parseSwissReceipt(text) {
     // Calculate confidence
     result.confidence = Math.min(100, confidencePoints);
     result.totals.itemCount = result.totals.itemCount || result.items.length;
+    // If no total was found, calculate from items
+    if (!result.totals.total && result.items.length > 0) {
+        result.totals.total = result.items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
+        // Round to 2 decimal places
+        result.totals.total = Math.round(result.totals.total * 100) / 100;
+    }
     // Add detected category
     result.category = detectedCategory;
     // Auto-detect category from items if not detected from store

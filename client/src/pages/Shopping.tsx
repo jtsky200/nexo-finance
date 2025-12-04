@@ -801,7 +801,7 @@ export default function Shopping() {
     }
   };
   
-  // Intelligent receipt corner detection using Sobel edge detection
+  // Intelligent receipt corner detection - brightness-based approach
   const findReceiptCorners = (imageData: ImageData, width: number, height: number) => {
     const data = imageData.data;
     
@@ -811,53 +811,48 @@ export default function Shopping() {
       gray[i / 4] = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
     }
     
-    // Step 2: Sobel edge detection
-    const edges = new Uint8ClampedArray(width * height);
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        const idx = y * width + x;
-        const gx = 
-          -gray[(y-1)*width + (x-1)] + gray[(y-1)*width + (x+1)] +
-          -2*gray[y*width + (x-1)] + 2*gray[y*width + (x+1)] +
-          -gray[(y+1)*width + (x-1)] + gray[(y+1)*width + (x+1)];
-        const gy = 
-          -gray[(y-1)*width + (x-1)] - 2*gray[(y-1)*width + x] - gray[(y-1)*width + (x+1)] +
-          gray[(y+1)*width + (x-1)] + 2*gray[(y+1)*width + x] + gray[(y+1)*width + (x+1)];
-        edges[idx] = Math.min(255, Math.sqrt(gx*gx + gy*gy));
-      }
+    // Step 2: Find bright pixels (receipts are typically white/bright)
+    const brightnessThreshold = 160;
+    const bright = new Uint8ClampedArray(width * height);
+    for (let i = 0; i < gray.length; i++) {
+      bright[i] = gray[i] > brightnessThreshold ? 255 : 0;
     }
     
-    // Step 3: Find receipt boundaries by scanning for strong edges
-    const threshold = 50;
+    // Step 3: Find bounding box of bright area
     let minX = width, maxX = 0, minY = height, maxY = 0;
-    let foundEdges = false;
+    let brightCount = 0;
     
-    // Scan columns for vertical edges
-    for (let x = 0; x < width; x++) {
-      let edgeCount = 0;
-      for (let y = 0; y < height; y++) {
-        if (edges[y * width + x] > threshold) edgeCount++;
-      }
-      if (edgeCount > height * 0.1) {
-        if (x < width / 2 && x < minX) { minX = x; foundEdges = true; }
-        if (x > width / 2 && x > maxX) { maxX = x; foundEdges = true; }
-      }
-    }
-    
-    // Scan rows for horizontal edges
     for (let y = 0; y < height; y++) {
-      let edgeCount = 0;
+      let rowBright = 0;
+      let rowMinX = width, rowMaxX = 0;
       for (let x = 0; x < width; x++) {
-        if (edges[y * width + x] > threshold) edgeCount++;
+        if (bright[y * width + x] > 0) {
+          rowBright++;
+          if (x < rowMinX) rowMinX = x;
+          if (x > rowMaxX) rowMaxX = x;
+        }
       }
-      if (edgeCount > width * 0.1) {
-        if (y < height / 2 && y < minY) { minY = y; foundEdges = true; }
-        if (y > height / 2 && y > maxY) { maxY = y; foundEdges = true; }
+      if (rowBright > width * 0.15) {
+        if (y < minY) minY = y;
+        maxY = y;
+        if (rowMinX < minX) minX = rowMinX;
+        if (rowMaxX > maxX) maxX = rowMaxX;
+        brightCount += rowBright;
       }
     }
     
-    if (foundEdges && maxX > minX && maxY > minY) {
-      const padX = (maxX - minX) * 0.02;
+    const potentialArea = (maxX - minX) * (maxY - minY);
+    const coverage = potentialArea > 0 ? brightCount / potentialArea : 0;
+    const aspectRatio = (maxY - minY) / Math.max(1, maxX - minX);
+    
+    const isValidReceipt = 
+      maxX > minX + width * 0.1 &&
+      maxY > minY + height * 0.1 &&
+      aspectRatio > 0.5 && aspectRatio < 4 &&
+      coverage > 0.3;
+    
+    if (isValidReceipt) {
+      const padX = (maxX - minX) * 0.03;
       const padY = (maxY - minY) * 0.02;
       
       return {
@@ -865,7 +860,7 @@ export default function Shopping() {
         topRight: { x: Math.min(width, maxX + padX), y: Math.max(0, minY - padY) },
         bottomLeft: { x: Math.max(0, minX - padX), y: Math.min(height, maxY + padY) },
         bottomRight: { x: Math.min(width, maxX + padX), y: Math.min(height, maxY + padY) },
-        confidence: Math.min(100, ((maxX - minX) * (maxY - minY)) / (width * height) * 200)
+        confidence: Math.min(100, coverage * 150)
       };
     }
     

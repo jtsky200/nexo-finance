@@ -665,3 +665,119 @@ export async function deleteInvoice(personId: string, invoiceId: string) {
   const deleteInvoiceFunc = httpsCallable(functions, 'deleteInvoice');
   await deleteInvoiceFunc({ personId, invoiceId });
 }
+
+// ========== Stores & Receipt Hooks ==========
+
+export interface StoreItem {
+  id: string;
+  name: string;
+  articleNumber?: string;
+  category: string;
+  lastPrice: number;
+  priceHistory: Array<{ price: number; date: string }>;
+  purchaseCount: number;
+}
+
+export interface Store {
+  id: string;
+  name: string;
+  address?: string;
+  city?: string;
+  postalCode?: string;
+  createdAt?: string;
+}
+
+export interface Receipt {
+  id: string;
+  storeId: string;
+  storeName: string;
+  purchaseDate?: string;
+  purchaseTime?: string;
+  total: number;
+  itemCount: number;
+  createdAt?: string;
+}
+
+export function useStores() {
+  const [data, setData] = useState<Store[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchStores = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const getStoresFunc = httpsCallable(functions, 'getStores');
+      const result = await getStoresFunc({});
+      const response = result.data as { success: boolean; stores: Store[] };
+      setData(response.stores || []);
+    } catch (err: any) {
+      setError(err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchStores();
+  }, [fetchStores]);
+
+  return { data, isLoading, error, refetch: fetchStores };
+}
+
+export function useStoreItems(storeId?: string, storeName?: string) {
+  const [data, setData] = useState<StoreItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchItems = useCallback(async () => {
+    if (!storeId && !storeName) {
+      setData([]);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const getStoreItemsFunc = httpsCallable(functions, 'getStoreItems');
+      const result = await getStoreItemsFunc({ storeId, storeName });
+      const response = result.data as { success: boolean; items: StoreItem[] };
+      setData(response.items || []);
+    } catch (err: any) {
+      setError(err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [storeId, storeName]);
+
+  useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
+
+  return { data, isLoading, error, refetch: fetchItems };
+}
+
+export function useReceipts(limit?: number, storeId?: string) {
+  const [data, setData] = useState<Receipt[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchReceipts = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const getReceiptsFunc = httpsCallable(functions, 'getReceipts');
+      const result = await getReceiptsFunc({ limit, storeId });
+      const response = result.data as { success: boolean; receipts: Receipt[] };
+      setData(response.receipts || []);
+    } catch (err: any) {
+      setError(err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [limit, storeId]);
+
+  useEffect(() => {
+    fetchReceipts();
+  }, [fetchReceipts]);
+
+  return { data, isLoading, error, refetch: fetchReceipts };
+}

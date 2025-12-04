@@ -20,7 +20,7 @@ import {
   RotateCcw, ListChecks, Tag, Banknote, ScanLine,
   Apple, Home as HomeIcon, Shirt, Cpu, Heart, MoreHorizontal, ChevronRight
 } from 'lucide-react';
-import { useShoppingList, createShoppingItem, deleteShoppingItem, markShoppingItemAsBought, createFinanceEntry } from '@/lib/firebaseHooks';
+import { useShoppingList, createShoppingItem, deleteShoppingItem, markShoppingItemAsBought, createFinanceEntry, useStores, useStoreItems, useReceipts } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
 import { functions } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -125,8 +125,14 @@ const QUICK_ADD_KEY = 'shopping_quick_add';
 export default function Shopping() {
   const { t } = useTranslation();
   const { data: items = [], isLoading, refetch } = useShoppingList();
+  const { data: userStores = [] } = useStores();
+  const { data: receipts = [] } = useReceipts(10);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  
+  // Store item suggestions state
+  const [selectedStoreForSuggestions, setSelectedStoreForSuggestions] = useState<string>('');
+  const { data: storeItems = [] } = useStoreItems(undefined, selectedStoreForSuggestions);
   
   // Budget state
   const [budget, setBudget] = useState(() => {

@@ -15,10 +15,13 @@ export const getReminders = onCall(async (request) => {
   }
 
   const userId = request.auth.uid;
-  const { startDate, endDate, status } = request.data;
+  const { startDate, endDate, status, personId } = request.data;
 
   let query: admin.firestore.Query = db.collection('reminders').where('userId', '==', userId);
 
+  if (personId) {
+    query = query.where('personId', '==', personId);
+  }
   if (startDate) {
     query = query.where('dueDate', '>=', admin.firestore.Timestamp.fromDate(new Date(startDate)));
   }
@@ -55,7 +58,7 @@ export const createReminder = onCall(async (request) => {
   }
 
   const userId = request.auth.uid;
-  const { title, type, dueDate, isAllDay, amount, currency, notes, recurrenceRule } = request.data;
+  const { title, type, dueDate, isAllDay, amount, currency, notes, recurrenceRule, personId, personName } = request.data;
 
   const reminderData = {
     userId,
@@ -67,6 +70,8 @@ export const createReminder = onCall(async (request) => {
     currency: currency || null,
     notes: notes || null,
     recurrenceRule: recurrenceRule || null,
+    personId: personId || null,
+    personName: personName || null,
     status: 'offen',
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -417,7 +422,7 @@ export const getPeople = onCall(async (request) => {
   }
 
   const userId = request.auth.uid;
-  const snapshot = await db.collection('people').where('userId', '==', userId).orderBy('name').get();
+  const snapshot = await db.collection('people').where('userId', '==', userId).get();
   
   // Get people with their invoices
   const people = await Promise.all(snapshot.docs.map(async (doc) => {

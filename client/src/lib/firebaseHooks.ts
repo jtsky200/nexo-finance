@@ -71,6 +71,53 @@ export function useReminders(filters?: { startDate?: Date; endDate?: Date; statu
   return { data: reminders, isLoading, error, refetch };
 }
 
+// ========== Person Reminders Hook ==========
+export function usePersonReminders(personId: string | undefined) {
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const fetchReminders = async () => {
+    if (!personId) {
+      setReminders([]);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const getRemindersFunc = httpsCallable(functions, 'getReminders');
+      const result = await getRemindersFunc({ personId });
+      const data = result.data as { reminders: any[] };
+      
+      const mappedReminders = data.reminders.map((r: any) => ({
+        ...r,
+        dueDate: r.dueDate?.toDate ? r.dueDate.toDate() : new Date(r.dueDate),
+        createdAt: r.createdAt?.toDate ? r.createdAt.toDate() : new Date(r.createdAt),
+        updatedAt: r.updatedAt?.toDate ? r.updatedAt.toDate() : new Date(r.updatedAt),
+      }));
+      
+      setReminders(mappedReminders);
+      setError(null);
+    } catch (err) {
+      setError(err as Error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReminders();
+  }, [personId, refreshKey]);
+
+  const refetch = async () => {
+    await fetchReminders();
+  };
+
+  return { data: reminders, isLoading, error, refetch };
+}
+
 // ========== All Bills Hook (combines person invoices + payment reminders) ==========
 export interface Bill {
   id: string;

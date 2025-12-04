@@ -43,9 +43,9 @@ export default function People() {
 
   const { data: people = [], isLoading, refetch } = usePeople();
 
-  // Separate people by type
+  // Separate people by type (children are part of household)
   const householdPeople = useMemo(() => {
-    return people.filter(p => !p.type || p.type === 'household');
+    return people.filter(p => !p.type || p.type === 'household' || p.type === 'child');
   }, [people]);
 
   const externalPeople = useMemo(() => {

@@ -57,7 +57,7 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
   const [showAddChildDialog, setShowAddChildDialog] = useState(false);
   const [newChildName, setNewChildName] = useState('');
 
-  // Filter children from people
+  // Filter only children (type === 'child')
   const children = useMemo(() => 
     people.filter(p => p.type === 'child'), 
     [people]
@@ -213,16 +213,20 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
 
     try {
       const createPersonFunc = httpsCallable(functions, 'createPerson');
-      await createPersonFunc({
+      const result = await createPersonFunc({
         name: newChildName.trim(),
         type: 'child',
-        relationship: 'child',
       });
-      toast.success('Kind hinzugefügt');
+      const newChild = (result.data as any);
+      
       setNewChildName('');
       setShowAddChildDialog(false);
-      // Refresh people list
-      refetchPeople();
+      
+      // Close and reopen dialog to refresh
+      onOpenChange(false);
+      toast.success('Kind hinzugefügt - bitte Schulplaner erneut öffnen');
+      
+      if (onDataChanged) onDataChanged();
     } catch (error) {
       console.error('Error adding child:', error);
       toast.error('Fehler beim Hinzufügen');

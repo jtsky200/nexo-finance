@@ -8,9 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Plus, Trash2, Edit2, Camera, QrCode, Copy, 
-  FileText, X, Calendar, Bell, Clock, ArrowDownLeft, ArrowUpRight, Repeat
+  FileText, X, Calendar, Bell, Clock, ArrowDownLeft, ArrowUpRight, Repeat, CalendarDays
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,7 +20,11 @@ import {
   createInvoice, 
   updateInvoice, 
   updateInvoiceStatus, 
-  deleteInvoice 
+  deleteInvoice,
+  usePersonReminders,
+  createReminder,
+  updateReminder,
+  deleteReminder
 } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
 import InvoiceScanner, { ScannedInvoiceData } from './InvoiceScanner';
@@ -33,10 +38,22 @@ interface PersonInvoicesDialogProps {
 
 export default function PersonInvoicesDialog({ person, open, onOpenChange, onDataChanged }: PersonInvoicesDialogProps) {
   const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<'invoices' | 'appointments'>('invoices');
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showAddAppointmentDialog, setShowAddAppointmentDialog] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<any>(null);
+  const [editingAppointment, setEditingAppointment] = useState<any>(null);
   const [deleteInvoiceId, setDeleteInvoiceId] = useState<string | null>(null);
+  const [deleteAppointmentId, setDeleteAppointmentId] = useState<string | null>(null);
+  const [newAppointment, setNewAppointment] = useState({
+    title: '',
+    type: 'termin' as 'termin' | 'aufgabe' | 'geburtstag' | 'andere',
+    dueDate: new Date().toISOString().split('T')[0],
+    isAllDay: true,
+    notes: '',
+    recurrenceRule: '' as '' | 'daily' | 'weekly' | 'monthly' | 'yearly',
+  });
   const [newInvoice, setNewInvoice] = useState({
     amount: '',
     description: '',
@@ -57,19 +74,94 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
   });
 
   const { data: invoices = [], isLoading, refetch } = usePersonInvoices(person?.id);
+  const { data: appointments = [], isLoading: appointmentsLoading, refetch: refetchAppointments } = usePersonReminders(person?.id);
 
   useEffect(() => {
     if (open && person?.id) {
       refetch();
+      refetchAppointments();
     }
   }, [open, person?.id]);
 
   const refreshData = useCallback(async () => {
     await refetch();
+    await refetchAppointments();
     if (onDataChanged) {
       onDataChanged();
     }
-  }, [refetch, onDataChanged]);
+  }, [refetch, refetchAppointments, onDataChanged]);
+
+  // Appointment handlers
+  const handleAddAppointment = async () => {
+    if (!newAppointment.title || !newAppointment.dueDate) {
+      toast.error('Bitte Titel und Datum eingeben');
+      return;
+    }
+
+    try {
+      await createReminder({
+        title: newAppointment.title,
+        type: newAppointment.type,
+        dueDate: new Date(newAppointment.dueDate),
+        isAllDay: newAppointment.isAllDay,
+        notes: newAppointment.notes || undefined,
+        recurrenceRule: newAppointment.recurrenceRule || undefined,
+        personId: person.id,
+        personName: person.name,
+      } as any);
+      
+      toast.success('Termin hinzugefügt');
+      setNewAppointment({
+        title: '',
+        type: 'termin',
+        dueDate: new Date().toISOString().split('T')[0],
+        isAllDay: true,
+        notes: '',
+        recurrenceRule: '',
+      });
+      setShowAddAppointmentDialog(false);
+      await refreshData();
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
+  const handleUpdateAppointment = async () => {
+    if (!editingAppointment || !editingAppointment.title) {
+      toast.error('Bitte Titel eingeben');
+      return;
+    }
+
+    try {
+      await updateReminder(editingAppointment.id, {
+        title: editingAppointment.title,
+        type: editingAppointment.type,
+        dueDate: new Date(editingAppointment.dueDate),
+        isAllDay: editingAppointment.isAllDay,
+        notes: editingAppointment.notes || undefined,
+        recurrenceRule: editingAppointment.recurrenceRule || undefined,
+      });
+      
+      toast.success('Termin aktualisiert');
+      setEditingAppointment(null);
+      await refreshData();
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
+  const handleDeleteAppointment = async () => {
+    if (!deleteAppointmentId) return;
+
+    try {
+      await deleteReminder(deleteAppointmentId);
+      toast.success('Termin gelöscht');
+      await refreshData();
+      setDeleteAppointmentId(null);
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
 
   const formatDate = (date: Date | any) => {
     if (!date) return '-';
@@ -255,44 +347,67 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 </div>
                 <div>
                   <h2 className="text-xl font-bold">{person?.name}</h2>
-                  <p className="text-sm text-muted-foreground">{invoices.length} Rechnungen</p>
+                  <p className="text-sm text-muted-foreground">
+                    {invoices.length} Rechnungen · {appointments.length} Termine
+                  </p>
                 </div>
               </div>
               <div className="flex gap-2 w-full sm:w-auto">
-                <Button variant="outline" onClick={() => setShowScanner(true)} className="flex-1 sm:flex-none h-10">
-                  <Camera className="w-4 h-4 mr-2" />
-                  Scannen
-                </Button>
-                <Button onClick={() => setShowAddDialog(true)} className="flex-1 sm:flex-none h-10">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Neu
-                </Button>
+                {activeTab === 'invoices' ? (
+                  <>
+                    <Button variant="outline" onClick={() => setShowScanner(true)} className="flex-1 sm:flex-none h-10">
+                      <Camera className="w-4 h-4 mr-2" />
+                      Scannen
+                    </Button>
+                    <Button onClick={() => setShowAddDialog(true)} className="flex-1 sm:flex-none h-10">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Rechnung
+                    </Button>
+                  </>
+                ) : (
+                  <Button onClick={() => setShowAddAppointmentDialog(true)} className="flex-1 sm:flex-none h-10">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Termin
+                  </Button>
+                )}
               </div>
             </div>
           </div>
 
           {/* Content */}
           <div className="px-6 py-6 overflow-y-auto flex-1">
-            {/* Statistics */}
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              <div className="bg-slate-100 dark:bg-slate-800 rounded-xl p-4">
-                <p className="text-xs text-muted-foreground mb-1">Gesamt</p>
-                <p className="text-lg font-bold truncate">{formatAmount(totalAmount)}</p>
-              </div>
-              <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-xl p-4">
-                <p className="text-xs text-red-600 dark:text-red-400 mb-1">Offen</p>
-                <p className="text-lg font-bold text-red-600 truncate">{formatAmount(openAmount)}</p>
-              </div>
-              <div className="bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-900 rounded-xl p-4">
-                <p className="text-xs text-green-600 dark:text-green-400 mb-1">Bezahlt</p>
-                <p className="text-lg font-bold text-green-600 truncate">{formatAmount(paidAmount)}</p>
-              </div>
-            </div>
+            {/* Tabs */}
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-6">
+                <TabsTrigger value="invoices" className="gap-2">
+                  <FileText className="w-4 h-4" />
+                  Rechnungen ({invoices.length})
+                </TabsTrigger>
+                <TabsTrigger value="appointments" className="gap-2">
+                  <CalendarDays className="w-4 h-4" />
+                  Termine ({appointments.length})
+                </TabsTrigger>
+              </TabsList>
 
-            {/* Invoice List */}
-            <h3 className="font-semibold mb-4">Rechnungen</h3>
+              {/* Invoices Tab */}
+              <TabsContent value="invoices" className="mt-0">
+                {/* Statistics */}
+                <div className="grid grid-cols-3 gap-3 mb-6">
+                  <div className="bg-slate-100 dark:bg-slate-800 rounded-xl p-4">
+                    <p className="text-xs text-muted-foreground mb-1">Gesamt</p>
+                    <p className="text-lg font-bold truncate">{formatAmount(totalAmount)}</p>
+                  </div>
+                  <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-xl p-4">
+                    <p className="text-xs text-red-600 dark:text-red-400 mb-1">Offen</p>
+                    <p className="text-lg font-bold text-red-600 truncate">{formatAmount(openAmount)}</p>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-900 rounded-xl p-4">
+                    <p className="text-xs text-green-600 dark:text-green-400 mb-1">Bezahlt</p>
+                    <p className="text-lg font-bold text-green-600 truncate">{formatAmount(paidAmount)}</p>
+                  </div>
+                </div>
             
-            {isLoading ? (
+                {isLoading ? (
               <div className="text-center py-10 text-muted-foreground">Laden...</div>
             ) : invoices.length > 0 ? (
               <div className="space-y-3">
@@ -389,21 +504,102 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 ))}
               </div>
             ) : (
-              <div className="border border-dashed rounded-xl py-12 text-center">
-                <FileText className="w-12 h-12 mx-auto text-muted-foreground/30 mb-4" />
-                <p className="text-muted-foreground mb-4">Noch keine Rechnungen</p>
-                <div className="flex gap-2 justify-center">
-                  <Button variant="outline" onClick={() => setShowScanner(true)} className="h-9">
-                    <Camera className="w-4 h-4 mr-2" />
-                    Scannen
-                  </Button>
-                  <Button onClick={() => setShowAddDialog(true)} className="h-9">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Neu
-                  </Button>
-                </div>
-              </div>
-            )}
+                  <div className="border border-dashed rounded-xl py-12 text-center">
+                    <FileText className="w-12 h-12 mx-auto text-muted-foreground/30 mb-4" />
+                    <p className="text-muted-foreground mb-4">Noch keine Rechnungen</p>
+                    <div className="flex gap-2 justify-center">
+                      <Button variant="outline" onClick={() => setShowScanner(true)} className="h-9">
+                        <Camera className="w-4 h-4 mr-2" />
+                        Scannen
+                      </Button>
+                      <Button onClick={() => setShowAddDialog(true)} className="h-9">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Neu
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* Appointments Tab */}
+              <TabsContent value="appointments" className="mt-0">
+                {appointmentsLoading ? (
+                  <div className="text-center py-10 text-muted-foreground">Laden...</div>
+                ) : appointments.length > 0 ? (
+                  <div className="space-y-3">
+                    {appointments.map((appointment: any) => (
+                      <div 
+                        key={appointment.id}
+                        className="rounded-xl p-4 border bg-slate-50/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800"
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <h4 className="font-semibold truncate">{appointment.title}</h4>
+                            <Badge variant="outline" className="text-xs">
+                              {appointment.type === 'termin' ? 'Termin' : 
+                               appointment.type === 'aufgabe' ? 'Aufgabe' : 
+                               appointment.type === 'geburtstag' ? 'Geburtstag' : 'Andere'}
+                            </Badge>
+                            {appointment.recurrenceRule && (
+                              <Badge variant="secondary" className="text-xs">
+                                <Repeat className="w-3 h-3 mr-1" />
+                                {appointment.recurrenceRule === 'daily' ? 'Täglich' :
+                                 appointment.recurrenceRule === 'weekly' ? 'Wöchentlich' :
+                                 appointment.recurrenceRule === 'monthly' ? 'Monatlich' : 'Jährlich'}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-4 mb-3">
+                          <span className="text-sm text-muted-foreground flex items-center gap-1">
+                            <Calendar className="w-4 h-4" />
+                            {formatDate(appointment.dueDate)}
+                          </span>
+                          {appointment.notes && (
+                            <span className="text-sm text-muted-foreground truncate">{appointment.notes}</span>
+                          )}
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1" />
+                          
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            className="h-9 w-9"
+                            onClick={() => setEditingAppointment({
+                              ...appointment,
+                              dueDate: new Date(appointment.dueDate).toISOString().split('T')[0],
+                            })}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            className="h-9 w-9 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                            onClick={() => setDeleteAppointmentId(appointment.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="border border-dashed rounded-xl py-12 text-center">
+                    <CalendarDays className="w-12 h-12 mx-auto text-muted-foreground/30 mb-4" />
+                    <p className="text-muted-foreground mb-4">Noch keine Termine</p>
+                    <Button onClick={() => setShowAddAppointmentDialog(true)} className="h-9">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Termin hinzufügen
+                    </Button>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </div>
         </DialogContent>
       </Dialog>
@@ -876,6 +1072,217 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
           <AlertDialogFooter className="mt-4 gap-2">
             <AlertDialogCancel className="h-10">Abbrechen</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteInvoice} className="h-10 bg-red-600 hover:bg-red-700">
+              Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Add Appointment Dialog */}
+      <Dialog open={showAddAppointmentDialog} onOpenChange={setShowAddAppointmentDialog}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="text-xl">Neuer Termin für {person?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Titel *</Label>
+              <Input
+                value={newAppointment.title}
+                onChange={(e) => setNewAppointment({ ...newAppointment, title: e.target.value })}
+                placeholder="z.B. Arzttermin, Treffen..."
+                className="mt-2 h-10"
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Typ</Label>
+                <Select
+                  value={newAppointment.type}
+                  onValueChange={(value: any) => setNewAppointment({ ...newAppointment, type: value })}
+                >
+                  <SelectTrigger className="mt-2 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="termin">Termin</SelectItem>
+                    <SelectItem value="aufgabe">Aufgabe</SelectItem>
+                    <SelectItem value="geburtstag">Geburtstag</SelectItem>
+                    <SelectItem value="andere">Andere</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Datum *</Label>
+                <Input
+                  type="date"
+                  value={newAppointment.dueDate}
+                  onChange={(e) => setNewAppointment({ ...newAppointment, dueDate: e.target.value })}
+                  className="mt-2 h-10"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Checkbox
+                id="isAllDay"
+                checked={newAppointment.isAllDay}
+                onCheckedChange={(checked) => setNewAppointment({ ...newAppointment, isAllDay: checked as boolean })}
+              />
+              <Label htmlFor="isAllDay" className="cursor-pointer">Ganztägig</Label>
+            </div>
+
+            <div>
+              <Label>Wiederholung</Label>
+              <Select
+                value={newAppointment.recurrenceRule}
+                onValueChange={(value: any) => setNewAppointment({ ...newAppointment, recurrenceRule: value })}
+              >
+                <SelectTrigger className="mt-2 h-10">
+                  <SelectValue placeholder="Keine Wiederholung" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Keine</SelectItem>
+                  <SelectItem value="daily">Täglich</SelectItem>
+                  <SelectItem value="weekly">Wöchentlich</SelectItem>
+                  <SelectItem value="monthly">Monatlich</SelectItem>
+                  <SelectItem value="yearly">Jährlich</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Notizen</Label>
+              <Textarea
+                value={newAppointment.notes}
+                onChange={(e) => setNewAppointment({ ...newAppointment, notes: e.target.value })}
+                placeholder="Optionale Notizen..."
+                className="mt-2"
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => setShowAddAppointmentDialog(false)} className="h-10">
+              Abbrechen
+            </Button>
+            <Button onClick={handleAddAppointment} className="h-10">
+              Hinzufügen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Appointment Dialog */}
+      {editingAppointment && (
+        <Dialog open={!!editingAppointment} onOpenChange={() => setEditingAppointment(null)}>
+          <DialogContent className="sm:max-w-[450px]">
+            <DialogHeader className="pb-4">
+              <DialogTitle className="text-xl">Termin bearbeiten</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label>Titel *</Label>
+                <Input
+                  value={editingAppointment.title}
+                  onChange={(e) => setEditingAppointment({ ...editingAppointment, title: e.target.value })}
+                  className="mt-2 h-10"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Typ</Label>
+                  <Select
+                    value={editingAppointment.type}
+                    onValueChange={(value) => setEditingAppointment({ ...editingAppointment, type: value })}
+                  >
+                    <SelectTrigger className="mt-2 h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="termin">Termin</SelectItem>
+                      <SelectItem value="aufgabe">Aufgabe</SelectItem>
+                      <SelectItem value="geburtstag">Geburtstag</SelectItem>
+                      <SelectItem value="andere">Andere</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Datum *</Label>
+                  <Input
+                    type="date"
+                    value={editingAppointment.dueDate}
+                    onChange={(e) => setEditingAppointment({ ...editingAppointment, dueDate: e.target.value })}
+                    className="mt-2 h-10"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  id="editIsAllDay"
+                  checked={editingAppointment.isAllDay}
+                  onCheckedChange={(checked) => setEditingAppointment({ ...editingAppointment, isAllDay: checked as boolean })}
+                />
+                <Label htmlFor="editIsAllDay" className="cursor-pointer">Ganztägig</Label>
+              </div>
+
+              <div>
+                <Label>Wiederholung</Label>
+                <Select
+                  value={editingAppointment.recurrenceRule || ''}
+                  onValueChange={(value) => setEditingAppointment({ ...editingAppointment, recurrenceRule: value })}
+                >
+                  <SelectTrigger className="mt-2 h-10">
+                    <SelectValue placeholder="Keine Wiederholung" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Keine</SelectItem>
+                    <SelectItem value="daily">Täglich</SelectItem>
+                    <SelectItem value="weekly">Wöchentlich</SelectItem>
+                    <SelectItem value="monthly">Monatlich</SelectItem>
+                    <SelectItem value="yearly">Jährlich</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Notizen</Label>
+                <Textarea
+                  value={editingAppointment.notes || ''}
+                  onChange={(e) => setEditingAppointment({ ...editingAppointment, notes: e.target.value })}
+                  placeholder="Optionale Notizen..."
+                  className="mt-2"
+                  rows={2}
+                />
+              </div>
+            </div>
+            <DialogFooter className="mt-4 gap-2">
+              <Button variant="outline" onClick={() => setEditingAppointment(null)} className="h-10">
+                Abbrechen
+              </Button>
+              <Button onClick={handleUpdateAppointment} className="h-10">
+                Speichern
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Delete Appointment AlertDialog */}
+      <AlertDialog open={!!deleteAppointmentId} onOpenChange={(open) => !open && setDeleteAppointmentId(null)}>
+        <AlertDialogContent className="max-w-[400px]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Termin löschen?</AlertDialogTitle>
+            <AlertDialogDescription className="mt-2">
+              Diese Aktion kann nicht rückgängig gemacht werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4 gap-2">
+            <AlertDialogCancel className="h-10">Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteAppointment} className="h-10 bg-red-600 hover:bg-red-700">
               Löschen
             </AlertDialogAction>
           </AlertDialogFooter>

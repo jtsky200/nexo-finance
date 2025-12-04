@@ -801,66 +801,59 @@ export default function Shopping() {
     }
   };
   
-  // Intelligent receipt corner detection - brightness-based approach
+  // Intelligent receipt corner detection - adaptive brightness approach
   const findReceiptCorners = (imageData: ImageData, width: number, height: number) => {
     const data = imageData.data;
     
-    // Step 1: Convert to grayscale
+    // Step 1: Convert to grayscale and calculate average brightness
     const gray = new Uint8ClampedArray(width * height);
+    let totalBrightness = 0;
     for (let i = 0; i < data.length; i += 4) {
-      gray[i / 4] = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+      const g = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+      gray[i / 4] = g;
+      totalBrightness += g;
     }
+    const avgBrightness = totalBrightness / gray.length;
     
-    // Step 2: Find bright pixels (receipts are typically white/bright)
-    const brightnessThreshold = 160;
-    const bright = new Uint8ClampedArray(width * height);
-    for (let i = 0; i < gray.length; i++) {
-      bright[i] = gray[i] > brightnessThreshold ? 255 : 0;
-    }
+    // Step 2: Adaptive threshold
+    const brightnessThreshold = Math.min(200, Math.max(120, avgBrightness + 30));
     
-    // Step 3: Find bounding box of bright area
+    // Step 3: Find bright area
     let minX = width, maxX = 0, minY = height, maxY = 0;
-    let brightCount = 0;
     
     for (let y = 0; y < height; y++) {
       let rowBright = 0;
       let rowMinX = width, rowMaxX = 0;
       for (let x = 0; x < width; x++) {
-        if (bright[y * width + x] > 0) {
+        if (gray[y * width + x] > brightnessThreshold) {
           rowBright++;
           if (x < rowMinX) rowMinX = x;
           if (x > rowMaxX) rowMaxX = x;
         }
       }
-      if (rowBright > width * 0.15) {
+      if (rowBright > width * 0.1) {
         if (y < minY) minY = y;
         maxY = y;
         if (rowMinX < minX) minX = rowMinX;
         if (rowMaxX > maxX) maxX = rowMaxX;
-        brightCount += rowBright;
       }
     }
     
-    const potentialArea = (maxX - minX) * (maxY - minY);
-    const coverage = potentialArea > 0 ? brightCount / potentialArea : 0;
-    const aspectRatio = (maxY - minY) / Math.max(1, maxX - minX);
+    const rectWidth = maxX - minX;
+    const rectHeight = maxY - minY;
+    const hasValidSize = rectWidth > width * 0.08 && rectHeight > height * 0.08;
     
-    const isValidReceipt = 
-      maxX > minX + width * 0.1 &&
-      maxY > minY + height * 0.1 &&
-      aspectRatio > 0.5 && aspectRatio < 4 &&
-      coverage > 0.3;
-    
-    if (isValidReceipt) {
-      const padX = (maxX - minX) * 0.03;
-      const padY = (maxY - minY) * 0.02;
+    if (hasValidSize) {
+      const padX = rectWidth * 0.05;
+      const padY = rectHeight * 0.03;
+      const confidence = Math.min(100, (rectWidth * rectHeight) / (width * height) * 250);
       
       return {
         topLeft: { x: Math.max(0, minX - padX), y: Math.max(0, minY - padY) },
         topRight: { x: Math.min(width, maxX + padX), y: Math.max(0, minY - padY) },
         bottomLeft: { x: Math.max(0, minX - padX), y: Math.min(height, maxY + padY) },
         bottomRight: { x: Math.min(width, maxX + padX), y: Math.min(height, maxY + padY) },
-        confidence: Math.min(100, coverage * 150)
+        confidence
       };
     }
     

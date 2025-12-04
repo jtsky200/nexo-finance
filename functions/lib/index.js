@@ -3101,8 +3101,25 @@ function parseSwissReceipt(text) {
                 footerSection = true;
                 continue;
             }
-            // Skip if this line is just a price (it was combined with previous line)
-            if (/^\d+[.,]\d{2}\s*[AB]?$/.test(line)) {
+            // If this line is just a price, try to combine with previous line
+            const priceOnlyMatch = line.match(/^(\d+[.,]\d{2})\s*([AB])?$/);
+            if (priceOnlyMatch && i > 0) {
+                const prevLine = lines[i - 1];
+                // Check if previous line looks like an article name (has article number or text)
+                const articleMatch = prevLine.match(/^(\d{4,6})?\s*(.+?)$/);
+                if (articleMatch && articleMatch[2] && articleMatch[2].length > 2 && !prevLine.match(/^(CHF|Total|Summe|MwSt)/i)) {
+                    const item = {
+                        quantity: 1,
+                        articleNumber: articleMatch[1] || undefined,
+                        name: articleMatch[2].trim(),
+                        unitPrice: parseFloat(priceOnlyMatch[1].replace(',', '.')),
+                        totalPrice: parseFloat(priceOnlyMatch[1].replace(',', '.')),
+                        taxCategory: priceOnlyMatch[2] || undefined,
+                    };
+                    result.items.push(item);
+                    headerSection = false;
+                    confidencePoints += 3;
+                }
                 continue;
             }
             // Skip Rabatt/Urspr. Preis lines (H&M discount info)

@@ -2937,7 +2937,7 @@ exports.analyzeReceipt = (0, https_1.onCall)(async (request) => {
 // ========================================
 // SINGLE LINE SCANNER - For item-by-item scanning
 // ========================================
-exports.analyzeSingleLine = (0, https_1.onCall)(async (request) => {
+exports.analyzeSingleLine = (0, https_1.onCall)({ memory: '512MiB', timeoutSeconds: 30 }, async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }

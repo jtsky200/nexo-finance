@@ -3430,7 +3430,7 @@ export const analyzeReceipt = onCall(async (request) => {
 // ========================================
 // SINGLE LINE SCANNER - For item-by-item scanning
 // ========================================
-export const analyzeSingleLine = onCall(async (request) => {
+export const analyzeSingleLine = onCall({ memory: '512MiB', timeoutSeconds: 30 }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'User must be authenticated');
   }

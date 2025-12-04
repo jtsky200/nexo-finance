@@ -468,20 +468,34 @@ export default function MobileShopping() {
     }
   };
 
-  // NEW: Scan single item for live scanning
+  // State for last scanned item (for visual feedback)
+  const [lastScannedItem, setLastScannedItem] = useState<string | null>(null);
+
+  // NEW: Scan single item for live scanning with duplicate detection
   const scanSingleItem = async () => {
     if (!videoRef.current || !canvasRef.current) return;
     
     setIsScanning(true);
+    setLastScannedItem(null);
     
     const video = videoRef.current;
     const canvas = canvasRef.current;
+    
+    // Capture only the center strip where scan line is
+    const stripHeight = video.videoHeight * 0.15; // 15% of height
+    const stripY = (video.videoHeight - stripHeight) / 2;
+    
     canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.height = stripHeight;
     const ctx = canvas.getContext('2d');
     
     if (ctx) {
-      ctx.drawImage(video, 0, 0);
+      // Draw only the center strip
+      ctx.drawImage(
+        video, 
+        0, stripY, video.videoWidth, stripHeight,  // Source
+        0, 0, video.videoWidth, stripHeight         // Destination
+      );
       
       canvas.toBlob(async (blob) => {
         if (blob) {
@@ -502,7 +516,6 @@ export default function MobileShopping() {
                 console.log('Single item result:', data);
                 
                 if (data.success && data.item) {
-                  // Add to live scanned items
                   const newItem: ReceiptItem = {
                     name: data.item.name,
                     articleNumber: data.item.articleNumber,
@@ -512,24 +525,51 @@ export default function MobileShopping() {
                     selected: true
                   };
                   
-                  setLiveScannedItems(prev => [...prev, newItem]);
-                  setLiveTotal(prev => prev + newItem.totalPrice);
+                  // Check for duplicates by articleNumber or name
+                  setLiveScannedItems(prev => {
+                    const existingIndex = prev.findIndex(item => 
+                      (item.articleNumber && item.articleNumber === newItem.articleNumber) ||
+                      item.name.toLowerCase() === newItem.name.toLowerCase()
+                    );
+                    
+                    if (existingIndex >= 0) {
+                      // Duplicate found - increase quantity
+                      const updated = [...prev];
+                      updated[existingIndex] = {
+                        ...updated[existingIndex],
+                        quantity: updated[existingIndex].quantity + newItem.quantity,
+                        totalPrice: updated[existingIndex].totalPrice + newItem.totalPrice
+                      };
+                      setLiveTotal(t => t + newItem.totalPrice);
+                      setLastScannedItem(`+1 ${newItem.name}`);
+                      toast.success(`+1 ${newItem.name}`, { duration: 1500 });
+                      return updated;
+                    } else {
+                      // New item
+                      setLiveTotal(t => t + newItem.totalPrice);
+                      setLastScannedItem(newItem.name);
+                      toast.success(`${newItem.name} - CHF ${newItem.totalPrice.toFixed(2)}`, { duration: 1500 });
+                      return [...prev, newItem];
+                    }
+                  });
                   
                   // Vibration feedback
                   if (navigator.vibrate) {
                     navigator.vibrate(100);
                   }
-                  
-                  toast.success(`${newItem.name} - CHF ${newItem.totalPrice.toFixed(2)}`);
                 } else {
-                  toast.error('Artikel nicht erkannt');
+                  const errorMsg = data.error || 'Artikel nicht erkannt';
+                  setLastScannedItem(`❌ ${errorMsg}`);
+                  toast.error(errorMsg, { duration: 1500 });
                   if (navigator.vibrate) {
                     navigator.vibrate([50, 50, 50]);
                   }
                 }
               } catch (innerError: any) {
                 console.error('Single scan error:', innerError);
-                toast.error('Scan-Fehler');
+                const msg = innerError.message?.includes('INTERNAL') ? 'Server-Fehler, nochmal versuchen' : 'Scan-Fehler';
+                setLastScannedItem(`❌ ${msg}`);
+                toast.error(msg, { duration: 1500 });
               }
               setIsScanning(false);
             };
@@ -539,7 +579,7 @@ export default function MobileShopping() {
             setIsScanning(false);
           }
         }
-      }, 'image/jpeg', 1.0);
+      }, 'image/jpeg', 0.9); // Reduced quality for faster upload
     }
   };
 
@@ -974,8 +1014,8 @@ export default function MobileShopping() {
           {/* LIVE SINGLE ITEM SCANNER */}
           {scannerMode === 'camera' && scannerType === 'single' && (
             <div className="flex-1 flex flex-col">
-              {/* Camera - Upper half */}
-              <div className="flex-1 relative min-h-[40%]">
+              {/* Camera - Upper section (smaller) */}
+              <div className="relative" style={{ height: '35%' }}>
                 <video
                   ref={videoRef}
                   autoPlay
@@ -985,38 +1025,44 @@ export default function MobileShopping() {
                 />
                 <canvas ref={canvasRef} className="hidden" />
                 
-                {/* Scan line guide */}
+                {/* Scan line guide - centered strip */}
                 {cameraStream && (
                   <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                    <div className="w-[90%] h-16 border-2 border-green-400 rounded-lg bg-green-400/10 flex items-center justify-center">
-                      <div className="w-full h-0.5 bg-green-400 animate-pulse" />
+                    <div className="w-[92%] h-12 border-2 border-green-400 rounded-lg bg-green-400/10">
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="w-full h-0.5 bg-green-400 animate-pulse" />
+                      </div>
                     </div>
                   </div>
                 )}
                 
-                {/* Status */}
-                <div className="absolute top-2 left-2 right-2 z-20">
-                  <div className="bg-black/60 rounded-lg p-2 text-center">
-                    <p className="text-white text-xs font-medium">
-                      {isScanning ? 'Scanne...' : 'Artikel-Zeile anvisieren'}
-                    </p>
+                {/* Last scanned feedback */}
+                {lastScannedItem && (
+                  <div className="absolute top-2 left-2 right-2 z-20">
+                    <div className={`rounded-lg p-2 text-center ${lastScannedItem.startsWith('❌') ? 'bg-red-500/80' : 'bg-green-500/80'}`}>
+                      <p className="text-white text-xs font-medium truncate">
+                        {lastScannedItem}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )}
                 
-                {/* Scan Button */}
+                {/* Scan Button - larger */}
                 {cameraStream && (
-                  <div className="absolute bottom-2 left-0 right-0 z-20 flex justify-center">
+                  <div className="absolute bottom-3 left-0 right-0 z-20 flex justify-center">
                     <button
                       onClick={scanSingleItem}
                       disabled={isScanning}
-                      className="px-6 py-3 rounded-full bg-green-500 shadow-lg flex items-center justify-center gap-2 active:opacity-80"
+                      className={`px-8 py-4 rounded-full shadow-lg flex items-center justify-center gap-2 active:opacity-80 ${
+                        isScanning ? 'bg-gray-500' : 'bg-green-500'
+                      }`}
                     >
                       {isScanning ? (
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                       ) : (
-                        <ScanLine className="w-5 h-5 text-white" />
+                        <ScanLine className="w-6 h-6 text-white" />
                       )}
-                      <span className="font-medium text-white">Scannen</span>
+                      <span className="font-semibold text-white text-lg">Scannen</span>
                     </button>
                   </div>
                 )}
@@ -1035,45 +1081,53 @@ export default function MobileShopping() {
                 )}
               </div>
               
-              {/* Scanned Items List - Lower half */}
-              <div className="flex-1 bg-background overflow-y-auto">
+              {/* Scanned Items List - Larger section */}
+              <div className="flex-1 bg-background overflow-y-auto" style={{ maxHeight: '65%' }}>
                 <div className="p-3">
-                  {/* Running Total */}
-                  <div className="flex items-center justify-between mb-3 p-3 bg-green-500/10 rounded-lg border border-green-500/30">
+                  {/* Running Total - Compact header */}
+                  <div className="flex items-center justify-between mb-2 p-2 bg-green-500/10 rounded-lg border border-green-500/30">
                     <div className="flex items-center gap-2">
-                      <ShoppingCart className="w-5 h-5 text-green-600" />
-                      <span className="font-medium">Gescannt: {liveScannedItems.length}</span>
+                      <ShoppingCart className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-medium">{liveScannedItems.reduce((sum, i) => sum + i.quantity, 0)} Artikel</span>
                     </div>
-                    <span className="text-lg font-bold text-green-600">CHF {liveTotal.toFixed(2)}</span>
+                    <span className="text-base font-bold text-green-600">CHF {liveTotal.toFixed(2)}</span>
                   </div>
                   
-                  {/* Scanned items list */}
+                  {/* Scanned items list - Compact */}
                   {liveScannedItems.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <ScanLine className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                      <p className="text-sm">Noch keine Artikel gescannt</p>
-                      <p className="text-xs mt-1">Visiere eine Artikel-Zeile an und drücke "Scannen"</p>
+                    <div className="text-center py-6 text-muted-foreground">
+                      <ScanLine className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                      <p className="text-sm">Quittung unter den grünen Rahmen halten</p>
+                      <p className="text-xs mt-1">Artikel-Zeile anvisieren → "Scannen"</p>
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       {liveScannedItems.map((item, idx) => (
                         <div 
                           key={idx}
-                          className="p-3 bg-muted rounded-lg flex items-center justify-between"
+                          className="p-2 bg-muted rounded-lg flex items-center justify-between"
                         >
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{item.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {item.quantity}x à CHF {item.unitPrice.toFixed(2)}
-                            </p>
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            {/* Quantity badge if > 1 */}
+                            {item.quantity > 1 && (
+                              <span className="w-6 h-6 rounded-full bg-green-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+                                {item.quantity}
+                              </span>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm truncate">{item.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {item.quantity > 1 ? `${item.quantity}× CHF ${item.unitPrice.toFixed(2)}` : `CHF ${item.unitPrice.toFixed(2)}`}
+                              </p>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold">CHF {item.totalPrice.toFixed(2)}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-sm">CHF {item.totalPrice.toFixed(2)}</span>
                             <button
                               onClick={() => removeLiveItem(idx)}
-                              className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center"
+                              className="w-7 h-7 rounded-full bg-red-500/10 flex items-center justify-center"
                             >
-                              <X className="w-4 h-4 text-red-500" />
+                              <X className="w-3.5 h-3.5 text-red-500" />
                             </button>
                           </div>
                         </div>

@@ -3427,6 +3427,138 @@ export const analyzeReceipt = onCall(async (request) => {
   }
 });
 
+// ========================================
+// SINGLE LINE SCANNER - For item-by-item scanning
+// ========================================
+export const analyzeSingleLine = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { fileData } = request.data;
+
+  if (!fileData) {
+    return { success: false, error: 'No file data provided' };
+  }
+
+  try {
+    const buffer = Buffer.from(fileData, 'base64');
+    console.log(`[analyzeSingleLine] Processing image: ${buffer.length} bytes`);
+
+    // Use Google Cloud Vision for OCR
+    const vision = require('@google-cloud/vision');
+    const visionClient = new vision.ImageAnnotatorClient();
+    const [result] = await visionClient.textDetection({
+      image: { content: buffer.toString('base64') },
+    });
+
+    const detections = result.textAnnotations;
+    let extractedText = '';
+
+    if (detections && detections.length > 0) {
+      extractedText = detections[0].description || '';
+    }
+
+    console.log(`[analyzeSingleLine] OCR result: ${extractedText.length} chars`);
+    console.log(`[analyzeSingleLine] Text: ${extractedText}`);
+
+    if (!extractedText || extractedText.length < 3) {
+      return { 
+        success: false, 
+        error: 'Kein Text erkannt',
+        rawText: extractedText || ''
+      };
+    }
+
+    // Parse single line/item
+    const item = parseSingleItem(extractedText);
+
+    if (item) {
+      return {
+        success: true,
+        item: item,
+        rawText: extractedText
+      };
+    } else {
+      return {
+        success: false,
+        error: 'Artikel nicht erkannt',
+        rawText: extractedText
+      };
+    }
+
+  } catch (error: any) {
+    console.error('[analyzeSingleLine] Error:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Parse a single item from OCR text
+function parseSingleItem(text: string): { name: string; price: number; quantity: number; articleNumber?: string } | null {
+  const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(l => l.length > 0);
+  
+  // Try each line to find a valid item
+  for (const line of lines) {
+    // Skip metadata lines
+    if (/^(CHF|Total|Summe|Zwischensumme|MwSt|Netto|Kartenzahlung|ALDI|MIGROS|COOP)/i.test(line)) {
+      continue;
+    }
+    
+    // ALDI format: "12055 Super Bock 6x0.331  7.95 B"
+    const aldiMatch = line.match(/^(\d{4,6})\s+(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
+    if (aldiMatch) {
+      return {
+        articleNumber: aldiMatch[1],
+        name: aldiMatch[2].trim(),
+        price: parseFloat(aldiMatch[3].replace(',', '.')),
+        quantity: 1
+      };
+    }
+    
+    // Quantity format: "2 x 12055 Name  3.98 A"
+    const qtyMatch = line.match(/^(\d+)\s*[x×]\s*(\d{4,6})?\s*(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/i);
+    if (qtyMatch) {
+      return {
+        articleNumber: qtyMatch[2] || undefined,
+        name: qtyMatch[3].trim(),
+        price: parseFloat(qtyMatch[4].replace(',', '.')),
+        quantity: parseInt(qtyMatch[1])
+      };
+    }
+    
+    // Simple format: "Name  3.98" or "Name  3.98 A"
+    const simpleMatch = line.match(/^([A-Za-zäöüÄÖÜ].{2,}?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
+    if (simpleMatch && !simpleMatch[1].match(/^(CHF|Total|Summe)/i)) {
+      return {
+        name: simpleMatch[1].trim(),
+        price: parseFloat(simpleMatch[2].replace(',', '.')),
+        quantity: 1
+      };
+    }
+    
+    // Price only on line - try to combine with next line
+    const priceOnly = line.match(/^(\d+[.,]\d{2})\s*([AB])?$/);
+    if (priceOnly) {
+      // Look for article name in previous/next line
+      const idx = lines.indexOf(line);
+      const prevLine = idx > 0 ? lines[idx - 1] : '';
+      if (prevLine && prevLine.match(/^(\d{4,6})?\s*[A-Za-zäöüÄÖÜ]/)) {
+        const articleMatch = prevLine.match(/^(\d{4,6})?\s*(.+)$/);
+        if (articleMatch) {
+          return {
+            articleNumber: articleMatch[1] || undefined,
+            name: articleMatch[2].trim(),
+            price: parseFloat(priceOnly[1].replace(',', '.')),
+            quantity: 1
+          };
+        }
+      }
+    }
+  }
+  
+  return null;
+}
+
 // Intelligent Swiss receipt parser
 function parseSwissReceipt(text: string): ReceiptData {
   const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(l => l.length > 0);

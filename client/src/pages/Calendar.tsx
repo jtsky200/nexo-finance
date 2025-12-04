@@ -569,22 +569,10 @@ export default function Calendar() {
     // Group events by date
     const eventsByDate: Record<string, CalendarEvent[]> = {};
     filteredEvents.forEach(e => {
-      const dateKey = new Date(e.date).toLocaleDateString('de-CH');
+      const dateKey = new Date(e.date).toLocaleDateString('de-CH', { weekday: 'long', day: 'numeric', month: 'long' });
       if (!eventsByDate[dateKey]) eventsByDate[dateKey] = [];
       eventsByDate[dateKey].push(e);
     });
-
-    const getTypeColor = (type: string) => {
-      switch(type) {
-        case 'due': return '#ef4444';
-        case 'appointment': return '#f97316';
-        case 'reminder': return '#3b82f6';
-        case 'work': return '#64748b';
-        case 'school': return '#8b5cf6';
-        case 'hort': return '#ec4899';
-        default: return '#6b7280';
-      }
-    };
 
     const getTypeLabel = (type: string) => {
       switch(type) {
@@ -594,7 +582,7 @@ export default function Calendar() {
         case 'work': return 'Arbeit';
         case 'school': return 'Schule';
         case 'hort': return 'Hort';
-        default: return 'Event';
+        default: return '';
       }
     };
 
@@ -607,155 +595,118 @@ export default function Calendar() {
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-            padding: 40px; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; 
+            padding: 40px 50px; 
             background: #fff;
-            color: #1f2937;
+            color: #333;
             line-height: 1.5;
           }
-          .header { 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #e5e7eb;
+          .header {
+            margin-bottom: 35px;
           }
           .header h1 { 
-            font-size: 28px; 
-            font-weight: 600;
-            color: #111827;
+            font-size: 32px; 
+            font-weight: 300;
+            color: #1a1a1a;
+            letter-spacing: -0.5px;
           }
-          .header .meta {
-            text-align: right;
-            color: #6b7280;
+          .header p {
+            color: #888;
             font-size: 14px;
+            margin-top: 5px;
           }
-          .stats {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 30px;
+          table {
+            width: 100%;
+            border-collapse: collapse;
           }
-          .stat-box {
-            background: #f9fafb;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 15px 20px;
-            min-width: 100px;
-          }
-          .stat-box .label { font-size: 12px; color: #6b7280; text-transform: uppercase; }
-          .stat-box .value { font-size: 24px; font-weight: 600; color: #111827; }
-          .date-group {
-            margin-bottom: 20px;
-          }
-          .date-header {
-            font-size: 14px;
-            font-weight: 600;
-            color: #374151;
-            padding: 10px 0;
-            border-bottom: 1px solid #e5e7eb;
-            margin-bottom: 10px;
-          }
-          .event-row {
-            display: flex;
-            align-items: center;
-            padding: 12px 15px;
-            margin-bottom: 8px;
-            background: #f9fafb;
-            border-radius: 8px;
-            border-left: 4px solid #3b82f6;
-          }
-          .event-type {
-            font-size: 10px;
-            font-weight: 600;
-            text-transform: uppercase;
-            padding: 3px 8px;
-            border-radius: 4px;
-            color: white;
-            margin-right: 15px;
-            min-width: 70px;
-            text-align: center;
-          }
-          .event-content {
-            flex: 1;
-          }
-          .event-title {
-            font-weight: 600;
-            color: #111827;
-            font-size: 15px;
-          }
-          .event-details {
+          .date-row td {
+            padding: 20px 0 10px 0;
             font-size: 13px;
-            color: #6b7280;
-            margin-top: 2px;
-          }
-          .event-amount {
             font-weight: 600;
+            color: #1a1a1a;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid #1a1a1a;
+          }
+          .event-row td {
+            padding: 14px 0;
+            border-bottom: 1px solid #eee;
+            vertical-align: top;
+          }
+          .event-row:hover td {
+            background: #fafafa;
+          }
+          .col-time {
+            width: 80px;
+            font-size: 13px;
+            color: #666;
+          }
+          .col-title {
             font-size: 15px;
-            color: #111827;
+            color: #1a1a1a;
+          }
+          .col-title small {
+            display: block;
+            font-size: 12px;
+            color: #999;
+            margin-top: 3px;
+          }
+          .col-type {
+            width: 100px;
+            font-size: 12px;
+            color: #666;
+            text-align: right;
+          }
+          .col-amount {
+            width: 120px;
+            font-size: 15px;
+            color: #1a1a1a;
+            text-align: right;
+            font-weight: 500;
           }
           .footer {
-            margin-top: 40px;
+            margin-top: 50px;
             padding-top: 20px;
-            border-top: 1px solid #e5e7eb;
+            border-top: 1px solid #eee;
             font-size: 12px;
-            color: #9ca3af;
-            text-align: center;
+            color: #aaa;
+            display: flex;
+            justify-content: space-between;
           }
           @media print {
-            body { padding: 20px; }
-            .event-row { break-inside: avoid; }
+            body { padding: 25px; }
+            .event-row:hover td { background: transparent; }
           }
         </style>
       </head>
       <body>
         <div class="header">
-          <h1>Kalender ${monthName}</h1>
-          <div class="meta">
-            <div>Erstellt am ${new Date().toLocaleDateString('de-CH')}</div>
-            <div>${filteredEvents.length} Events</div>
-          </div>
+          <h1>${monthName}</h1>
+          <p>${filteredEvents.length} Einträge</p>
         </div>
         
-        <div class="stats">
-          <div class="stat-box">
-            <div class="label">Gesamt</div>
-            <div class="value">${filteredEvents.length}</div>
-          </div>
-          <div class="stat-box">
-            <div class="label">Rechnungen</div>
-            <div class="value">${filteredEvents.filter(e => e.type === 'due').length}</div>
-          </div>
-          <div class="stat-box">
-            <div class="label">Termine</div>
-            <div class="value">${filteredEvents.filter(e => e.type === 'appointment').length}</div>
-          </div>
-        </div>
-
-        ${Object.entries(eventsByDate).map(([date, events]) => `
-          <div class="date-group">
-            <div class="date-header">${date}</div>
+        <table>
+          ${Object.entries(eventsByDate).map(([date, events]) => `
+            <tr class="date-row">
+              <td colspan="4">${date}</td>
+            </tr>
             ${events.map(e => `
-              <div class="event-row" style="border-left-color: ${getTypeColor(e.type)}">
-                <div class="event-type" style="background: ${getTypeColor(e.type)}">${getTypeLabel(e.type)}</div>
-                <div class="event-content">
-                  <div class="event-title">${e.title}</div>
-                  ${e.personName || e.time || e.description ? `
-                    <div class="event-details">
-                      ${e.time ? e.time + ' Uhr' : ''}
-                      ${e.personName ? (e.time ? ' · ' : '') + e.personName : ''}
-                      ${e.description ? (e.time || e.personName ? ' · ' : '') + e.description : ''}
-                    </div>
-                  ` : ''}
-                </div>
-                ${e.amount ? `<div class="event-amount">CHF ${(e.amount / 100).toFixed(2)}</div>` : ''}
-              </div>
+              <tr class="event-row">
+                <td class="col-time">${e.time || '–'}</td>
+                <td class="col-title">
+                  ${e.title}
+                  ${e.personName ? `<small>${e.personName}</small>` : ''}
+                </td>
+                <td class="col-type">${getTypeLabel(e.type)}</td>
+                <td class="col-amount">${e.amount ? 'CHF ' + (e.amount / 100).toFixed(2) : ''}</td>
+              </tr>
             `).join('')}
-          </div>
-        `).join('')}
+          `).join('')}
+        </table>
 
         <div class="footer">
-          Nexo Kalender · ${new Date().toLocaleDateString('de-CH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          <span>Nexo</span>
+          <span>Erstellt ${new Date().toLocaleDateString('de-CH')}</span>
         </div>
       </body>
       </html>
@@ -940,7 +891,7 @@ export default function Calendar() {
             </Select>
             
             <Select value={filterType} onValueChange={setFilterType}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-[160px]">
                 <Filter className="w-4 h-4 mr-2" />
                 <SelectValue />
               </SelectTrigger>

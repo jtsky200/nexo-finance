@@ -46,7 +46,7 @@ const HORT_TYPES = [
 ];
 
 export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged }: SchoolPlannerDialogProps) {
-  const { data: people = [], isLoading: peopleLoading } = usePeople();
+  const { data: people = [], isLoading: peopleLoading, refetch: refetchPeople } = usePeople();
   const [schedules, setSchedules] = useState<SchoolSchedule[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedChild, setSelectedChild] = useState<string>('');
@@ -221,7 +221,8 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
       toast.success('Kind hinzugefügt');
       setNewChildName('');
       setShowAddChildDialog(false);
-      // Refresh will happen via usePeople hook
+      // Refresh people list
+      refetchPeople();
     } catch (error) {
       console.error('Error adding child:', error);
       toast.error('Fehler beim Hinzufügen');

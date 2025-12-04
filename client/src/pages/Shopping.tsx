@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { useShoppingList, createShoppingItem, deleteShoppingItem, markShoppingItemAsBought, createFinanceEntry } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
+import { functions } from '@/lib/firebase';
+import { httpsCallable } from 'firebase/functions';
 // Animations removed for better performance
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 
@@ -126,6 +128,17 @@ export default function Shopping() {
   // Confirm dialog state
   const [showFinanceConfirm, setShowFinanceConfirm] = useState(false);
   const [pendingFinanceAmount, setPendingFinanceAmount] = useState(0);
+  
+  // Shopping list scanner & archive state
+  const [showListScanner, setShowListScanner] = useState(false);
+  const [listScannerMode, setListScannerMode] = useState<'scan' | 'archive'>('scan');
+  const [isListScanning, setIsListScanning] = useState(false);
+  const [scannedListItems, setScannedListItems] = useState<Array<{ name: string; quantity?: number; unit?: string; category?: string; selected: boolean }>>([]);
+  const [scannedListImage, setScannedListImage] = useState<string | null>(null);
+  const [savedTemplates, setSavedTemplates] = useState<Array<{ id: string; name: string; items: any[]; usageCount: number; createdAt: string }>>([]);
+  const [showSaveTemplateDialog, setShowSaveTemplateDialog] = useState(false);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const listScannerFileRef = useRef<HTMLInputElement>(null);
 
   const [newItem, setNewItem] = useState({
     item: '',
@@ -255,6 +268,161 @@ export default function Shopping() {
     setQuickAddTemplates(defaultQuickAddTemplates);
     toast.success('Schnell-Artikel zurückgesetzt');
   };
+
+  // ============================================
+  // SHOPPING LIST SCANNER FUNCTIONS
+  // ============================================
+  
+  // Load saved templates
+  const loadTemplates = async () => {
+    try {
+      const getTemplates = httpsCallable(functions, 'getShoppingListTemplates');
+      const result = await getTemplates({});
+      setSavedTemplates((result.data as any).templates || []);
+    } catch (error) {
+      console.error('Error loading templates:', error);
+    }
+  };
+
+  // Scan shopping list from image
+  const handleScanShoppingList = async (file: File) => {
+    if (!file) return;
+    
+    setIsListScanning(true);
+    setScannedListItems([]);
+    
+    try {
+      // Read file as base64
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = (reader.result as string).split(',')[1];
+        setScannedListImage(reader.result as string);
+        
+        // Call analyze function
+        const analyzeList = httpsCallable(functions, 'analyzeShoppingList');
+        const result = await analyzeList({
+          fileData: base64,
+          fileType: file.type,
+          fileName: file.name,
+        });
+        
+        const data = result.data as any;
+        
+        if (data.success && data.items.length > 0) {
+          setScannedListItems(data.items.map((item: any) => ({ ...item, selected: true })));
+          toast.success(`${data.items.length} Artikel erkannt!`);
+        } else {
+          toast.error('Keine Artikel erkannt. Versuche ein anderes Bild.');
+        }
+        
+        setIsListScanning(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (error: any) {
+      toast.error('Fehler beim Scannen: ' + error.message);
+      setIsListScanning(false);
+    }
+  };
+
+  // Add scanned items to shopping list
+  const handleAddScannedItems = async () => {
+    const selectedItems = scannedListItems.filter(item => item.selected);
+    if (selectedItems.length === 0) {
+      toast.error('Bitte mindestens einen Artikel auswählen');
+      return;
+    }
+    
+    try {
+      for (const item of selectedItems) {
+        await createShoppingItem({
+          item: item.name,
+          quantity: item.quantity || 1,
+          category: item.category || 'Sonstiges',
+          estimatedPrice: 0,
+          currency: 'CHF',
+          store: '',
+        });
+      }
+      
+      toast.success(`${selectedItems.length} Artikel hinzugefügt!`);
+      refetch();
+      
+      // Show save template dialog
+      setShowSaveTemplateDialog(true);
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
+  // Save scanned list as template
+  const handleSaveTemplate = async () => {
+    if (!newTemplateName.trim()) {
+      toast.error('Bitte Namen eingeben');
+      return;
+    }
+    
+    const selectedItems = scannedListItems.filter(item => item.selected);
+    if (selectedItems.length === 0) {
+      toast.error('Keine Artikel zum Speichern');
+      return;
+    }
+    
+    try {
+      const saveTemplate = httpsCallable(functions, 'saveShoppingListTemplate');
+      await saveTemplate({
+        name: newTemplateName,
+        items: selectedItems.map(item => ({
+          name: item.name,
+          quantity: item.quantity || 1,
+          unit: item.unit,
+          category: item.category || 'Sonstiges',
+        })),
+        sourceImage: scannedListImage,
+      });
+      
+      toast.success('Liste im Archiv gespeichert!');
+      setShowSaveTemplateDialog(false);
+      setNewTemplateName('');
+      setShowListScanner(false);
+      setScannedListItems([]);
+      setScannedListImage(null);
+      loadTemplates();
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
+  // Use template from archive
+  const handleUseTemplate = async (templateId: string) => {
+    try {
+      const useTemplate = httpsCallable(functions, 'useShoppingListTemplate');
+      const result = await useTemplate({ templateId });
+      const data = result.data as any;
+      
+      toast.success(`${data.addedCount} Artikel hinzugefügt!`);
+      refetch();
+      loadTemplates();
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
+  // Delete template
+  const handleDeleteTemplate = async (templateId: string) => {
+    try {
+      const deleteTemplate = httpsCallable(functions, 'deleteShoppingListTemplate');
+      await deleteTemplate({ templateId });
+      toast.success('Liste aus Archiv gelöscht');
+      loadTemplates();
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
+  // Load templates on mount
+  useEffect(() => {
+    loadTemplates();
+  }, []);
 
   const handleAddItem = async () => {
     if (!newItem.item.trim()) {
@@ -489,7 +657,7 @@ export default function Shopping() {
     }, 2000);
   };
 
-  const handleAddScannedItems = async () => {
+  const handleAddReceiptScannedItems = async () => {
     try {
       for (const item of scannedItems) {
         await createShoppingItem({
@@ -725,7 +893,23 @@ export default function Shopping() {
             onClick={() => setShowReceiptScanner(true)}
           >
             <ScanLine className="w-4 h-4 mr-2" />
-            Quittung scannen
+            Quittung
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => { setShowListScanner(true); setListScannerMode('scan'); }}
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Liste scannen
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => { setShowListScanner(true); setListScannerMode('archive'); loadTemplates(); }}
+          >
+            <Copy className="w-4 h-4 mr-2" />
+            Archiv ({savedTemplates.length})
           </Button>
           <Button 
             variant="outline" 
@@ -1423,7 +1607,7 @@ export default function Shopping() {
               Abbrechen
             </Button>
             {scannedItems.length > 0 && (
-              <Button onClick={handleAddScannedItems}>
+              <Button onClick={handleAddReceiptScannedItems}>
                 {scannedItems.length} Artikel hinzufügen
               </Button>
             )}
@@ -1558,6 +1742,266 @@ export default function Shopping() {
             </Button>
             <Button onClick={handleApplyTemplate} disabled={!selectedTemplate}>
               {selectedTemplate ? `${selectedTemplate.items.length} Artikel hinzufügen` : 'Vorlage wählen'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Shopping List Scanner & Archive Dialog */}
+      <Dialog open={showListScanner} onOpenChange={setShowListScanner}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="flex items-center gap-2">
+              {listScannerMode === 'scan' ? (
+                <>
+                  <FileText className="w-5 h-5" />
+                  Einkaufsliste scannen
+                </>
+              ) : (
+                <>
+                  <Copy className="w-5 h-5" />
+                  Listen-Archiv
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {listScannerMode === 'scan' 
+                ? 'Scanne ein Foto deiner Einkaufsliste und füge alle Artikel hinzu'
+                : 'Verwende gespeicherte Listen wieder'
+              }
+            </DialogDescription>
+          </DialogHeader>
+          
+          {/* Mode Toggle */}
+          <div className="flex gap-2 mb-4">
+            <Button
+              variant={listScannerMode === 'scan' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setListScannerMode('scan')}
+            >
+              <ScanLine className="w-4 h-4 mr-2" />
+              Scannen
+            </Button>
+            <Button
+              variant={listScannerMode === 'archive' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => { setListScannerMode('archive'); loadTemplates(); }}
+            >
+              <Copy className="w-4 h-4 mr-2" />
+              Archiv ({savedTemplates.length})
+            </Button>
+          </div>
+
+          {listScannerMode === 'scan' ? (
+            <div className="space-y-4">
+              {/* Upload Area */}
+              {!scannedListImage && (
+                <div
+                  className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center cursor-pointer hover:border-slate-400 transition-colors"
+                  onClick={() => listScannerFileRef.current?.click()}
+                >
+                  <Upload className="w-12 h-12 mx-auto mb-4 text-slate-400" />
+                  <p className="font-medium">Einkaufsliste hochladen</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    JPG, PNG oder PDF - handgeschrieben oder gedruckt
+                  </p>
+                  <input
+                    ref={listScannerFileRef}
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    onChange={(e) => e.target.files?.[0] && handleScanShoppingList(e.target.files[0])}
+                  />
+                </div>
+              )}
+
+              {/* Scanning Progress */}
+              {isListScanning && (
+                <div className="text-center py-8">
+                  <div className="animate-spin w-8 h-8 border-2 border-slate-300 border-t-slate-600 rounded-full mx-auto mb-4" />
+                  <p className="text-sm text-muted-foreground">Analysiere Einkaufsliste...</p>
+                </div>
+              )}
+
+              {/* Scanned Image Preview */}
+              {scannedListImage && !isListScanning && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">Gescannte Liste</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => { setScannedListImage(null); setScannedListItems([]); }}
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Neu scannen
+                    </Button>
+                  </div>
+                  <img 
+                    src={scannedListImage} 
+                    alt="Scanned list" 
+                    className="max-h-40 w-auto mx-auto rounded-lg border"
+                  />
+                </div>
+              )}
+
+              {/* Scanned Items */}
+              {scannedListItems.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">
+                      Erkannte Artikel ({scannedListItems.filter(i => i.selected).length}/{scannedListItems.length})
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setScannedListItems(items => items.map(i => ({ ...i, selected: !scannedListItems.every(x => x.selected) })))}
+                    >
+                      {scannedListItems.every(i => i.selected) ? 'Alle abwählen' : 'Alle auswählen'}
+                    </Button>
+                  </div>
+                  
+                  <div className="max-h-64 overflow-y-auto space-y-2 border rounded-lg p-3">
+                    {scannedListItems.map((item, idx) => (
+                      <div 
+                        key={idx}
+                        className={`flex items-center gap-3 p-2 rounded-md transition-colors ${
+                          item.selected ? 'bg-green-50 dark:bg-green-900/20' : 'bg-slate-50 dark:bg-slate-800'
+                        }`}
+                      >
+                        <Checkbox
+                          checked={item.selected}
+                          onCheckedChange={(checked) => {
+                            setScannedListItems(items => items.map((i, j) => 
+                              j === idx ? { ...i, selected: !!checked } : i
+                            ));
+                          }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium">{item.name}</span>
+                          {item.quantity && item.quantity > 1 && (
+                            <span className="text-sm text-muted-foreground ml-2">
+                              ×{item.quantity} {item.unit || ''}
+                            </span>
+                          )}
+                        </div>
+                        <Badge variant="outline" className="text-xs shrink-0">
+                          {item.category || 'Sonstiges'}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Archive View */
+            <div className="space-y-4">
+              {savedTemplates.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Copy className="w-12 h-12 mx-auto mb-4 opacity-30" />
+                  <p>Noch keine Listen im Archiv</p>
+                  <p className="text-sm mt-1">Scanne eine Liste und speichere sie für später</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {savedTemplates.map((template) => (
+                    <div 
+                      key={template.id}
+                      className="border rounded-lg p-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h4 className="font-medium">{template.name}</h4>
+                          <p className="text-xs text-muted-foreground">
+                            {template.items.length} Artikel · {template.usageCount}× verwendet
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleUseTemplate(template.id)}
+                          >
+                            <Plus className="w-4 h-4 mr-1" />
+                            Verwenden
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleDeleteTemplate(template.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {template.items.slice(0, 6).map((item: any, idx: number) => (
+                          <Badge key={idx} variant="secondary" className="text-xs">
+                            {item.name}
+                          </Badge>
+                        ))}
+                        {template.items.length > 6 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{template.items.length - 6} mehr
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          
+          <DialogFooter className="pt-4">
+            <Button variant="outline" onClick={() => setShowListScanner(false)}>
+              Schliessen
+            </Button>
+            {listScannerMode === 'scan' && scannedListItems.length > 0 && (
+              <Button onClick={handleAddScannedItems}>
+                <Plus className="w-4 h-4 mr-2" />
+                {scannedListItems.filter(i => i.selected).length} Artikel hinzufügen
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Save Template Dialog */}
+      <Dialog open={showSaveTemplateDialog} onOpenChange={setShowSaveTemplateDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Save className="w-5 h-5" />
+              Liste im Archiv speichern
+            </DialogTitle>
+            <DialogDescription>
+              Speichere diese Liste für späteren Gebrauch
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Name der Liste</Label>
+              <Input
+                placeholder="z.B. Wocheneinkauf, Party-Einkauf..."
+                value={newTemplateName}
+                onChange={(e) => setNewTemplateName(e.target.value)}
+              />
+            </div>
+            
+            <div className="text-sm text-muted-foreground">
+              {scannedListItems.filter(i => i.selected).length} Artikel werden gespeichert
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSaveTemplateDialog(false)}>
+              Überspringen
+            </Button>
+            <Button onClick={handleSaveTemplate}>
+              <Save className="w-4 h-4 mr-2" />
+              Im Archiv speichern
             </Button>
           </DialogFooter>
         </DialogContent>

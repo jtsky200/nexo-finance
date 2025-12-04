@@ -3021,3 +3021,276 @@ export const getAllDocuments = onCall(async (request) => {
   
   return { documents: limitedDocs, total: allDocuments.length };
 });
+
+// ============================================
+// SHOPPING LIST SCANNER & ARCHIVE
+// ============================================
+
+// Analyze Shopping List (OCR)
+export const analyzeShoppingList = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { fileData, fileType, fileName } = request.data;
+  const buffer = Buffer.from(fileData, 'base64');
+  let extractedText = '';
+  const mimeType = fileType?.toLowerCase() || '';
+  const fileExt = fileName?.toLowerCase().split('.').pop() || '';
+
+  try {
+    // Extract text based on file type
+    if (mimeType.includes('pdf') || fileExt === 'pdf') {
+      const pdfParse = require('pdf-parse');
+      const pdfData = await pdfParse(buffer);
+      extractedText = (pdfData.text || '').trim();
+    } else if (mimeType.includes('image')) {
+      // Use Google Vision for images
+      try {
+        const vision = require('@google-cloud/vision');
+        const client = new vision.ImageAnnotatorClient();
+        const [result] = await client.textDetection(buffer);
+        const detections = result.textAnnotations;
+        extractedText = detections && detections.length > 0 ? detections[0].description : '';
+      } catch (e) {
+        console.error('Vision OCR error:', e);
+      }
+    } else {
+      extractedText = buffer.toString('utf8').trim();
+    }
+
+    // Parse shopping items from text
+    const items = parseShoppingItems(extractedText);
+
+    return {
+      success: true,
+      rawText: extractedText,
+      items,
+      itemCount: items.length,
+    };
+
+  } catch (error: any) {
+    console.error('Shopping list analysis error:', error);
+    return {
+      success: false,
+      error: error.message,
+      items: [],
+    };
+  }
+});
+
+// Helper function to parse shopping items from text
+function parseShoppingItems(text: string): Array<{ name: string; quantity?: number; unit?: string; category?: string }> {
+  const items: Array<{ name: string; quantity?: number; unit?: string; category?: string }> = [];
+  
+  // Common units
+  const unitPatterns = /(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|stk|stück|pack|pkg|dose|dosen|flasche|fl|beutel|tüte|scheiben|riegel|becher|glas|tube)?\s*/i;
+  
+  // Category keywords
+  const categoryKeywords: Record<string, string[]> = {
+    'Obst & Gemüse': ['apfel', 'äpfel', 'banane', 'orange', 'tomate', 'salat', 'gurke', 'kartoffel', 'zwiebel', 'karotte', 'paprika', 'brokkoli', 'spinat', 'zucchini', 'aubergine', 'pilz', 'champignon'],
+    'Milchprodukte': ['milch', 'käse', 'joghurt', 'butter', 'sahne', 'quark', 'schmand', 'frischkäse', 'mozzarella'],
+    'Fleisch & Fisch': ['fleisch', 'huhn', 'hähnchen', 'rind', 'schwein', 'lachs', 'fisch', 'wurst', 'schinken', 'salami', 'hack'],
+    'Brot & Backwaren': ['brot', 'brötchen', 'toast', 'croissant', 'kuchen', 'gebäck', 'mehl'],
+    'Getränke': ['wasser', 'saft', 'cola', 'bier', 'wein', 'kaffee', 'tee', 'limonade', 'energy'],
+    'Süsswaren': ['schokolade', 'keks', 'gummibärchen', 'bonbon', 'eis', 'chips', 'snack'],
+    'Haushalt': ['waschmittel', 'spülmittel', 'toilettenpapier', 'taschentücher', 'müllbeutel', 'reiniger'],
+    'Hygiene': ['shampoo', 'duschgel', 'seife', 'zahnpasta', 'deo', 'creme'],
+  };
+
+  // Split text into lines and process
+  const lines = text.split(/[\n\r]+/);
+  
+  for (let line of lines) {
+    line = line.trim();
+    if (!line || line.length < 2) continue;
+    
+    // Skip common non-item lines
+    if (/^(einkaufsliste|shopping|liste|datum|total|summe|€|chf|\d+[.,]\d{2}$)/i.test(line)) continue;
+    
+    // Extract quantity and unit
+    let quantity: number | undefined;
+    let unit: string | undefined;
+    let itemName = line;
+    
+    const match = line.match(unitPatterns);
+    if (match) {
+      quantity = parseFloat(match[1].replace(',', '.'));
+      unit = match[2]?.toLowerCase();
+      itemName = line.replace(match[0], '').trim();
+    }
+    
+    // Also check for patterns like "2x Milch" or "3 Äpfel"
+    const countMatch = itemName.match(/^(\d+)\s*[xX×]?\s+(.+)/);
+    if (countMatch && !quantity) {
+      quantity = parseInt(countMatch[1]);
+      itemName = countMatch[2].trim();
+    }
+    
+    // Clean up item name
+    itemName = itemName
+      .replace(/^[-•*○◦▪▸►→·]\s*/, '') // Remove bullet points
+      .replace(/^\d+[.)]\s*/, '') // Remove numbering
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    if (!itemName || itemName.length < 2) continue;
+    
+    // Determine category
+    let category: string | undefined;
+    const lowerName = itemName.toLowerCase();
+    for (const [cat, keywords] of Object.entries(categoryKeywords)) {
+      if (keywords.some(kw => lowerName.includes(kw))) {
+        category = cat;
+        break;
+      }
+    }
+    
+    items.push({
+      name: itemName,
+      quantity: quantity || 1,
+      unit,
+      category: category || 'Sonstiges',
+    });
+  }
+  
+  return items;
+}
+
+// Save Shopping List Template (Archive)
+export const saveShoppingListTemplate = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { name, items, sourceImage } = request.data;
+
+  if (!name || !items || items.length === 0) {
+    throw new HttpsError('invalid-argument', 'Name and items are required');
+  }
+
+  const templateData = {
+    userId,
+    name,
+    items,
+    sourceImage: sourceImage || null,
+    usageCount: 0,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  const templateRef = await db.collection('shoppingListTemplates').add(templateData);
+  
+  return { 
+    success: true, 
+    templateId: templateRef.id,
+  };
+});
+
+// Get Shopping List Templates
+export const getShoppingListTemplates = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  
+  const templatesSnapshot = await db.collection('shoppingListTemplates')
+    .where('userId', '==', userId)
+    .get();
+  
+  const templates = templatesSnapshot.docs.map(doc => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      name: data.name || '',
+      items: data.items || [],
+      usageCount: data.usageCount || 0,
+      sourceImage: data.sourceImage || null,
+      createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+      updatedAt: data.updatedAt?.toDate?.()?.toISOString() || null,
+    };
+  });
+  
+  // Sort by usage count (most used first), then by date
+  templates.sort((a, b) => {
+    if (b.usageCount !== a.usageCount) return b.usageCount - a.usageCount;
+    return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+  });
+  
+  return { templates };
+});
+
+// Delete Shopping List Template
+export const deleteShoppingListTemplate = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { templateId } = request.data;
+
+  const templateDoc = await db.collection('shoppingListTemplates').doc(templateId).get();
+  
+  if (!templateDoc.exists || templateDoc.data()?.userId !== userId) {
+    throw new HttpsError('permission-denied', 'Not authorized');
+  }
+
+  await db.collection('shoppingListTemplates').doc(templateId).delete();
+  
+  return { success: true };
+});
+
+// Use Shopping List Template (add items and increment usage count)
+export const useShoppingListTemplate = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { templateId } = request.data;
+
+  const templateDoc = await db.collection('shoppingListTemplates').doc(templateId).get();
+  
+  if (!templateDoc.exists || templateDoc.data()?.userId !== userId) {
+    throw new HttpsError('permission-denied', 'Not authorized');
+  }
+
+  const templateData = templateDoc.data();
+  const items = templateData?.items || [];
+
+  // Add items to shopping list
+  const batch = db.batch();
+  const addedItems: string[] = [];
+  
+  for (const item of items) {
+    const itemData = {
+      userId,
+      name: item.name,
+      quantity: item.quantity || 1,
+      unit: item.unit || null,
+      category: item.category || 'Sonstiges',
+      bought: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    
+    const itemRef = db.collection('shoppingList').doc();
+    batch.set(itemRef, itemData);
+    addedItems.push(itemRef.id);
+  }
+
+  // Increment usage count
+  batch.update(db.collection('shoppingListTemplates').doc(templateId), {
+    usageCount: admin.firestore.FieldValue.increment(1),
+    lastUsedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  await batch.commit();
+
+  return { 
+    success: true, 
+    addedCount: addedItems.length,
+    addedItems,
+  };
+});

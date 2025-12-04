@@ -45,7 +45,7 @@ var __rest = (this && this.__rest) || function (s, e) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = exports.createSchoolSchedule = exports.getChildren = exports.deleteVacation = exports.updateVacation = exports.createVacation = exports.getVacations = exports.deleteWorkSchedule = exports.updateWorkSchedule = exports.createWorkSchedule = exports.getWorkSchedules = exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.getAllBills = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
-exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = void 0;
+exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
@@ -2618,5 +2618,240 @@ exports.getAllDocuments = (0, https_1.onCall)(async (request) => {
     // Apply limit if specified
     const limitedDocs = queryLimit ? allDocuments.slice(0, queryLimit) : allDocuments;
     return { documents: limitedDocs, total: allDocuments.length };
+});
+// ============================================
+// SHOPPING LIST SCANNER & ARCHIVE
+// ============================================
+// Analyze Shopping List (OCR)
+exports.analyzeShoppingList = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const { fileData, fileType, fileName } = request.data;
+    const buffer = Buffer.from(fileData, 'base64');
+    let extractedText = '';
+    const mimeType = (fileType === null || fileType === void 0 ? void 0 : fileType.toLowerCase()) || '';
+    const fileExt = (fileName === null || fileName === void 0 ? void 0 : fileName.toLowerCase().split('.').pop()) || '';
+    try {
+        // Extract text based on file type
+        if (mimeType.includes('pdf') || fileExt === 'pdf') {
+            const pdfParse = require('pdf-parse');
+            const pdfData = await pdfParse(buffer);
+            extractedText = (pdfData.text || '').trim();
+        }
+        else if (mimeType.includes('image')) {
+            // Use Google Vision for images
+            try {
+                const vision = require('@google-cloud/vision');
+                const client = new vision.ImageAnnotatorClient();
+                const [result] = await client.textDetection(buffer);
+                const detections = result.textAnnotations;
+                extractedText = detections && detections.length > 0 ? detections[0].description : '';
+            }
+            catch (e) {
+                console.error('Vision OCR error:', e);
+            }
+        }
+        else {
+            extractedText = buffer.toString('utf8').trim();
+        }
+        // Parse shopping items from text
+        const items = parseShoppingItems(extractedText);
+        return {
+            success: true,
+            rawText: extractedText,
+            items,
+            itemCount: items.length,
+        };
+    }
+    catch (error) {
+        console.error('Shopping list analysis error:', error);
+        return {
+            success: false,
+            error: error.message,
+            items: [],
+        };
+    }
+});
+// Helper function to parse shopping items from text
+function parseShoppingItems(text) {
+    var _a;
+    const items = [];
+    // Common units
+    const unitPatterns = /(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|stk|stück|pack|pkg|dose|dosen|flasche|fl|beutel|tüte|scheiben|riegel|becher|glas|tube)?\s*/i;
+    // Category keywords
+    const categoryKeywords = {
+        'Obst & Gemüse': ['apfel', 'äpfel', 'banane', 'orange', 'tomate', 'salat', 'gurke', 'kartoffel', 'zwiebel', 'karotte', 'paprika', 'brokkoli', 'spinat', 'zucchini', 'aubergine', 'pilz', 'champignon'],
+        'Milchprodukte': ['milch', 'käse', 'joghurt', 'butter', 'sahne', 'quark', 'schmand', 'frischkäse', 'mozzarella'],
+        'Fleisch & Fisch': ['fleisch', 'huhn', 'hähnchen', 'rind', 'schwein', 'lachs', 'fisch', 'wurst', 'schinken', 'salami', 'hack'],
+        'Brot & Backwaren': ['brot', 'brötchen', 'toast', 'croissant', 'kuchen', 'gebäck', 'mehl'],
+        'Getränke': ['wasser', 'saft', 'cola', 'bier', 'wein', 'kaffee', 'tee', 'limonade', 'energy'],
+        'Süsswaren': ['schokolade', 'keks', 'gummibärchen', 'bonbon', 'eis', 'chips', 'snack'],
+        'Haushalt': ['waschmittel', 'spülmittel', 'toilettenpapier', 'taschentücher', 'müllbeutel', 'reiniger'],
+        'Hygiene': ['shampoo', 'duschgel', 'seife', 'zahnpasta', 'deo', 'creme'],
+    };
+    // Split text into lines and process
+    const lines = text.split(/[\n\r]+/);
+    for (let line of lines) {
+        line = line.trim();
+        if (!line || line.length < 2)
+            continue;
+        // Skip common non-item lines
+        if (/^(einkaufsliste|shopping|liste|datum|total|summe|€|chf|\d+[.,]\d{2}$)/i.test(line))
+            continue;
+        // Extract quantity and unit
+        let quantity;
+        let unit;
+        let itemName = line;
+        const match = line.match(unitPatterns);
+        if (match) {
+            quantity = parseFloat(match[1].replace(',', '.'));
+            unit = (_a = match[2]) === null || _a === void 0 ? void 0 : _a.toLowerCase();
+            itemName = line.replace(match[0], '').trim();
+        }
+        // Also check for patterns like "2x Milch" or "3 Äpfel"
+        const countMatch = itemName.match(/^(\d+)\s*[xX×]?\s+(.+)/);
+        if (countMatch && !quantity) {
+            quantity = parseInt(countMatch[1]);
+            itemName = countMatch[2].trim();
+        }
+        // Clean up item name
+        itemName = itemName
+            .replace(/^[-•*○◦▪▸►→·]\s*/, '') // Remove bullet points
+            .replace(/^\d+[.)]\s*/, '') // Remove numbering
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (!itemName || itemName.length < 2)
+            continue;
+        // Determine category
+        let category;
+        const lowerName = itemName.toLowerCase();
+        for (const [cat, keywords] of Object.entries(categoryKeywords)) {
+            if (keywords.some(kw => lowerName.includes(kw))) {
+                category = cat;
+                break;
+            }
+        }
+        items.push({
+            name: itemName,
+            quantity: quantity || 1,
+            unit,
+            category: category || 'Sonstiges',
+        });
+    }
+    return items;
+}
+// Save Shopping List Template (Archive)
+exports.saveShoppingListTemplate = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { name, items, sourceImage } = request.data;
+    if (!name || !items || items.length === 0) {
+        throw new https_1.HttpsError('invalid-argument', 'Name and items are required');
+    }
+    const templateData = {
+        userId,
+        name,
+        items,
+        sourceImage: sourceImage || null,
+        usageCount: 0,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    const templateRef = await db.collection('shoppingListTemplates').add(templateData);
+    return {
+        success: true,
+        templateId: templateRef.id,
+    };
+});
+// Get Shopping List Templates
+exports.getShoppingListTemplates = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const templatesSnapshot = await db.collection('shoppingListTemplates')
+        .where('userId', '==', userId)
+        .get();
+    const templates = templatesSnapshot.docs.map(doc => {
+        var _a, _b, _c, _d, _e, _f;
+        const data = doc.data();
+        return {
+            id: doc.id,
+            name: data.name || '',
+            items: data.items || [],
+            usageCount: data.usageCount || 0,
+            sourceImage: data.sourceImage || null,
+            createdAt: ((_c = (_b = (_a = data.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
+            updatedAt: ((_f = (_e = (_d = data.updatedAt) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null,
+        };
+    });
+    // Sort by usage count (most used first), then by date
+    templates.sort((a, b) => {
+        if (b.usageCount !== a.usageCount)
+            return b.usageCount - a.usageCount;
+        return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    });
+    return { templates };
+});
+// Delete Shopping List Template
+exports.deleteShoppingListTemplate = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { templateId } = request.data;
+    const templateDoc = await db.collection('shoppingListTemplates').doc(templateId).get();
+    if (!templateDoc.exists || ((_a = templateDoc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized');
+    }
+    await db.collection('shoppingListTemplates').doc(templateId).delete();
+    return { success: true };
+});
+// Use Shopping List Template (add items and increment usage count)
+exports.useShoppingListTemplate = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { templateId } = request.data;
+    const templateDoc = await db.collection('shoppingListTemplates').doc(templateId).get();
+    if (!templateDoc.exists || ((_a = templateDoc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized');
+    }
+    const templateData = templateDoc.data();
+    const items = (templateData === null || templateData === void 0 ? void 0 : templateData.items) || [];
+    // Add items to shopping list
+    const batch = db.batch();
+    const addedItems = [];
+    for (const item of items) {
+        const itemData = {
+            userId,
+            name: item.name,
+            quantity: item.quantity || 1,
+            unit: item.unit || null,
+            category: item.category || 'Sonstiges',
+            bought: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+        const itemRef = db.collection('shoppingList').doc();
+        batch.set(itemRef, itemData);
+        addedItems.push(itemRef.id);
+    }
+    // Increment usage count
+    batch.update(db.collection('shoppingListTemplates').doc(templateId), {
+        usageCount: admin.firestore.FieldValue.increment(1),
+        lastUsedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
+    return {
+        success: true,
+        addedCount: addedItems.length,
+        addedItems,
+    };
 });
 //# sourceMappingURL=index.js.map

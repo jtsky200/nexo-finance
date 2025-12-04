@@ -197,6 +197,8 @@ export default function Shopping() {
   const [sortBy, setSortBy] = useState<'name' | 'category' | 'price' | 'store'>('category');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showAllQuickAdd, setShowAllQuickAdd] = useState(false);
+  const [showItemSuggestions, setShowItemSuggestions] = useState(false);
+  const itemInputRef = useRef<HTMLInputElement>(null);
 
   const categories = ['Lebensmittel', 'Haushalt', 'Hygiene', 'Elektronik', 'Kleidung', 'Sonstiges'];
 
@@ -204,6 +206,12 @@ export default function Shopping() {
   useEffect(() => {
     localStorage.setItem(BUDGET_KEY, JSON.stringify(budget));
   }, [budget]);
+
+  // Sync store selection for item suggestions
+  useEffect(() => {
+    const storeName = stores.find(s => s.id === newItem.store)?.name || '';
+    setSelectedStoreForSuggestions(storeName);
+  }, [newItem.store]);
 
   // Save quick add templates to localStorage
   useEffect(() => {
@@ -237,6 +245,15 @@ export default function Shopping() {
   const budgetRemaining = budget.isSet ? budget.amount - totalSpent : 0;
   const budgetProgress = budget.isSet && budget.amount > 0 ? (totalSpent / budget.amount) * 100 : 0;
   const isOverBudget = budget.isSet && totalSpent > budget.amount;
+
+  // Filtered item suggestions based on input
+  const filteredSuggestions = useMemo(() => {
+    if (!newItem.item.trim() || newItem.item.length < 2) return [];
+    const searchTerm = newItem.item.toLowerCase();
+    return storeItems
+      .filter(item => item.name.toLowerCase().includes(searchTerm))
+      .slice(0, 5);
+  }, [newItem.item, storeItems]);
 
   // Group items by category
   const groupedItems = useMemo(() => {
@@ -1250,14 +1267,52 @@ export default function Shopping() {
           <CardContent>
             {/* Row 1: Artikel + Menge */}
             <div className="flex gap-3 mb-3">
-              <div className="flex-1">
+              <div className="flex-1 relative">
                 <Label className="text-xs text-muted-foreground">Artikel</Label>
                 <Input
+                  ref={itemInputRef}
                   value={newItem.item}
-                  onChange={(e) => setNewItem({ ...newItem, item: e.target.value })}
+                  onChange={(e) => {
+                    setNewItem({ ...newItem, item: e.target.value });
+                    setShowItemSuggestions(true);
+                  }}
+                  onFocus={() => setShowItemSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowItemSuggestions(false), 200)}
                   placeholder="z.B. Bio-Milch"
                   onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
                 />
+                {/* Item suggestions dropdown */}
+                {showItemSuggestions && filteredSuggestions.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                    {filteredSuggestions.map((suggestion) => (
+                      <button
+                        key={suggestion.id}
+                        type="button"
+                        className="w-full px-3 py-2 text-left hover:bg-muted flex items-center justify-between text-sm"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setNewItem({ 
+                            ...newItem, 
+                            item: suggestion.name,
+                            estimatedPrice: suggestion.lastPrice,
+                            category: suggestion.category || 'Lebensmittel'
+                          });
+                          setShowItemSuggestions(false);
+                        }}
+                      >
+                        <span className="truncate">{suggestion.name}</span>
+                        <span className="text-muted-foreground ml-2 shrink-0">
+                          CHF {suggestion.lastPrice.toFixed(2)}
+                        </span>
+                      </button>
+                    ))}
+                    {selectedStoreForSuggestions && (
+                      <div className="px-3 py-1.5 text-xs text-muted-foreground border-t bg-muted/50">
+                        Vorschläge von {selectedStoreForSuggestions}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="w-20">
                 <Label className="text-xs text-muted-foreground">Menge</Label>

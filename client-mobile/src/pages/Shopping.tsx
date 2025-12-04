@@ -18,7 +18,8 @@ import {
   ChevronDown,
   ChevronUp,
   Save,
-  Banknote
+  Banknote,
+  RotateCcw
 } from 'lucide-react';
 import MobileLayout from '@/components/MobileLayout';
 import { useShoppingList, createShoppingItem, markShoppingItemAsBought, deleteShoppingItem, createFinanceEntry } from '@/lib/firebaseHooks';
@@ -477,6 +478,10 @@ export default function MobileShopping() {
   const [autoScanEnabled, setAutoScanEnabled] = useState(false);
   const [autoScanInterval, setAutoScanInterval] = useState<NodeJS.Timeout | null>(null);
   const [lastScanTime, setLastScanTime] = useState(0);
+  
+  // Track scanned positions to prevent duplicates
+  const [scannedPositions, setScannedPositions] = useState<Set<string>>(new Set());
+  const [scanHistory, setScanHistory] = useState<Array<{item: ReceiptItem, position: string, timestamp: number}>>([]);
 
   // NEW: Auto-scan all items in frame
   const scanAllItemsInFrame = async () => {
@@ -532,46 +537,100 @@ export default function MobileShopping() {
                 console.log('Frame scan result:', data);
                 
                 if (data.success && data.items && data.items.length > 0) {
-                  // Add all items to pending list (merge with existing)
-                  const newItems: ReceiptItem[] = data.items.map((item: any) => ({
-                    name: item.name || 'Unbekannt',
-                    articleNumber: item.articleNumber,
-                    quantity: item.quantity || 1,
-                    unitPrice: item.unitPrice || item.totalPrice || 0,
-                    totalPrice: item.totalPrice || (item.unitPrice * (item.quantity || 1)),
-                    selected: true
-                  }));
+                  // Create position-based IDs for each item
+                  const rawText = data.rawText || '';
+                  const lines = rawText.split(/[\n\r]+/);
                   
-                  // Merge with existing items (avoid duplicates)
-                  setLiveScannedItems(prev => {
-                    const merged = [...prev];
-                    newItems.forEach(newItem => {
-                      const existingIndex = merged.findIndex(item => 
-                        (item.articleNumber && item.articleNumber === newItem.articleNumber) ||
-                        item.name.toLowerCase() === newItem.name.toLowerCase()
-                      );
-                      
-                      if (existingIndex >= 0) {
-                        // Update quantity if same item
-                        merged[existingIndex].quantity += newItem.quantity;
-                        merged[existingIndex].totalPrice += newItem.totalPrice;
-                      } else {
-                        merged.push(newItem);
+                  // Find items with their approximate position in text
+                  const itemsWithPositions = data.items.map((item: any, idx: number) => {
+                    // Find line number where this item appears
+                    const itemName = item.name || '';
+                    let lineIndex = -1;
+                    for (let i = 0; i < lines.length; i++) {
+                      if (lines[i].includes(itemName) || 
+                          (item.articleNumber && lines[i].includes(item.articleNumber))) {
+                        lineIndex = i;
+                        break;
                       }
-                    });
+                    }
                     
-                    // Recalculate total
-                    const newTotal = merged.reduce((sum, item) => sum + item.totalPrice, 0);
-                    setLiveTotal(newTotal);
+                    // Create position ID: name + approximate Y position (line number)
+                    const positionId = `${itemName.toLowerCase().trim()}_${lineIndex >= 0 ? lineIndex : idx}`;
                     
-                    return merged;
+                    return {
+                      item: {
+                        name: item.name || 'Unbekannt',
+                        articleNumber: item.articleNumber,
+                        quantity: item.quantity || 1,
+                        unitPrice: item.unitPrice || item.totalPrice || 0,
+                        totalPrice: item.totalPrice || (item.unitPrice * (item.quantity || 1)),
+                        selected: true
+                      },
+                      positionId
+                    };
                   });
                   
-                  toast.success(`${newItems.length} Artikel erkannt!`, { duration: 1500 });
+                  // Filter out already scanned positions
+                  const newItemsToAdd = itemsWithPositions.filter(({ positionId }) => {
+                    return !scannedPositions.has(positionId);
+                  });
                   
-                  // Vibration feedback
-                  if (navigator.vibrate) {
-                    navigator.vibrate(200);
+                  if (newItemsToAdd.length > 0) {
+                    // Add new positions to scanned set
+                    const newPositions = new Set(scannedPositions);
+                    newItemsToAdd.forEach(({ positionId }) => {
+                      newPositions.add(positionId);
+                    });
+                    setScannedPositions(newPositions);
+                    
+                    // Add items to list (merge with existing by name/articleNumber)
+                    setLiveScannedItems(prev => {
+                      const merged = [...prev];
+                      let addedCount = 0;
+                      
+                      newItemsToAdd.forEach(({ item: newItem }) => {
+                        const existingIndex = merged.findIndex(item => 
+                          (item.articleNumber && item.articleNumber === newItem.articleNumber && item.articleNumber) ||
+                          (item.name.toLowerCase().trim() === newItem.name.toLowerCase().trim() && 
+                           Math.abs(item.unitPrice - newItem.unitPrice) < 0.01) // Same price = same item
+                        );
+                        
+                        if (existingIndex >= 0) {
+                          // Same item already exists - don't add duplicate
+                          // Just update if quantity is different
+                          if (merged[existingIndex].quantity < newItem.quantity) {
+                            const oldTotal = merged[existingIndex].totalPrice;
+                            merged[existingIndex].quantity = newItem.quantity;
+                            merged[existingIndex].totalPrice = newItem.totalPrice;
+                            setLiveTotal(t => t - oldTotal + newItem.totalPrice);
+                          }
+                        } else {
+                          // New item
+                          merged.push(newItem);
+                          addedCount++;
+                        }
+                      });
+                      
+                      // Recalculate total
+                      const newTotal = merged.reduce((sum, item) => sum + item.totalPrice, 0);
+                      setLiveTotal(newTotal);
+                      
+                      return merged;
+                    });
+                    
+                    if (addedCount > 0) {
+                      toast.success(`${addedCount} neue Artikel erkannt!`, { duration: 1500 });
+                      
+                      // Vibration feedback
+                      if (navigator.vibrate) {
+                        navigator.vibrate(200);
+                      }
+                    }
+                  } else {
+                    // All items already scanned
+                    if (!autoScanEnabled) {
+                      toast.info('Alle Artikel bereits erkannt', { duration: 1000 });
+                    }
                   }
                 } else {
                   // No items found - don't show error if auto-scan (it's normal)
@@ -901,6 +960,8 @@ export default function MobileShopping() {
     setPendingQuantity(1);
     setScanError(null);
     setAutoScanEnabled(false);
+    setScannedPositions(new Set()); // Reset position tracking
+    setScanHistory([]);
     if (autoScanInterval) {
       clearInterval(autoScanInterval);
       setAutoScanInterval(null);
@@ -1199,8 +1260,8 @@ export default function MobileShopping() {
           {/* IMPROVED SINGLE ITEM SCANNER */}
           {scannerMode === 'camera' && scannerType === 'single' && (
             <div className="flex-1 flex flex-col bg-background">
-              {/* Camera Section */}
-              <div className="relative bg-black" style={{ height: '30%', minHeight: '180px' }}>
+              {/* Camera Section - Smaller */}
+              <div className="relative bg-black" style={{ height: '25%', minHeight: '160px' }}>
                 <video
                   ref={videoRef}
                   autoPlay
@@ -1225,44 +1286,46 @@ export default function MobileShopping() {
                 
                 {/* Auto-Scan Toggle */}
                 {cameraStream && (
-                  <div className="absolute top-4 left-4 right-4 z-20 flex justify-between items-center">
-                    <div className="bg-black/60 rounded-lg px-3 py-2">
+                  <div className="absolute top-3 left-3 right-3 z-20 flex justify-between items-center">
+                    <div className="bg-black/70 rounded-lg px-2.5 py-1.5">
                       <p className="text-white text-xs">
-                        {isScanning ? 'Scanne...' : autoScanEnabled ? 'Auto-Scan aktiv' : 'Quittung in Rahmen halten'}
+                        {isScanning ? 'Scanne...' : 
+                         autoScanEnabled ? `Auto-Scan (${scannedPositions.size} Positionen)` : 
+                         'Quittung in Rahmen halten'}
                       </p>
                     </div>
                     <button
                       onClick={() => setAutoScanEnabled(!autoScanEnabled)}
-                      className={`px-4 py-2 rounded-lg flex items-center gap-2 ${
+                      className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${
                         autoScanEnabled ? 'bg-green-500' : 'bg-white/20'
                       }`}
                     >
-                      <div className={`w-3 h-3 rounded-full ${autoScanEnabled ? 'bg-white' : 'bg-white/50'}`} />
+                      <div className={`w-2.5 h-2.5 rounded-full ${autoScanEnabled ? 'bg-white' : 'bg-white/50'}`} />
                       <span className="text-white text-xs font-medium">Auto</span>
                     </button>
                   </div>
                 )}
                 
-                {/* Scan Button */}
+                {/* Scan Button - Compact */}
                 {cameraStream && !pendingItem && (
-                  <div className="absolute bottom-4 left-0 right-0 z-20 flex flex-col items-center gap-2">
+                  <div className="absolute bottom-3 left-0 right-0 z-20 flex flex-col items-center gap-1.5">
                     <button
                       onClick={scanAllItems}
                       disabled={isScanning}
-                      className={`px-10 py-4 rounded-full shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-transform ${
+                      className={`px-8 py-3 rounded-full shadow-xl flex items-center justify-center gap-2.5 active:scale-95 transition-transform ${
                         isScanning ? 'bg-gray-600' : 'bg-green-500'
                       }`}
                     >
                       {isScanning ? (
-                        <div className="w-7 h-7 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                        <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                       ) : (
-                        <ScanLine className="w-7 h-7 text-white" />
+                        <ScanLine className="w-6 h-6 text-white" />
                       )}
-                      <span className="font-bold text-white text-xl">{isScanning ? 'Scanne...' : 'ALLE SCANNEN'}</span>
+                      <span className="font-bold text-white text-lg">{isScanning ? 'Scanne...' : 'ALLE SCANNEN'}</span>
                     </button>
                     {!autoScanEnabled && (
-                      <p className="text-white/70 text-xs text-center px-4">
-                        Quittung in den grünen Rahmen halten<br/>und "ALLE SCANNEN" drücken
+                      <p className="text-white/60 text-xs text-center px-4">
+                        Quittung in Rahmen → "ALLE SCANNEN"
                       </p>
                     )}
                   </div>
@@ -1358,77 +1421,97 @@ export default function MobileShopping() {
                   </div>
                 )}
                 
-                {/* Scanned Items List */}
+                {/* Scanned Items List - Compact Design */}
                 {liveScannedItems.length > 0 && (
                   <div className="mt-2">
-                    {/* Header */}
-                    <div className="flex items-center justify-between mb-3 p-3 bg-green-500/10 rounded-xl border border-green-500/30">
+                    {/* Compact Header */}
+                    <div className="flex items-center justify-between mb-2 px-2 py-2 bg-green-500/10 rounded-lg">
                       <div className="flex items-center gap-2">
-                        <ShoppingCart className="w-5 h-5 text-green-600" />
-                        <span className="font-semibold">{liveScannedItems.reduce((sum, i) => sum + i.quantity, 0)} Artikel</span>
+                        <ShoppingCart className="w-4 h-4 text-green-600" />
+                        <span className="text-sm font-semibold">{liveScannedItems.reduce((sum, i) => sum + i.quantity, 0)} Artikel</span>
                       </div>
-                      <span className="text-xl font-bold text-green-600">CHF {liveTotal.toFixed(2)}</span>
+                      <span className="text-lg font-bold text-green-600">CHF {liveTotal.toFixed(2)}</span>
                     </div>
                     
-                    {/* Items with quantity controls */}
-                    <div className="space-y-2 mb-4">
+                    {/* Compact Items List */}
+                    <div className="space-y-1.5 mb-3">
                       {liveScannedItems.map((item, idx) => (
                         <div 
                           key={idx}
-                          className="p-3 bg-muted rounded-xl"
+                          className="p-2.5 bg-muted rounded-lg flex items-center gap-2"
                         >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex-1 min-w-0">
-                              <p className="font-semibold truncate">{item.name}</p>
-                              <p className="text-sm text-muted-foreground">
-                                CHF {item.unitPrice.toFixed(2)} pro Stück
-                              </p>
-                            </div>
+                          {/* Quantity Badge */}
+                          <div className="w-8 h-8 rounded-full bg-green-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+                            {item.quantity}
+                          </div>
+                          
+                          {/* Item Info */}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{item.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              CHF {item.unitPrice.toFixed(2)} × {item.quantity}
+                            </p>
+                          </div>
+                          
+                          {/* Quantity Controls - Compact */}
+                          <div className="flex items-center gap-1.5">
                             <button
-                              onClick={() => removeLiveItem(idx)}
-                              className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0"
+                              onClick={() => updateItemQuantity(idx, item.quantity - 1)}
+                              className="w-7 h-7 rounded-full bg-background flex items-center justify-center text-sm font-bold active:bg-background/80"
                             >
-                              <X className="w-4 h-4 text-red-500" />
+                              −
+                            </button>
+                            <button
+                              onClick={() => updateItemQuantity(idx, item.quantity + 1)}
+                              className="w-7 h-7 rounded-full bg-background flex items-center justify-center text-sm font-bold active:bg-background/80"
+                            >
+                              +
                             </button>
                           </div>
                           
-                          {/* Quantity Selector */}
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <button
-                                onClick={() => updateItemQuantity(idx, item.quantity - 1)}
-                                className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-xl font-bold active:bg-background/80"
-                              >
-                                −
-                              </button>
-                              <span className="text-2xl font-bold w-12 text-center">{item.quantity}</span>
-                              <button
-                                onClick={() => updateItemQuantity(idx, item.quantity + 1)}
-                                className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-xl font-bold active:bg-background/80"
-                              >
-                                +
-                              </button>
-                            </div>
-                            <span className="font-bold text-lg">CHF {item.totalPrice.toFixed(2)}</span>
-                          </div>
+                          {/* Total Price */}
+                          <span className="font-bold text-sm w-16 text-right">CHF {item.totalPrice.toFixed(2)}</span>
+                          
+                          {/* Remove Button */}
+                          <button
+                            onClick={() => removeLiveItem(idx)}
+                            className="w-7 h-7 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5 text-red-500" />
+                          </button>
                         </div>
                       ))}
                     </div>
                     
-                    {/* Action Buttons */}
-                    <div className="flex gap-3">
+                    {/* Action Buttons - Compact */}
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => { setLiveScannedItems([]); setLiveTotal(0); }}
-                        className="flex-1 py-4 rounded-xl bg-muted flex items-center justify-center gap-2 font-semibold"
+                        onClick={() => { 
+                          setScannedPositions(new Set()); 
+                          toast.success('Positionen zurückgesetzt - kann neu scannen');
+                        }}
+                        className="px-3 py-2 rounded-lg bg-muted flex items-center justify-center gap-1.5 text-xs font-medium"
+                        title="Positionen zurücksetzen (für neue Quittung)"
                       >
-                        <Trash2 className="w-5 h-5" />
+                        <RotateCcw className="w-4 h-4" />
+                        Reset
+                      </button>
+                      <button
+                        onClick={() => { 
+                          setLiveScannedItems([]); 
+                          setLiveTotal(0); 
+                          setScannedPositions(new Set());
+                        }}
+                        className="flex-1 py-2.5 rounded-lg bg-muted flex items-center justify-center gap-2 text-sm font-semibold"
+                      >
+                        <Trash2 className="w-4 h-4" />
                         Alle löschen
                       </button>
                       <button
                         onClick={addLiveItemsToList}
-                        className="flex-1 py-4 rounded-xl bg-primary text-primary-foreground flex items-center justify-center gap-2 font-semibold"
+                        className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground flex items-center justify-center gap-2 text-sm font-semibold"
                       >
-                        <Check className="w-5 h-5" />
+                        <Check className="w-4 h-4" />
                         Fertig
                       </button>
                     </div>

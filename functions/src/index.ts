@@ -3789,16 +3789,16 @@ function parseSwissReceipt(text: string): ReceiptData {
     console.log(`[parseSwissReceipt] Aggressive parsing found ${result.items.length} items`);
   }
   
-  // If no total was found, calculate from items
-  if (!result.totals.total && result.items.length > 0) {
-    result.totals.total = result.items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
+  // ALWAYS calculate total from items (most reliable)
+  if (result.items.length > 0) {
+    const calculatedTotal = result.items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
     // Round to 2 decimal places
-    result.totals.total = Math.round(result.totals.total * 100) / 100;
-    console.log(`[parseSwissReceipt] Calculated total from items: ${result.totals.total}`);
+    result.totals.total = Math.round(calculatedTotal * 100) / 100;
+    console.log(`[parseSwissReceipt] Calculated total from ${result.items.length} items: ${result.totals.total}`);
   }
   
-  // If STILL no total, look for the largest price in the text
-  if (!result.totals.total || result.totals.total === 0) {
+  // If still no total (no items), look for the largest price in the text
+  if (result.totals.total === 0 || result.totals.total === undefined) {
     const allPrices: number[] = [];
     for (const line of lines) {
       const priceMatches = line.matchAll(/(\d+[.,]\d{2})/g);

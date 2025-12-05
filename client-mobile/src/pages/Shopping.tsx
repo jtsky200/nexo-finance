@@ -185,36 +185,121 @@ export default function MobileShopping() {
   // Camera functions with auto-detection
   const startCamera = async () => {
     try {
+      // Check for camera support
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        toast.error('Kamera wird nicht unterstützt');
-        setScannerMode('upload');
-        return;
-      }
-      
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: 'environment', 
-          width: { ideal: 3840 },  // 4K für bessere OCR
-          height: { ideal: 2160 } 
+        // Fallback for older browsers
+        const getUserMedia = (navigator as any).getUserMedia || 
+                            (navigator as any).webkitGetUserMedia || 
+                            (navigator as any).mozGetUserMedia;
+        if (!getUserMedia) {
+          toast.error('Kamera wird nicht unterstützt');
+          setScannerMode('upload');
+          return;
         }
-      });
+      }
+
+      // Stop existing stream first
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+      }
+
+      // Try optimal constraints first (high quality for OCR)
+      let stream: MediaStream | null = null;
+      let constraints: MediaStreamConstraints = {
+        video: {
+          facingMode: 'environment', // Rear camera
+          width: { ideal: 1920, min: 1280 },  // Full HD instead of 4K for better compatibility
+          height: { ideal: 1080, min: 720 },
+          aspectRatio: { ideal: 16/9 }
+        }
+      };
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (error: any) {
+        console.warn('High quality camera failed, trying fallback:', error);
+        // Fallback to basic constraints
+        constraints = {
+          video: {
+            facingMode: 'environment'
+          }
+        };
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      }
+
+      if (!stream) {
+        throw new Error('Kein Kamera-Stream erhalten');
+      }
+
       setCameraStream(stream);
       setScannerStatus('scanning');
       
       if (videoRef.current) {
+        // Set stream
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        toast.success('Scanner aktiv');
+        
+        // Wait for video to be ready
+        await new Promise<void>((resolve, reject) => {
+          if (!videoRef.current) {
+            reject(new Error('Video element nicht gefunden'));
+            return;
+          }
+
+          const video = videoRef.current;
+          
+          const onLoadedMetadata = () => {
+            video.removeEventListener('loadedmetadata', onLoadedMetadata);
+            video.removeEventListener('error', onError);
+            resolve();
+          };
+
+          const onError = (e: Event) => {
+            video.removeEventListener('loadedmetadata', onLoadedMetadata);
+            video.removeEventListener('error', onError);
+            reject(new Error('Video konnte nicht geladen werden'));
+          };
+
+          video.addEventListener('loadedmetadata', onLoadedMetadata);
+          video.addEventListener('error', onError);
+          
+          // Start playing
+          video.play().then(() => {
+            // Video is playing, wait for metadata
+            if (video.readyState >= 2) {
+              // HAVE_CURRENT_DATA or higher
+              onLoadedMetadata();
+            }
+          }).catch(reject);
+        });
+
+        toast.success('Kamera aktiv');
         startEdgeDetection();
       }
     } catch (error: any) {
       console.error('Camera error:', error);
-      if (error.name === 'NotAllowedError') {
-        toast.error('Kamera-Berechtigung verweigert');
-      } else {
-        toast.error('Kamera-Fehler: ' + error.message);
+      
+      // Stop any partial stream
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        setCameraStream(null);
       }
+      
+      let errorMessage = 'Kamera-Fehler';
+      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        errorMessage = 'Kamera-Berechtigung verweigert. Bitte in den Browser-Einstellungen erlauben.';
+      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+        errorMessage = 'Keine Kamera gefunden';
+      } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+        errorMessage = 'Kamera wird bereits verwendet';
+      } else if (error.name === 'OverconstrainedError' || error.name === 'ConstraintNotSatisfiedError') {
+        errorMessage = 'Kamera-Unterstützung nicht verfügbar';
+      } else {
+        errorMessage = `Kamera-Fehler: ${error.message || error.name}`;
+      }
+      
+      toast.error(errorMessage);
       setScannerMode('upload');
+      setScannerStatus('idle');
     }
   };
 
@@ -277,14 +362,49 @@ export default function MobileShopping() {
     }
   };
   
+  // Handle video element when stream changes
+  useEffect(() => {
+    if (cameraStream && videoRef.current) {
+      const video = videoRef.current;
+      
+      // Ensure video element is properly set up
+      if (video.srcObject !== cameraStream) {
+        video.srcObject = cameraStream;
+      }
+      
+      // Ensure video is playing
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.error('Video play error:', error);
+          toast.error('Video konnte nicht abgespielt werden');
+        });
+      }
+    }
+    
+    return () => {
+      // Cleanup when component unmounts or stream changes
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+        videoRef.current.srcObject = null;
+      }
+    };
+  }, [cameraStream]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
       }
       if (cameraStream) {
         cameraStream.getTracks().forEach(track => track.stop());
+        setCameraStream(null);
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
       }
     };
   }, []);
@@ -1222,6 +1342,7 @@ export default function MobileShopping() {
                 autoPlay
                 playsInline
                 muted
+                preload="auto"
                 className="absolute inset-0 w-full h-full object-cover"
               />
               <canvas ref={canvasRef} className="hidden" />
@@ -1296,6 +1417,7 @@ export default function MobileShopping() {
                   autoPlay
                   playsInline
                   muted
+                  preload="auto"
                   className="absolute inset-0 w-full h-full object-cover"
                 />
                 <canvas ref={canvasRef} className="hidden" />

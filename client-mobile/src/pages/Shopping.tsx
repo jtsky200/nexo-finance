@@ -1310,7 +1310,16 @@ export default function MobileShopping() {
               Quittung
             </button>
             <button
-              onClick={() => { setScannerType('single'); setScannerMode('camera'); startCamera(); setLiveScannedItems([]); setLiveTotal(0); }}
+              onClick={async () => { 
+                setScannerType('single'); 
+                setScannerMode('camera'); 
+                setLiveScannedItems([]); 
+                setLiveTotal(0);
+                setScannedPositions(new Set());
+                setPendingItem(null);
+                setScanError(null);
+                await startCamera(); 
+              }}
               className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 text-sm ${
                 scannerType === 'single' ? 'bg-white text-black' : 'bg-white/20 text-white'
               }`}
@@ -1404,13 +1413,13 @@ export default function MobileShopping() {
 
           {/* COMPLETELY REBUILT SINGLE ITEM SCANNER - WIDE SCREEN & USER FRIENDLY */}
           {scannerMode === 'camera' && scannerType === 'single' && (
-            <div className="flex-1 flex flex-col bg-background w-full max-w-full">
+            <div className="flex-1 flex flex-col bg-background w-full h-full overflow-hidden">
               {/* Top Bar - Status & Controls */}
-              <div className="w-full px-4 py-3 bg-background border-b border-border">
+              <div className="w-full px-4 py-3 bg-background border-b border-border flex-shrink-0">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-muted-foreground">Scanner</p>
-                    <p className="text-base font-bold">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-muted-foreground">Scanner</p>
+                    <p className="text-sm font-bold truncate">
                       {isScanning ? 'Scanne...' : 
                        autoScanEnabled ? `${scannedPositions.size} Positionen erkannt` : 
                        'Bereit zum Scannen'}
@@ -1418,20 +1427,20 @@ export default function MobileShopping() {
                   </div>
                   <button
                     onClick={() => setAutoScanEnabled(!autoScanEnabled)}
-                    className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                    className={`px-3 py-2 rounded-lg flex items-center gap-1.5 flex-shrink-0 transition-colors ${
                       autoScanEnabled ? 'bg-green-500 text-white' : 'bg-muted text-foreground'
                     }`}
                   >
                     <div className={`w-2 h-2 rounded-full ${autoScanEnabled ? 'bg-white' : 'bg-foreground/50'}`} />
-                    <span className="text-sm font-semibold">Auto</span>
+                    <span className="text-xs font-semibold">Auto</span>
                   </button>
                 </div>
               </div>
 
-              {/* Main Content - Horizontal Layout for Wide Screen */}
-              <div className="flex-1 flex flex-col lg:flex-row w-full overflow-hidden">
-                {/* Left: Camera Section */}
-                <div className="relative bg-black w-full lg:w-1/2" style={{ minHeight: '300px', maxHeight: '500px' }}>
+              {/* Main Content - Responsive Layout */}
+              <div className="flex-1 flex flex-col w-full overflow-hidden min-h-0">
+                {/* Camera Section - Takes 40% on mobile, 50% on wide screens */}
+                <div className="relative bg-black w-full flex-shrink-0" style={{ height: '40vh', minHeight: '250px' }}>
                   <video
                     ref={videoRef}
                     autoPlay
@@ -1475,20 +1484,20 @@ export default function MobileShopping() {
                   
                   {/* Camera Controls */}
                   {cameraStream && !pendingItem && (
-                    <div className="absolute bottom-4 left-0 right-0 z-20 px-4">
+                    <div className="absolute bottom-3 left-0 right-0 z-20 px-3">
                       <button
                         onClick={scanAllItems}
                         disabled={isScanning}
-                        className={`w-full py-4 rounded-xl shadow-lg flex items-center justify-center gap-3 transition-all ${
-                          isScanning ? 'bg-gray-600' : 'bg-green-500 hover:bg-green-600'
+                        className={`w-full py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all ${
+                          isScanning ? 'bg-gray-600' : 'bg-green-500 active:bg-green-600'
                         }`}
                       >
                         {isScanning ? (
-                          <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                         ) : (
-                          <ScanLine className="w-6 h-6 text-white" />
+                          <ScanLine className="w-5 h-5 text-white" />
                         )}
-                        <span className="font-bold text-white text-lg">
+                        <span className="font-bold text-white text-base">
                           {isScanning ? 'Scanne...' : 'ALLE SCANNEN'}
                         </span>
                       </button>
@@ -1500,17 +1509,17 @@ export default function MobileShopping() {
                     <div className="absolute inset-0 flex items-center justify-center bg-black/80">
                       <button
                         onClick={startCamera}
-                        className="px-6 py-3 rounded-xl bg-white shadow-lg flex items-center justify-center gap-2"
+                        className="px-5 py-2.5 rounded-lg bg-white shadow-lg flex items-center justify-center gap-2"
                       >
                         <Camera className="w-5 h-5 text-gray-800" />
-                        <span className="font-semibold text-gray-800">Kamera starten</span>
+                        <span className="font-semibold text-gray-800 text-sm">Kamera starten</span>
                       </button>
                     </div>
                   )}
                 </div>
                 
-                {/* Right: Items List & Controls */}
-                <div className="flex-1 overflow-y-auto bg-background w-full lg:w-1/2 p-4">
+                {/* Items List & Controls - Scrollable */}
+                <div className="flex-1 overflow-y-auto bg-background w-full p-3 min-h-0">
                   {/* Error Message */}
                   {scanError && !pendingItem && (
                     <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">

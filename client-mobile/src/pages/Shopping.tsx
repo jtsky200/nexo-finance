@@ -187,93 +187,100 @@ export default function MobileShopping() {
     try {
       // Check for camera support
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        // Fallback for older browsers
-        const getUserMedia = (navigator as any).getUserMedia || 
-                            (navigator as any).webkitGetUserMedia || 
-                            (navigator as any).mozGetUserMedia;
-        if (!getUserMedia) {
-          toast.error('Kamera wird nicht unterstützt');
-          setScannerMode('upload');
-          return;
-        }
+        toast.error('Kamera wird nicht unterstützt');
+        setScannerMode('upload');
+        return;
       }
 
-      // Stop existing stream first
+      // Stop existing stream first (with delay to ensure cleanup)
       if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream.getTracks().forEach(track => {
+          track.stop();
+        });
+        setCameraStream(null);
+        // Small delay to ensure stream is fully stopped
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
-      // Try optimal constraints first (high quality for OCR)
+      // Clear video element
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+
+      // Start with basic constraints for maximum compatibility
       let stream: MediaStream | null = null;
-      let constraints: MediaStreamConstraints = {
+      const constraints: MediaStreamConstraints = {
         video: {
-          facingMode: 'environment', // Rear camera
-          width: { ideal: 1920, min: 1280 },  // Full HD instead of 4K for better compatibility
-          height: { ideal: 1080, min: 720 },
-          aspectRatio: { ideal: 16/9 }
+          facingMode: 'environment' // Rear camera
         }
       };
 
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (error: any) {
-        console.warn('High quality camera failed, trying fallback:', error);
-        // Fallback to basic constraints
-        constraints = {
-          video: {
-            facingMode: 'environment'
-          }
-        };
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.warn('Camera access failed:', error);
+        throw error;
       }
 
-      if (!stream) {
+      if (!stream || stream.getVideoTracks().length === 0) {
         throw new Error('Kein Kamera-Stream erhalten');
       }
 
+      // Set stream to state first
       setCameraStream(stream);
       setScannerStatus('scanning');
       
+      // Wait a bit for state to update
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
       if (videoRef.current) {
-        // Set stream
-        videoRef.current.srcObject = stream;
+        const video = videoRef.current;
         
-        // Wait for video to be ready
+        // Set stream
+        video.srcObject = stream;
+        
+        // Wait for video metadata to load
         await new Promise<void>((resolve, reject) => {
-          if (!videoRef.current) {
-            reject(new Error('Video element nicht gefunden'));
-            return;
-          }
+          const timeout = setTimeout(() => {
+            reject(new Error('Video-Timeout'));
+          }, 5000);
 
-          const video = videoRef.current;
-          
           const onLoadedMetadata = () => {
+            clearTimeout(timeout);
             video.removeEventListener('loadedmetadata', onLoadedMetadata);
             video.removeEventListener('error', onError);
             resolve();
           };
 
           const onError = (e: Event) => {
+            clearTimeout(timeout);
             video.removeEventListener('loadedmetadata', onLoadedMetadata);
             video.removeEventListener('error', onError);
-            reject(new Error('Video konnte nicht geladen werden'));
+            reject(new Error('Video-Fehler'));
           };
 
-          video.addEventListener('loadedmetadata', onLoadedMetadata);
-          video.addEventListener('error', onError);
-          
-          // Start playing
-          video.play().then(() => {
-            // Video is playing, wait for metadata
-            if (video.readyState >= 2) {
-              // HAVE_CURRENT_DATA or higher
-              onLoadedMetadata();
-            }
-          }).catch(reject);
+          // Check if already loaded
+          if (video.readyState >= 2) {
+            clearTimeout(timeout);
+            resolve();
+            return;
+          }
+
+          video.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
+          video.addEventListener('error', onError, { once: true });
         });
 
-        toast.success('Kamera aktiv');
-        startEdgeDetection();
+        // Start playing
+        try {
+          await video.play();
+          toast.success('Kamera aktiv');
+          startEdgeDetection();
+        } catch (playError: any) {
+          console.error('Video play error:', playError);
+          // Don't throw - video might still work
+          toast.success('Kamera aktiv');
+          startEdgeDetection();
+        }
       }
     } catch (error: any) {
       console.error('Camera error:', error);
@@ -282,6 +289,10 @@ export default function MobileShopping() {
       if (cameraStream) {
         cameraStream.getTracks().forEach(track => track.stop());
         setCameraStream(null);
+      }
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
       }
       
       let errorMessage = 'Kamera-Fehler';
@@ -293,6 +304,8 @@ export default function MobileShopping() {
         errorMessage = 'Kamera wird bereits verwendet';
       } else if (error.name === 'OverconstrainedError' || error.name === 'ConstraintNotSatisfiedError') {
         errorMessage = 'Kamera-Unterstützung nicht verfügbar';
+      } else if (error.message === 'Video-Timeout') {
+        errorMessage = 'Kamera-Initialisierung zu langsam';
       } else {
         errorMessage = `Kamera-Fehler: ${error.message || error.name}`;
       }
@@ -362,29 +375,11 @@ export default function MobileShopping() {
     }
   };
   
-  // Handle video element when stream changes
+  // Handle video element cleanup when stream changes (only cleanup, no auto-play)
   useEffect(() => {
-    if (cameraStream && videoRef.current) {
-      const video = videoRef.current;
-      
-      // Ensure video element is properly set up
-      if (video.srcObject !== cameraStream) {
-        video.srcObject = cameraStream;
-      }
-      
-      // Ensure video is playing
-      const playPromise = video.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(error => {
-          console.error('Video play error:', error);
-          toast.error('Video konnte nicht abgespielt werden');
-        });
-      }
-    }
-    
     return () => {
-      // Cleanup when component unmounts or stream changes
-      if (videoRef.current && videoRef.current.srcObject) {
+      // Only cleanup when stream is removed
+      if (!cameraStream && videoRef.current && videoRef.current.srcObject) {
         const stream = videoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
         videoRef.current.srcObject = null;

@@ -1289,8 +1289,8 @@ export default function MobileShopping() {
           {/* IMPROVED SINGLE ITEM SCANNER */}
           {scannerMode === 'camera' && scannerType === 'single' && (
             <div className="flex-1 flex flex-col bg-background">
-              {/* Camera Section - Larger */}
-              <div className="relative bg-black" style={{ height: '40%', minHeight: '240px' }}>
+              {/* Camera Section - Much Larger */}
+              <div className="relative bg-black" style={{ height: '50%', minHeight: '300px' }}>
                 <video
                   ref={videoRef}
                   autoPlay
@@ -1300,24 +1300,24 @@ export default function MobileShopping() {
                 />
                 <canvas ref={canvasRef} className="hidden" />
                 
-                {/* Frame guide with auto-scan indicator */}
+                {/* Frame guide with auto-scan indicator - Larger */}
                 {cameraStream && (
-                  <div className="absolute inset-4 border-2 rounded-lg pointer-events-none" 
-                       style={{ borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.5)' }}>
+                  <div className="absolute inset-6 border-3 rounded-xl pointer-events-none" 
+                       style={{ borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.6)' }}>
                     {autoScanEnabled && (
-                      <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-2">
-                        <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                      <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-5 py-2 rounded-full text-sm font-bold flex items-center gap-2.5">
+                        <div className="w-3 h-3 bg-white rounded-full animate-pulse" />
                         Auto-Scan aktiv
                       </div>
                     )}
                   </div>
                 )}
                 
-                {/* Auto-Scan Toggle - Larger */}
+                {/* Auto-Scan Toggle - Much Larger */}
                 {cameraStream && (
-                  <div className="absolute top-4 left-4 right-4 z-20 flex justify-between items-center">
-                    <div className="bg-black/80 rounded-xl px-4 py-2.5">
-                      <p className="text-white text-sm font-medium">
+                  <div className="absolute top-5 left-5 right-5 z-20 flex justify-between items-center">
+                    <div className="bg-black/80 rounded-xl px-5 py-3">
+                      <p className="text-white text-base font-bold">
                         {isScanning ? 'Scanne...' : 
                          autoScanEnabled ? `Auto-Scan aktiv (${scannedPositions.size} Positionen)` : 
                          'Quittung in Rahmen halten'}
@@ -1325,35 +1325,35 @@ export default function MobileShopping() {
                     </div>
                     <button
                       onClick={() => setAutoScanEnabled(!autoScanEnabled)}
-                      className={`px-4 py-2.5 rounded-xl flex items-center gap-2 ${
+                      className={`px-5 py-3 rounded-xl flex items-center gap-2.5 ${
                         autoScanEnabled ? 'bg-green-500' : 'bg-white/20'
                       }`}
                     >
-                      <div className={`w-3 h-3 rounded-full ${autoScanEnabled ? 'bg-white' : 'bg-white/50'}`} />
-                      <span className="text-white text-sm font-semibold">Auto</span>
+                      <div className={`w-4 h-4 rounded-full ${autoScanEnabled ? 'bg-white' : 'bg-white/50'}`} />
+                      <span className="text-white text-base font-bold">Auto</span>
                     </button>
                   </div>
                 )}
                 
-                {/* Scan Button - Larger */}
+                {/* Scan Button - Much Larger */}
                 {cameraStream && !pendingItem && (
-                  <div className="absolute bottom-4 left-0 right-0 z-20 flex flex-col items-center gap-2">
+                  <div className="absolute bottom-5 left-0 right-0 z-20 flex flex-col items-center gap-3">
                     <button
                       onClick={scanAllItems}
                       disabled={isScanning}
-                      className={`px-12 py-4 rounded-full shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-transform ${
+                      className={`px-16 py-5 rounded-full shadow-xl flex items-center justify-center gap-4 active:scale-95 transition-transform ${
                         isScanning ? 'bg-gray-600' : 'bg-green-500'
                       }`}
                     >
                       {isScanning ? (
-                        <div className="w-8 h-8 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                        <div className="w-10 h-10 border-4 border-white/30 border-t-white rounded-full animate-spin" />
                       ) : (
-                        <ScanLine className="w-8 h-8 text-white" />
+                        <ScanLine className="w-10 h-10 text-white" />
                       )}
-                      <span className="font-bold text-white text-xl">{isScanning ? 'Scanne...' : 'ALLE SCANNEN'}</span>
+                      <span className="font-bold text-white text-2xl">{isScanning ? 'Scanne...' : 'ALLE SCANNEN'}</span>
                     </button>
                     {!autoScanEnabled && (
-                      <p className="text-white/70 text-sm text-center px-4">
+                      <p className="text-white/80 text-base text-center px-4 font-medium">
                         Quittung in Rahmen halten<br/>und "ALLE SCANNEN" drücken
                       </p>
                     )}
@@ -1374,73 +1374,73 @@ export default function MobileShopping() {
                 )}
               </div>
               
-              {/* Content Section */}
-              <div className="flex-1 overflow-y-auto p-4">
-                {/* Error Message */}
+              {/* Content Section - More Padding */}
+              <div className="flex-1 overflow-y-auto p-5">
+                {/* Error Message - Larger */}
                 {scanError && !pendingItem && (
-                  <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
-                    <p className="text-red-600 font-medium text-center">{scanError}</p>
-                    <p className="text-red-500/70 text-sm text-center mt-1">Quittung näher halten und erneut scannen</p>
+                  <div className="mb-5 p-5 bg-red-500/10 border-2 border-red-500/30 rounded-xl">
+                    <p className="text-red-600 font-bold text-lg text-center">{scanError}</p>
+                    <p className="text-red-500/70 text-base text-center mt-2 font-medium">Quittung näher halten und erneut scannen</p>
                   </div>
                 )}
                 
-                {/* PENDING ITEM - Confirmation Card */}
+                {/* PENDING ITEM - Confirmation Card - Much Larger */}
                 {pendingItem && (
-                  <div className="mb-4 p-4 bg-green-500/10 border-2 border-green-500 rounded-xl">
-                    <p className="text-green-600 font-semibold text-sm mb-3">ERKANNT:</p>
+                  <div className="mb-5 p-6 bg-green-500/10 border-2 border-green-500 rounded-xl">
+                    <p className="text-green-600 font-bold text-base mb-4">ERKANNT:</p>
                     
-                    <div className="bg-background rounded-lg p-4 mb-4">
-                      <p className="font-bold text-lg">{pendingItem.name}</p>
-                      <p className="text-muted-foreground">CHF {pendingItem.unitPrice.toFixed(2)} pro Stück</p>
+                    <div className="bg-background rounded-lg p-5 mb-5">
+                      <p className="font-bold text-xl mb-2">{pendingItem.name}</p>
+                      <p className="text-base text-muted-foreground">CHF {pendingItem.unitPrice.toFixed(2)} pro Stück</p>
                     </div>
                     
-                    {/* Quantity Selector */}
-                    <div className="flex items-center justify-center gap-4 mb-4">
+                    {/* Quantity Selector - Much Larger */}
+                    <div className="flex items-center justify-center gap-5 mb-5">
                       <button
                         onClick={() => setPendingQuantity(q => Math.max(1, q - 1))}
-                        className="w-14 h-14 rounded-full bg-muted flex items-center justify-center text-2xl font-bold active:bg-muted/80"
+                        className="w-16 h-16 rounded-full bg-muted flex items-center justify-center text-3xl font-bold active:bg-muted/80"
                       >
                         −
                       </button>
-                      <span className="text-4xl font-bold w-16 text-center">{pendingQuantity}</span>
+                      <span className="text-5xl font-bold w-20 text-center">{pendingQuantity}</span>
                       <button
                         onClick={() => setPendingQuantity(q => q + 1)}
-                        className="w-14 h-14 rounded-full bg-muted flex items-center justify-center text-2xl font-bold active:bg-muted/80"
+                        className="w-16 h-16 rounded-full bg-muted flex items-center justify-center text-3xl font-bold active:bg-muted/80"
                       >
                         +
                       </button>
                     </div>
                     
-                    <p className="text-center text-xl font-bold mb-4">
+                    <p className="text-center text-2xl font-bold mb-5">
                       Total: CHF {(pendingItem.unitPrice * pendingQuantity).toFixed(2)}
                     </p>
                     
-                    {/* Action Buttons */}
-                    <div className="flex gap-3">
+                    {/* Action Buttons - Much Larger */}
+                    <div className="flex gap-4">
                       <button
                         onClick={cancelPendingItem}
-                        className="flex-1 py-4 rounded-xl bg-muted flex items-center justify-center gap-2 font-semibold"
+                        className="flex-1 py-5 rounded-xl bg-muted flex items-center justify-center gap-2.5 text-lg font-bold"
                       >
-                        <X className="w-5 h-5" />
+                        <X className="w-6 h-6" />
                         Abbrechen
                       </button>
                       <button
                         onClick={confirmPendingItem}
-                        className="flex-1 py-4 rounded-xl bg-green-500 text-white flex items-center justify-center gap-2 font-semibold"
+                        className="flex-1 py-5 rounded-xl bg-green-500 text-white flex items-center justify-center gap-2.5 text-lg font-bold"
                       >
-                        <Check className="w-5 h-5" />
+                        <Check className="w-6 h-6" />
                         Hinzufügen
                       </button>
                     </div>
                   </div>
                 )}
                 
-                {/* Instructions when no pending item */}
+                {/* Instructions when no pending item - Larger */}
                 {!pendingItem && liveScannedItems.length === 0 && !scanError && (
-                  <div className="text-center py-6">
-                    <ScanLine className="w-16 h-16 mx-auto mb-4 text-muted-foreground/30" />
-                    <p className="text-lg font-medium text-muted-foreground">Artikel scannen</p>
-                    <p className="text-sm text-muted-foreground/70 mt-2">
+                  <div className="text-center py-8">
+                    <ScanLine className="w-20 h-20 mx-auto mb-5 text-muted-foreground/30" />
+                    <p className="text-xl font-bold text-muted-foreground mb-3">Artikel scannen</p>
+                    <p className="text-base text-muted-foreground/70 mt-2 font-medium">
                       {autoScanEnabled ? (
                         <>Auto-Scan aktiv: Quittung in den Rahmen halten<br/>Alle Artikel werden automatisch erkannt</>
                       ) : (
@@ -1450,82 +1450,82 @@ export default function MobileShopping() {
                   </div>
                 )}
                 
-                {/* Scanned Items List - Larger Design */}
+                {/* Scanned Items List - Much Larger Design */}
                 {liveScannedItems.length > 0 && (
-                  <div className="mt-3">
-                    {/* Larger Header */}
-                    <div className="flex items-center justify-between mb-3 px-4 py-3 bg-green-500/10 rounded-xl border border-green-500/30">
+                  <div className="mt-4">
+                    {/* Much Larger Header */}
+                    <div className="flex items-center justify-between mb-4 px-5 py-4 bg-green-500/10 rounded-xl border-2 border-green-500/30">
                       <div className="flex items-center gap-3">
-                        <ShoppingCart className="w-6 h-6 text-green-600" />
-                        <span className="text-base font-bold">{liveScannedItems.reduce((sum, i) => sum + i.quantity, 0)} Artikel</span>
+                        <ShoppingCart className="w-8 h-8 text-green-600" />
+                        <span className="text-lg font-bold">{liveScannedItems.reduce((sum, i) => sum + i.quantity, 0)} Artikel</span>
                       </div>
-                      <span className="text-2xl font-bold text-green-600">CHF {liveTotal.toFixed(2)}</span>
+                      <span className="text-3xl font-bold text-green-600">CHF {liveTotal.toFixed(2)}</span>
                     </div>
                     
-                    {/* Larger Items List */}
-                    <div className="space-y-3 mb-4">
+                    {/* Much Larger Items List */}
+                    <div className="space-y-4 mb-5">
                       {liveScannedItems.map((item, idx) => (
                         <div 
                           key={idx}
-                          className="p-4 bg-muted rounded-xl"
+                          className="p-5 bg-muted rounded-xl border border-border"
                         >
-                          <div className="flex items-start justify-between mb-3">
-                            {/* Quantity Badge - Larger */}
-                            <div className="w-10 h-10 rounded-full bg-green-500 text-white text-base font-bold flex items-center justify-center flex-shrink-0 mr-3">
+                          <div className="flex items-start justify-between mb-4">
+                            {/* Quantity Badge - Much Larger */}
+                            <div className="w-14 h-14 rounded-full bg-green-500 text-white text-lg font-bold flex items-center justify-center flex-shrink-0 mr-4">
                               {item.quantity}
                             </div>
                             
-                            {/* Item Info - Larger */}
+                            {/* Item Info - Much Larger */}
                             <div className="flex-1 min-w-0">
-                              <p className="font-bold text-base mb-1">{item.name}</p>
-                              <p className="text-sm text-muted-foreground">
+                              <p className="font-bold text-lg mb-2">{item.name}</p>
+                              <p className="text-base text-muted-foreground">
                                 CHF {item.unitPrice.toFixed(2)} pro Stück
                               </p>
                             </div>
                             
-                            {/* Remove Button - Larger */}
+                            {/* Remove Button - Much Larger */}
                             <button
                               onClick={() => removeLiveItem(idx)}
-                              className="w-9 h-9 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0"
+                              className="w-11 h-11 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0"
                             >
-                              <X className="w-5 h-5 text-red-500" />
+                              <X className="w-6 h-6 text-red-500" />
                             </button>
                           </div>
                           
-                          {/* Quantity Controls - Larger */}
+                          {/* Quantity Controls - Much Larger */}
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-5">
                               <button
                                 onClick={() => updateItemQuantity(idx, item.quantity - 1)}
-                                className="w-12 h-12 rounded-full bg-background flex items-center justify-center text-2xl font-bold active:bg-background/80"
+                                className="w-14 h-14 rounded-full bg-background flex items-center justify-center text-3xl font-bold active:bg-background/80"
                               >
                                 −
                               </button>
-                              <span className="text-3xl font-bold w-16 text-center">{item.quantity}</span>
+                              <span className="text-4xl font-bold w-20 text-center">{item.quantity}</span>
                               <button
                                 onClick={() => updateItemQuantity(idx, item.quantity + 1)}
-                                className="w-12 h-12 rounded-full bg-background flex items-center justify-center text-2xl font-bold active:bg-background/80"
+                                className="w-14 h-14 rounded-full bg-background flex items-center justify-center text-3xl font-bold active:bg-background/80"
                               >
                                 +
                               </button>
                             </div>
-                            <span className="font-bold text-xl">CHF {item.totalPrice.toFixed(2)}</span>
+                            <span className="font-bold text-2xl">CHF {item.totalPrice.toFixed(2)}</span>
                           </div>
                         </div>
                       ))}
                     </div>
                     
-                    {/* Action Buttons - Larger */}
-                    <div className="flex gap-3">
+                    {/* Action Buttons - Much Larger */}
+                    <div className="flex gap-4">
                       <button
                         onClick={() => { 
                           setScannedPositions(new Set()); 
                           toast.success('Positionen zurückgesetzt - kann neu scannen');
                         }}
-                        className="px-4 py-3 rounded-xl bg-muted flex items-center justify-center gap-2 text-sm font-semibold"
+                        className="px-6 py-4 rounded-xl bg-muted flex items-center justify-center gap-2.5 text-base font-bold"
                         title="Positionen zurücksetzen (für neue Quittung)"
                       >
-                        <RotateCcw className="w-5 h-5" />
+                        <RotateCcw className="w-6 h-6" />
                         Reset
                       </button>
                       <button
@@ -1534,16 +1534,16 @@ export default function MobileShopping() {
                           setLiveTotal(0); 
                           setScannedPositions(new Set());
                         }}
-                        className="flex-1 py-4 rounded-xl bg-muted flex items-center justify-center gap-2 text-base font-bold"
+                        className="flex-1 py-5 rounded-xl bg-muted flex items-center justify-center gap-2.5 text-lg font-bold"
                       >
-                        <Trash2 className="w-5 h-5" />
+                        <Trash2 className="w-6 h-6" />
                         Alle löschen
                       </button>
                       <button
                         onClick={addLiveItemsToList}
-                        className="flex-1 py-4 rounded-xl bg-primary text-primary-foreground flex items-center justify-center gap-2 text-base font-bold"
+                        className="flex-1 py-5 rounded-xl bg-primary text-primary-foreground flex items-center justify-center gap-2.5 text-lg font-bold"
                       >
-                        <Check className="w-5 h-5" />
+                        <Check className="w-6 h-6" />
                         Fertig
                       </button>
                     </div>

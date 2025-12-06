@@ -1446,136 +1446,334 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Installment Payment Dialog */}
+      {/* Complete Installment Management Dialog */}
       <Dialog open={showInstallmentPaymentDialog} onOpenChange={setShowInstallmentPaymentDialog}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
           <DialogHeader className="pb-4">
-            <DialogTitle className="text-xl">Rate bezahlen</DialogTitle>
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <CreditCard className="w-5 h-5" />
+              Ratenverwaltung
+            </DialogTitle>
           </DialogHeader>
           {selectedInvoiceForPayment && selectedInvoiceForPayment.installments && (
-            <div className="space-y-4">
-              <div className="p-3 bg-muted rounded-lg">
-                <p className="text-sm font-medium">{selectedInvoiceForPayment.description}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Gesamtbetrag: {formatAmount(selectedInvoiceForPayment.amount)}
-                </p>
+            <div className="space-y-6">
+              {/* Invoice Overview */}
+              <div className="p-4 bg-muted rounded-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="text-base font-semibold">{selectedInvoiceForPayment.description}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {selectedInvoiceForPayment.installmentCount} Raten à {selectedInvoiceForPayment.installmentInterval === 'weekly' ? 'Woche' : selectedInvoiceForPayment.installmentInterval === 'monthly' ? 'Monat' : selectedInvoiceForPayment.installmentInterval === 'quarterly' ? 'Quartal' : 'Jahr'}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Gesamtbetrag</p>
+                    <p className="text-lg font-bold">{formatAmount(selectedInvoiceForPayment.amount)}</p>
+                  </div>
+                </div>
+                
+                {/* Progress Bar */}
+                <div className="w-full bg-background rounded-full h-3 mb-3">
+                  <div 
+                    className="bg-green-500 h-3 rounded-full transition-all"
+                    style={{ 
+                      width: `${Math.min(100, ((selectedInvoiceForPayment.totalPaid || 0) / selectedInvoiceForPayment.amount) * 100))}%` 
+                    }}
+                  />
+                </div>
+                
+                {/* Statistics */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Bezahlt</p>
+                    <p className="text-sm font-semibold text-green-600">
+                      {formatAmount((selectedInvoiceForPayment.totalPaid || 0) * 100)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Noch offen</p>
+                    <p className="text-sm font-semibold text-red-600">
+                      {formatAmount((selectedInvoiceForPayment.amount - (selectedInvoiceForPayment.totalPaid || 0)) * 100)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Fertig am</p>
+                    <p className="text-sm font-semibold">
+                      {selectedInvoiceForPayment.installmentEndDate ? formatDate(selectedInvoiceForPayment.installmentEndDate) : 'Nicht gesetzt'}
+                    </p>
+                  </div>
+                </div>
               </div>
 
+              {/* Installments List */}
               <div>
-                <Label>Rate auswählen</Label>
-                <Select
-                  value={selectedInstallment?.number?.toString() || ''}
-                  onValueChange={(value) => {
-                    const inst = selectedInvoiceForPayment.installments.find((i: any) => i.number === parseInt(value));
-                    setSelectedInstallment(inst);
-                    setPaymentAmount(inst ? (inst.amount - (inst.paidAmount || 0)).toFixed(2) : '');
-                  }}
-                >
-                  <SelectTrigger className="mt-2 h-10">
-                    <SelectValue placeholder="Rate auswählen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {selectedInvoiceForPayment.installments.map((inst: any) => (
-                      <SelectItem key={inst.number} value={inst.number.toString()}>
-                        <div className="flex items-center justify-between w-full">
-                          <span>Rate {inst.number} - {formatAmount(inst.amount * 100)}</span>
-                          <Badge variant={inst.status === 'paid' ? 'default' : inst.status === 'partial' ? 'secondary' : 'outline'}>
-                            {inst.status === 'paid' ? 'Bezahlt' : inst.status === 'partial' ? 'Teilweise' : 'Offen'}
-                          </Badge>
+                <div className="flex items-center justify-between mb-3">
+                  <Label className="text-base font-semibold">Alle Raten</Label>
+                  <Badge variant="outline">
+                    {selectedInvoiceForPayment.installments.filter((inst: any) => inst.status === 'paid').length} / {selectedInvoiceForPayment.installments.length} bezahlt
+                  </Badge>
+                </div>
+                
+                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  {selectedInvoiceForPayment.installments.map((inst: any, idx: number) => {
+                    const remaining = inst.amount - (inst.paidAmount || 0);
+                    const isOverdue = inst.dueDate && new Date(inst.dueDate.toDate ? inst.dueDate.toDate() : inst.dueDate) < new Date() && inst.status !== 'paid';
+                    
+                    return (
+                      <div 
+                        key={inst.number}
+                        className={`p-4 border rounded-lg ${
+                          inst.status === 'paid' 
+                            ? 'bg-green-50/50 border-green-200 dark:bg-green-950/20 dark:border-green-800' 
+                            : inst.status === 'partial'
+                            ? 'bg-orange-50/50 border-orange-200 dark:bg-orange-950/20 dark:border-orange-800'
+                            : isOverdue
+                            ? 'bg-red-50/50 border-red-200 dark:bg-red-950/20 dark:border-red-800'
+                            : 'bg-slate-50/50 border-slate-200 dark:bg-slate-900/50 dark:border-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                                inst.status === 'paid' 
+                                  ? 'bg-green-500 text-white' 
+                                  : inst.status === 'partial'
+                                  ? 'bg-orange-500 text-white'
+                                  : 'bg-slate-300 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
+                              }`}>
+                                {inst.number}
+                              </div>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-sm font-semibold">Rate {inst.number}</span>
+                                  <Badge variant={
+                                    inst.status === 'paid' ? 'default' : 
+                                    inst.status === 'partial' ? 'secondary' : 
+                                    isOverdue ? 'destructive' : 'outline'
+                                  }>
+                                    {inst.status === 'paid' ? 'Bezahlt' : 
+                                     inst.status === 'partial' ? 'Teilweise' : 
+                                     isOverdue ? 'Überfällig' : 'Offen'}
+                                  </Badge>
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {inst.dueDate ? (
+                                    <span className={isOverdue ? 'text-red-600 font-medium' : ''}>
+                                      Fällig: {formatDate(inst.dueDate.toDate ? inst.dueDate.toDate() : inst.dueDate)}
+                                    </span>
+                                  ) : (
+                                    <span>Kein Fälligkeitsdatum</span>
+                                  )}
+                                  {inst.paidDate && (
+                                    <span className="ml-3 text-green-600">
+                                      Bezahlt: {formatDate(inst.paidDate.toDate ? inst.paidDate.toDate() : inst.paidDate)}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-3 mt-3 text-xs">
+                              <div>
+                                <p className="text-muted-foreground mb-1">Rate</p>
+                                <p className="font-semibold">{formatAmount(inst.amount * 100)}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground mb-1">Bezahlt</p>
+                                <p className="font-semibold text-green-600">{formatAmount((inst.paidAmount || 0) * 100)}</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground mb-1">Noch offen</p>
+                                <p className={`font-semibold ${remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                  {formatAmount(remaining * 100)}
+                                </p>
+                              </div>
+                            </div>
+                            
+                            {inst.status === 'partial' && (
+                              <div className="mt-2 w-full bg-background rounded-full h-1.5">
+                                <div 
+                                  className="bg-orange-500 h-1.5 rounded-full"
+                                  style={{ width: `${(inst.paidAmount / inst.amount) * 100}%` }}
+                                />
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="flex flex-col gap-2">
+                            {remaining > 0 && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 text-xs whitespace-nowrap"
+                                onClick={() => {
+                                  setSelectedInstallment(inst);
+                                  setPaymentAmount(remaining.toFixed(2));
+                                }}
+                              >
+                                {inst.status === 'partial' ? 'Weiter zahlen' : 'Bezahlen'}
+                              </Button>
+                            )}
+                            {inst.paidAmount > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 text-xs whitespace-nowrap"
+                                onClick={() => {
+                                  setSelectedInstallment(inst);
+                                  setPaymentAmount('');
+                                }}
+                              >
+                                Bearbeiten
+                              </Button>
+                            )}
+                          </div>
                         </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
+              {/* Payment Form */}
               {selectedInstallment && (
-                <div className="space-y-3 p-4 border rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Fälligkeitsdatum:</span>
-                    <span className="text-sm font-medium">
-                      {selectedInstallment.dueDate ? formatDate(selectedInstallment.dueDate) : 'Nicht gesetzt'}
-                    </span>
+                <div className="p-4 border rounded-lg bg-background">
+                  <div className="flex items-center justify-between mb-4">
+                    <Label className="text-base font-semibold">Zahlung erfassen</Label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedInstallment(null);
+                        setPaymentAmount('');
+                      }}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Rate:</span>
-                    <span className="text-sm font-medium">{formatAmount(selectedInstallment.amount * 100)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Bereits bezahlt:</span>
-                    <span className="text-sm font-medium">{formatAmount((selectedInstallment.paidAmount || 0) * 100)}</span>
-                  </div>
-                  <div className="flex items-center justify-between border-t pt-2">
-                    <span className="text-sm font-medium">Noch zu zahlen:</span>
-                    <span className="text-sm font-bold text-red-600">
-                      {formatAmount((selectedInstallment.amount - (selectedInstallment.paidAmount || 0)) * 100)}
-                    </span>
+                  
+                  <div className="space-y-4">
+                    <div className="p-3 bg-muted rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-muted-foreground">Rate {selectedInstallment.number}</span>
+                        <Badge variant={selectedInstallment.status === 'paid' ? 'default' : selectedInstallment.status === 'partial' ? 'secondary' : 'outline'}>
+                          {selectedInstallment.status === 'paid' ? 'Bezahlt' : selectedInstallment.status === 'partial' ? 'Teilweise' : 'Offen'}
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <p className="text-muted-foreground mb-1">Rate</p>
+                          <p className="font-semibold">{formatAmount(selectedInstallment.amount * 100)}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground mb-1">Bereits bezahlt</p>
+                          <p className="font-semibold text-green-600">{formatAmount((selectedInstallment.paidAmount || 0) * 100)}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground mb-1">Fälligkeitsdatum</p>
+                          <p className="font-semibold">
+                            {selectedInstallment.dueDate ? formatDate(selectedInstallment.dueDate.toDate ? selectedInstallment.dueDate.toDate() : selectedInstallment.dueDate) : 'Nicht gesetzt'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground mb-1">Noch zu zahlen</p>
+                          <p className="font-semibold text-red-600">
+                            {formatAmount((selectedInstallment.amount - (selectedInstallment.paidAmount || 0)) * 100)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label>Zahlungsbetrag (CHF) *</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={paymentAmount}
+                        onChange={(e) => setPaymentAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="mt-2 h-10"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Maximal: {formatAmount((selectedInstallment.amount - (selectedInstallment.paidAmount || 0)) * 100)}
+                      </p>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1 h-10"
+                        onClick={() => {
+                          setSelectedInstallment(null);
+                          setPaymentAmount('');
+                        }}
+                      >
+                        Abbrechen
+                      </Button>
+                      <Button
+                        className="flex-1 h-10"
+                        onClick={async () => {
+                          if (!selectedInvoiceForPayment || !selectedInstallment || !paymentAmount) {
+                            toast.error('Bitte alle Felder ausfüllen');
+                            return;
+                          }
+                          const amount = parseFloat(paymentAmount);
+                          if (amount <= 0) {
+                            toast.error('Betrag muss größer als 0 sein');
+                            return;
+                          }
+                          const remaining = selectedInstallment.amount - (selectedInstallment.paidAmount || 0);
+                          if (amount > remaining) {
+                            toast.error(`Betrag darf nicht größer als ${formatAmount(remaining * 100)} sein`);
+                            return;
+                          }
+                          try {
+                            await recordInstallmentPayment(
+                              person.id,
+                              selectedInvoiceForPayment.id,
+                              selectedInstallment.number,
+                              amount,
+                              new Date()
+                            );
+                            toast.success('Zahlung erfolgreich erfasst');
+                            setSelectedInstallment(null);
+                            setPaymentAmount('');
+                            await refreshData();
+                            // Refresh invoice data to update selected invoice
+                            await refetch();
+                            const updatedInvoices = await refetch();
+                            if (updatedInvoices.data) {
+                              const updatedInvoice = updatedInvoices.data.find((inv: any) => inv.id === selectedInvoiceForPayment.id);
+                              if (updatedInvoice) {
+                                setSelectedInvoiceForPayment(updatedInvoice);
+                              }
+                            }
+                          } catch (error: any) {
+                            toast.error('Fehler: ' + error.message);
+                          }
+                        }}
+                      >
+                        Zahlung erfassen
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
-
-              <div>
-                <Label>Zahlungsbetrag (CHF) *</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="mt-2 h-10"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Maximal: {selectedInstallment ? formatAmount((selectedInstallment.amount - (selectedInstallment.paidAmount || 0)) * 100) : '0.00 CHF'}
-                </p>
-              </div>
             </div>
           )}
           <DialogFooter className="mt-4 gap-2">
-            <Button variant="outline" onClick={() => {
-              setShowInstallmentPaymentDialog(false);
-              setSelectedInvoiceForPayment(null);
-              setSelectedInstallment(null);
-              setPaymentAmount('');
-            }} className="h-10">
-              Abbrechen
-            </Button>
             <Button 
-              onClick={async () => {
-                if (!selectedInvoiceForPayment || !selectedInstallment || !paymentAmount) {
-                  toast.error('Bitte alle Felder ausfüllen');
-                  return;
-                }
-                const amount = parseFloat(paymentAmount);
-                if (amount <= 0) {
-                  toast.error('Betrag muss größer als 0 sein');
-                  return;
-                }
-                const remaining = selectedInstallment.amount - (selectedInstallment.paidAmount || 0);
-                if (amount > remaining) {
-                  toast.error(`Betrag darf nicht größer als ${formatAmount(remaining * 100)} sein`);
-                  return;
-                }
-                try {
-                  await recordInstallmentPayment(
-                    person.id,
-                    selectedInvoiceForPayment.id,
-                    selectedInstallment.number,
-                    amount,
-                    new Date()
-                  );
-                  toast.success('Rate erfolgreich erfasst');
-                  setShowInstallmentPaymentDialog(false);
-                  setSelectedInvoiceForPayment(null);
-                  setSelectedInstallment(null);
-                  setPaymentAmount('');
-                  await refreshData();
-                } catch (error: any) {
-                  toast.error('Fehler: ' + error.message);
-                }
-              }}
+              variant="outline" 
+              onClick={() => {
+                setShowInstallmentPaymentDialog(false);
+                setSelectedInvoiceForPayment(null);
+                setSelectedInstallment(null);
+                setPaymentAmount('');
+              }} 
               className="h-10"
             >
-              Zahlung erfassen
+              Schliessen
             </Button>
           </DialogFooter>
         </DialogContent>

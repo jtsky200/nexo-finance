@@ -2992,17 +2992,51 @@ exports.analyzeSingleLine = (0, https_1.onCall)({ memory: '512MiB', timeoutSecon
         return { success: false, error: error.message };
     }
 });
-// Parse a single item from OCR text - improved multi-line support
+// Parse a single item from OCR text - INTELLIGENT FILTERING
 function parseSingleItem(text) {
     const lines = text.split(/[\n\r]+/).map(l => l.trim()).filter(l => l.length > 0);
+    // INTELLIGENT SKIP PATTERNS - Comprehensive list of non-item lines
+    const skipPatterns = [
+        // Header/Footer metadata
+        /^(CHF|Total|Summe|Zwischensumme|Rundung|MwSt|MWST|Netto|Brutto|Kartenzahlung|Barzahlung|TWINT|Debit|Kredit)/i,
+        /^(ALDI|MIGROS|COOP|LIDL|DENNER|SPAR|VOLG|MANOR|SNIPES|H&M|ZARA|BP|SHELL|AVIA|VENDEX)/i,
+        /^(VIELEN|Danke|Thank|Bitte|Herzlich|Willkommen|Geschäft|Store|Bon|Zeit|Datum|Kasse)/i,
+        /^(Artikel|ANZAHL|Pos\.|Position|Rabatt|Urspr\.\s*Preis|Urspr\.Preis)/i,
+        /^(Member|EFT|Buchung|Trm-Id|Trx|Auth|Rückgeld|Gegeben|Erhalten)/i,
+        /^(CHE-|MWST-Nr|UID|www\.|Tel|Telefon|Email)/i,
+        // Barcodes and IDs
+        /^\d{10,}$/, // Long numbers (barcodes)
+        /^[A-Z]{2,3}-?\d{3,}/i, // Tax IDs
+        /^CHF$/i,
+        // Separators
+        /^[x×]\s*$/i, // Standalone x
+        /^[-=*#]+$/, // Separators
+        /^\s*\d+\s*Artikel\s*$/i,
+        // Tax summary lines
+        /^(A|B|Ges\.?)\s+\d/i,
+        // Price-only lines without context (likely totals)
+        /^(\d+[.,]\d{2})\s*$/,
+        // Store addresses and locations
+        /^\d{4}\s+[A-Za-zäöüÄÖÜ\-\s]+$/i, // Postal code + city
+        /^[A-Za-zäöüÄÖÜ]+(?:strasse|str\.|weg|platz|gasse)\s*\d*/i, // Street names
+        // Generic codes that look like article numbers but aren't
+        /^(\d{6,})\s*$/, // Just numbers (likely barcode or ID)
+        /^(\d{4,6})\s*[x×]\s*$/, // Article number with x but no name/price
+    ];
     // First, try to find complete items on single lines
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const nextLine = i < lines.length - 1 ? lines[i + 1] : '';
-        // Skip metadata lines
-        if (/^(CHF|Total|Summe|Zwischensumme|Rundung|MwSt|Netto|Kartenzahlung|ALDI|MIGROS|COOP|Artikel|VIELEN|Bitte)/i.test(line)) {
+        // INTELLIGENT SKIP: Check all skip patterns
+        if (skipPatterns.some(p => p.test(line))) {
             continue;
         }
+        // Additional validation: Line must have meaningful content
+        if (line.length < 3)
+            continue;
+        // Skip if line is ONLY numbers (barcode/ID)
+        if (/^\d+$/.test(line) && line.length > 6)
+            continue;
         // ALDI format: "12055 Super Bock 6x0.331  7.95 B"
         const aldiMatch = line.match(/^(\d{4,6})\s+(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
         if (aldiMatch) {
@@ -3167,7 +3201,10 @@ function parseSwissReceipt(text) {
     };
     let headerSection = true;
     let footerSection = false;
+    let itemsSection = false;
+    let totalSectionStart = -1; // Track where total section begins
     let confidencePoints = 0;
+    const itemPositions = []; // Track item positions
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const nextLine = lines[i + 1] || '';
@@ -3210,14 +3247,17 @@ function parseSwissReceipt(text) {
             // Check if we're entering item section (usually after "CHF" header or store name)
             if (line === 'CHF' || line.match(/^\s*CHF\s+CHF\s*$/) || line.match(/^\s*CHF\s*$/)) {
                 headerSection = false;
+                itemsSection = true;
                 continue;
             }
             // Also check if this line looks like an item (exit header early)
-            if (line.match(/^\d{4,6}\s+[A-Za-z]/)) {
+            if (line.match(/^\d{4,6}\s+[A-Za-z]/) || (line.match(/^[A-Za-zäöüÄÖÜ]/) && nextLine.match(/^\d+[.,]\d{2}/))) {
                 headerSection = false;
+                itemsSection = true;
                 // Don't continue - process this line as item
                 const item = parseReceiptItem(line, nextLine);
                 if (item) {
+                    itemPositions.push({ lineIndex: i, item });
                     result.items.push(item);
                     confidencePoints += 3;
                     if (/^\d+[.,]\d{2}\s*[AB]?$/.test(nextLine)) {
@@ -3228,20 +3268,35 @@ function parseSwissReceipt(text) {
             }
         }
         // === ITEM SECTION ===
-        if (!footerSection) {
-            // Check for total (signals end of items)
+        if (itemsSection && !footerSection) {
+            // INTELLIGENT TOTAL DETECTION: Check for total section start
             const totalMatch = line.match(patterns.total);
-            if (totalMatch) {
-                result.totals.total = parseFloat(totalMatch[2].replace(',', '.'));
+            const subtotalMatch = line.match(patterns.subtotal);
+            const totalKeywords = /^(Total|PREIS|TOTAL|Summe|SUMME|Total-EFT|Gesamtbetrag|ALDI\s*PREIS|Zwischensumme|Subtotal)/i;
+            if (totalMatch || subtotalMatch || totalKeywords.test(line)) {
+                // Mark total section start
+                if (totalSectionStart === -1) {
+                    totalSectionStart = i;
+                    console.log(`[parseSwissReceipt] Total section starts at line ${i}: "${line}"`);
+                }
+                if (totalMatch) {
+                    result.totals.total = parseFloat(totalMatch[2].replace(',', '.'));
+                }
+                if (subtotalMatch) {
+                    result.totals.subtotal = parseFloat(subtotalMatch[2].replace(',', '.'));
+                }
                 footerSection = true;
+                itemsSection = false; // Stop processing items
                 confidencePoints += 15;
                 continue;
             }
-            // Check for subtotal
-            const subtotalMatch = line.match(patterns.subtotal);
-            if (subtotalMatch) {
-                result.totals.subtotal = parseFloat(subtotalMatch[2].replace(',', '.'));
+            // Additional total indicators - stop item processing
+            if (/^(MwSt|MWST|Steuer|Netto|Brutto|Rundung|Kartenzahlung|Barzahlung)/i.test(line)) {
+                if (totalSectionStart === -1) {
+                    totalSectionStart = i;
+                }
                 footerSection = true;
+                itemsSection = false;
                 continue;
             }
             // If this line is just a price, try to combine with previous line
@@ -3307,16 +3362,24 @@ function parseSwissReceipt(text) {
                 i++; // Skip the product name line
                 continue;
             }
-            // Try to parse as item
-            const item = parseReceiptItem(line, nextLine);
-            if (item) {
-                result.items.push(item);
-                headerSection = false;
-                confidencePoints += 3;
-                // Skip next line if it was a price-only line that was combined
-                if (/^\d+[.,]\d{2}\s*[AB]?$/.test(nextLine)) {
-                    i++; // Skip the next iteration
+            // Try to parse as item - ONLY if we're still in items section
+            if (totalSectionStart === -1 || i < totalSectionStart) {
+                const item = parseReceiptItem(line, nextLine);
+                if (item) {
+                    // Track item position
+                    itemPositions.push({ lineIndex: i, item });
+                    result.items.push(item);
+                    headerSection = false;
+                    confidencePoints += 3;
+                    // Skip next line if it was a price-only line that was combined
+                    if (/^\d+[.,]\d{2}\s*[AB]?$/.test(nextLine)) {
+                        i++; // Skip the next iteration
+                    }
                 }
+            }
+            else {
+                // We've passed the total section start - don't process as item
+                break;
             }
         }
         // === FOOTER SECTION ===
@@ -3371,21 +3434,50 @@ function parseSwissReceipt(text) {
             }
         }
     }
+    // Add position information to items
+    result.items = result.items.map((item, index) => {
+        const itemPos = itemPositions.find(ip => ip.item === item);
+        return Object.assign(Object.assign({}, item), { position: itemPos ? itemPos.lineIndex : index, section: itemPos && totalSectionStart > 0 && itemPos.lineIndex >= totalSectionStart ? 'total' : 'items' });
+    });
+    // Log section detection
+    if (totalSectionStart > 0) {
+        console.log(`[parseSwissReceipt] Total section detected at line ${totalSectionStart}`);
+        console.log(`[parseSwissReceipt] Items before total: ${result.items.filter(i => i.section === 'items').length}`);
+    }
     // Calculate confidence
     result.confidence = Math.min(100, confidencePoints);
     result.totals.itemCount = result.totals.itemCount || result.items.length;
-    // Filter out invalid items (like "2 x", "4 x" quantity lines)
-    result.items = result.items.filter(item => {
+    // INTELLIGENT FILTERING: Remove invalid items
+    result.items = result.items.filter((item, index) => {
         const name = item.name.trim();
         // Remove items that are just quantity indicators
         if (/^\d+\s*[x×]$/i.test(name))
             return false;
-        // Remove items with very short names
+        // Remove items with very short names (likely OCR errors)
         if (name.length < 3)
             return false;
         // Remove items that look like metadata
-        if (/^(CHF|Total|Summe|Subtotal|MwSt|Netto|Zwischensumme|Rundung|Kartenzahlung|Bar|Rückgeld)/i.test(name))
+        if (/^(CHF|Total|Summe|Subtotal|MwSt|MWST|Netto|Brutto|Zwischensumme|Rundung|Kartenzahlung|Bar|Rückgeld|Gegeben|Erhalten)/i.test(name))
             return false;
+        // Remove items that are just numbers (barcodes/IDs)
+        if (/^\d{6,}$/.test(name))
+            return false;
+        // Remove items that are store names or addresses
+        if (/^(ALDI|MIGROS|COOP|LIDL|DENNER|SPAR|VOLG|MANOR|SNIPES|H&M|ZARA|BP|SHELL|AVIA|VENDEX)/i.test(name))
+            return false;
+        if (/^\d{4}\s+[A-Za-zäöüÄÖÜ\-\s]+$/i.test(name))
+            return false; // Postal code + city
+        if (/^[A-Za-zäöüÄÖÜ]+(?:strasse|str\.|weg|platz|gasse)\s*\d*/i.test(name))
+            return false; // Street names
+        // Remove items with invalid prices
+        if (!item.unitPrice || item.unitPrice <= 0 || item.unitPrice > 100000)
+            return false;
+        // Remove items that appear after total section
+        const itemPos = itemPositions.find(ip => ip.item === item);
+        if (itemPos && totalSectionStart > 0 && itemPos.lineIndex >= totalSectionStart) {
+            console.log(`[parseSwissReceipt] Filtering item after total section: "${name}" at line ${itemPos.lineIndex}`);
+            return false;
+        }
         return true;
     });
     // Remove duplicate items (same name and price)
@@ -3450,31 +3542,49 @@ function parseSwissReceipt(text) {
     }
     return result;
 }
-// Parse a single receipt item line
+// Parse a single receipt item line - INTELLIGENT FILTERING
 function parseReceiptItem(line, nextLine) {
-    // Skip non-item patterns
+    // COMPREHENSIVE SKIP PATTERNS - Non-item lines
     const skipPatterns = [
-        /^(Zwischensumme|Subtotal|Total|PREIS|Summe|Rundung|ALDI PREIS|Gesamtbetrag)/i,
+        // Totals and sums
+        /^(Zwischensumme|Subtotal|Total|PREIS|Summe|SUMME|Rundung|ALDI\s*PREIS|Gesamtbetrag|Total-EFT)/i,
+        // Tax and financial
         /^(MwSt|MWST|Steuer|Netto|Brutto|St\s*%)/i,
-        /^(Vielen\s*Dank|Danke|Bitte|Herzlich|Willkommen)/i,
-        /^(Kartenzahlung|Barzahlung|TWINT|Debit|Mastercard|Erhalten|Gegeben)/i,
-        /^(Urspr\.\s*Preis|Rabatt)/i, // H&M discount lines
-        /^(ANZAHL|Artikel\s*\d)/i,
-        /^(Benutzer|Datum|Kasse|Store|Bon|Zeit)/i,
-        /^(Member|EFT|Buchung|Trm-Id|Trx|Auth)/i,
-        /^(Rückgeld|CHE-|MWST-Nr|www\.|Tel)/i,
-        /^\d{10,}$/, // Barcodes
-        /^[A-Z]{2,3}-?\d{3}/i, // Tax IDs
-        /^CHF$/i,
-        /^[x×]\s*$/i, // Standalone x
-        /^[-=*]+$/, // Separators
-        /^\s*\d+\s*Artikel\s*$/i,
         /^(A|B|Ges\.?)\s+\d/i, // Tax summary lines
+        // Greetings and messages
+        /^(Vielen\s*Dank|Danke|Thank|Bitte|Herzlich|Willkommen|Geschäft|Store|Bon|Zeit|Datum|Kasse)/i,
+        // Payment methods
+        /^(Kartenzahlung|Barzahlung|TWINT|Debit|Kredit|Mastercard|Visa|Erhalten|Gegeben|Rückgeld)/i,
+        // Discounts and pricing info
+        /^(Urspr\.\s*Preis|Urspr\.Preis|Rabatt|Reduziert)/i,
+        // Metadata
+        /^(ANZAHL|Artikel\s*\d|Pos\.|Position|Member|EFT|Buchung|Trm-Id|Trx|Auth)/i,
+        /^(Benutzer|CHE-|MWST-Nr|UID|www\.|Tel|Telefon|Email)/i,
+        // Store names
+        /^(ALDI|MIGROS|COOP|LIDL|DENNER|SPAR|VOLG|MANOR|SNIPES|H&M|ZARA|BP|SHELL|AVIA|VENDEX)/i,
+        // Barcodes and IDs
+        /^\d{10,}$/, // Long numbers (barcodes)
+        /^[A-Z]{2,3}-?\d{3,}/i, // Tax IDs
+        /^CHF$/i,
+        // Separators
+        /^[x×]\s*$/i, // Standalone x
+        /^[-=*#]+$/, // Separators
+        /^\s*\d+\s*Artikel\s*$/i,
+        // Address patterns
+        /^\d{4}\s+[A-Za-zäöüÄÖÜ\-\s]+$/i, // Postal code + city
+        /^[A-Za-zäöüÄÖÜ]+(?:strasse|str\.|weg|platz|gasse)\s*\d*/i, // Street names
+        // Just numbers (likely IDs)
+        /^\d{6,}$/,
     ];
     if (skipPatterns.some(p => p.test(line)))
         return null;
     if (line.length < 3)
         return null;
+    // Additional validation: Line must have meaningful content (not just numbers or symbols)
+    if (/^[\d\s]+$/.test(line) && line.length > 6)
+        return null; // Just numbers
+    if (/^[^\w\s]+$/.test(line))
+        return null; // Just symbols
     let item = null;
     // Combine line with nextLine if nextLine is just a price
     const priceOnlyMatch = nextLine.match(/^(\d+[.,]\d{2})\s*([AB])?$/);

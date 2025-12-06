@@ -221,19 +221,44 @@ export default function MobileShopping() {
         videoRef.current.srcObject = null;
       }
 
-      // Start with basic constraints for maximum compatibility
+      // HIGH RESOLUTION CONSTRAINTS for precision scanning
+      // Try maximum resolution first, then fallback
       let stream: MediaStream | null = null;
-      const constraints: MediaStreamConstraints = {
+      let constraints: MediaStreamConstraints = {
         video: {
-          facingMode: 'environment' // Rear camera
-        }
+          facingMode: 'environment', // Back camera
+          width: { ideal: 3840 }, // 4K for maximum precision
+          height: { ideal: 2160 },
+          aspectRatio: { ideal: 16/9 },
+        },
+        audio: false,
       };
 
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log('[Camera] High resolution stream started');
       } catch (error: any) {
-        console.warn('Camera access failed:', error);
-        throw error;
+        console.warn('[Camera] High resolution failed, trying fallback:', error);
+        // Fallback to Full HD
+        constraints = {
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+          audio: false,
+        };
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+          console.log('[Camera] Fallback resolution stream started');
+        } catch (fallbackError: any) {
+          console.warn('[Camera] Fallback failed, using basic constraints:', fallbackError);
+          // Last resort: basic constraints
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment' },
+            audio: false,
+          });
+        }
       }
 
       if (!stream || stream.getVideoTracks().length === 0) {
@@ -612,13 +637,13 @@ export default function MobileShopping() {
   const [scannedPositions, setScannedPositions] = useState<Set<string>>(new Set());
   const [scanHistory, setScanHistory] = useState<Array<{item: ReceiptItem, position: string, timestamp: number}>>([]);
 
-  // NEW: Auto-scan all items in frame
+  // LIVE FULL-SCREEN SCANNER - High Resolution & Continuous
   const scanAllItemsInFrame = async () => {
     if (!videoRef.current || !canvasRef.current) return;
     if (isScanning) return; // Prevent multiple scans
     
     const now = Date.now();
-    if (now - lastScanTime < 2000) return; // Throttle: max 1 scan per 2 seconds
+    if (now - lastScanTime < 1500) return; // Throttle: max 1 scan per 1.5 seconds for live scanning
     setLastScanTime(now);
     
     setIsScanning(true);
@@ -627,25 +652,32 @@ export default function MobileShopping() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     
-    // Capture only the frame area (center 80% of screen)
-    const frameMargin = 0.1; // 10% margin on each side
-    const frameX = video.videoWidth * frameMargin;
-    const frameY = video.videoHeight * frameMargin;
-    const frameWidth = video.videoWidth * (1 - 2 * frameMargin);
-    const frameHeight = video.videoHeight * (1 - 2 * frameMargin);
+    // FULL SCREEN CAPTURE - Maximum resolution for precision
+    // Use full video dimensions for best OCR quality
+    const videoWidth = video.videoWidth || 1920; // Fallback to high res
+    const videoHeight = video.videoHeight || 1080;
     
-    canvas.width = frameWidth;
-    canvas.height = frameHeight;
-    const ctx = canvas.getContext('2d');
+    // Set canvas to high resolution (minimum 1920x1080 for precision)
+    const targetWidth = Math.max(videoWidth, 1920);
+    const targetHeight = Math.max(videoHeight, 1080);
+    
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext('2d', { 
+      willReadFrequently: true,
+      alpha: false 
+    });
     
     if (ctx) {
-      // Draw only the frame area
+      // Draw FULL SCREEN at maximum quality
       ctx.drawImage(
         video,
-        frameX, frameY, frameWidth, frameHeight, // Source
-        0, 0, frameWidth, frameHeight              // Destination
+        0, 0, videoWidth, videoHeight, // Source: full video
+        0, 0, targetWidth, targetHeight // Destination: high-res canvas
       );
       
+      // Convert to blob with maximum quality
+      // Maximum quality for precision OCR
       canvas.toBlob(async (blob) => {
         if (blob) {
           try {
@@ -654,16 +686,23 @@ export default function MobileShopping() {
               try {
                 const base64 = (reader.result as string).split(',')[1];
                 
-                // Use full receipt analyzer for multiple items
+                console.log(`[Live Scanner] Captured image: ${blob.size} bytes, Resolution: ${targetWidth}x${targetHeight}`);
+                
+                // Use full receipt analyzer for multiple items with high precision
                 const analyzeReceipt = httpsCallable(functions, 'analyzeReceipt');
                 const result = await analyzeReceipt({
                   fileData: base64,
                   fileType: 'image/jpeg',
-                  fileName: 'frame-scan.jpg',
+                  fileName: 'live-scan-full.jpg',
                 });
                 
                 const data = result.data as any;
-                console.log('Frame scan result:', data);
+                console.log('[Live Scanner] Full-screen scan result:', {
+                  success: data.success,
+                  itemsCount: data.items?.length || 0,
+                  hasError: !!data.error,
+                  rawTextLength: data.rawText?.length || 0
+                });
                 
                 if (data.success && data.items && data.items.length > 0) {
                   // Create position-based IDs for each item
@@ -811,26 +850,28 @@ export default function MobileShopping() {
             setIsScanning(false);
           }
         }
-      }, 'image/jpeg', 0.9);
+      }, 'image/jpeg', 0.95); // Maximum quality (0.95) for precision OCR
     }
   };
 
-  // Start/Stop auto-scan
+  // LIVE CONTINUOUS SCANNING - Full screen, high resolution
   useEffect(() => {
     if (autoScanEnabled && cameraStream && scannerType === 'single') {
-      const interval = setInterval(() => {
-        if (!isScanning) {
-          scanAllItemsInFrame();
-        }
-      }, 3000); // Scan every 3 seconds
-      setAutoScanInterval(interval);
-      
-      // Also scan immediately after 1 second
+      // Scan immediately when enabled
       const immediateTimeout = setTimeout(() => {
-        if (!isScanning) {
+        if (!isScanning && cameraStream) {
           scanAllItemsInFrame();
         }
-      }, 1000);
+      }, 500); // Start scanning after 500ms
+      
+      // Continuous scanning every 2 seconds for live updates
+      const interval = setInterval(() => {
+        if (!isScanning && cameraStream) {
+          scanAllItemsInFrame();
+        }
+      }, 2000); // Scan every 2 seconds for live scanning
+      
+      setAutoScanInterval(interval);
       
       return () => {
         clearInterval(interval);
@@ -844,7 +885,7 @@ export default function MobileShopping() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoScanEnabled, cameraStream, scannerType]);
+  }, [autoScanEnabled, cameraStream, scannerType, isScanning]);
 
   // NEW: Manual scan all items
   const scanAllItems = async () => {
@@ -1460,9 +1501,9 @@ export default function MobileShopping() {
                 </div>
               </div>
 
-              {/* Main Camera View - Full Screen Experience */}
+              {/* LIVE FULL-SCREEN CAMERA - No Window, Maximum Resolution */}
               <div className="flex-1 flex flex-col w-full overflow-hidden min-h-0 relative">
-                {/* Camera Preview - Full Height */}
+                {/* Camera Preview - FULL SCREEN, High Resolution */}
                 <div className="relative bg-black w-full flex-1 flex-shrink-0 min-h-0">
                   <video
                     ref={videoRef}
@@ -1471,89 +1512,45 @@ export default function MobileShopping() {
                     muted
                     preload="auto"
                     className="absolute inset-0 w-full h-full object-cover"
+                    style={{ 
+                      // Force high resolution for better OCR
+                      minWidth: '100%',
+                      minHeight: '100%'
+                    }}
                   />
                   <canvas ref={canvasRef} className="hidden" />
                   
-                  {/* Professional Scan Window Overlay */}
-                  {cameraStream && (
+                  {/* Live Scanning Indicator - Minimal Overlay */}
+                  {cameraStream && autoScanEnabled && (
                     <div className="absolute inset-0 pointer-events-none">
-                      {/* Dimmed outer area */}
-                      <svg className="absolute inset-0 w-full h-full" style={{ mixBlendMode: 'multiply' }}>
-                        <defs>
-                          <mask id="scan-window-mask">
-                            <rect width="100%" height="100%" fill="white" />
-                            <rect 
-                              x="10%" 
-                              y="20%" 
-                              width="80%" 
-                              height="50%" 
-                              rx="12" 
-                              fill="black"
-                            />
-                          </mask>
-                        </defs>
-                        <rect 
-                          width="100%" 
-                          height="100%" 
-                          fill="rgba(0,0,0,0.5)" 
-                          mask="url(#scan-window-mask)"
+                      {/* Subtle scanning animation */}
+                      {isScanning && (
+                        <div 
+                          className="absolute left-0 right-0 h-1 bg-green-500/50"
+                          style={{
+                            top: '50%',
+                            animation: 'scan-line 1.5s ease-in-out infinite',
+                            boxShadow: '0 0 20px rgba(16, 185, 129, 0.6)',
+                            transform: 'translateY(-50%)'
+                          }}
                         />
-                      </svg>
+                      )}
                       
-                      {/* Scan window frame */}
-                      <div 
-                        className="absolute left-[10%] top-[20%] w-[80%] h-[50%] border-2 rounded-xl"
-                        style={{ 
-                          borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.8)',
-                          boxShadow: autoScanEnabled 
-                            ? '0 0 20px rgba(16, 185, 129, 0.3)' 
-                            : '0 0 10px rgba(255,255,255,0.2)'
-                        }}
-                      >
-                        {/* Animated corner indicators */}
-                        <div className="absolute -top-1 -left-1 w-6 h-6">
-                          <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 rounded-tl"
-                               style={{ borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.9)' }} />
+                      {/* Status indicator - Top center */}
+                      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10">
+                        <div className="bg-green-500/90 backdrop-blur-sm text-white px-4 py-2 rounded-full text-xs font-semibold flex items-center gap-2 shadow-lg">
+                          <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                          {isScanning ? 'Analysiere...' : `Live-Scan (${liveScannedItems.length} Artikel)`}
                         </div>
-                        <div className="absolute -top-1 -right-1 w-6 h-6">
-                          <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 rounded-tr"
-                               style={{ borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.9)' }} />
-                        </div>
-                        <div className="absolute -bottom-1 -left-1 w-6 h-6">
-                          <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 rounded-bl"
-                               style={{ borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.9)' }} />
-                        </div>
-                        <div className="absolute -bottom-1 -right-1 w-6 h-6">
-                          <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 rounded-br"
-                               style={{ borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.9)' }} />
-                        </div>
-                        
-                        {/* Scanning line animation when auto-scan is active */}
-                        {autoScanEnabled && isScanning && (
-                          <div 
-                            className="absolute left-0 right-0 h-0.5 bg-green-500 opacity-75"
-                            style={{
-                              top: '0%',
-                              animation: 'scan-line 2s ease-in-out infinite',
-                              boxShadow: '0 0 10px rgba(16, 185, 129, 0.8)',
-                              transform: 'translateY(0)'
-                            }}
-                          />
-                        )}
                       </div>
-                      
-                      {/* Status indicator */}
-                      <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-10">
-                        {autoScanEnabled ? (
-                          <div className="bg-green-500/90 backdrop-blur-sm text-white px-4 py-2 rounded-full text-xs font-semibold flex items-center gap-2 shadow-lg">
-                            <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                            Auto-Scan aktiv
-                          </div>
-                        ) : (
-                          <div className="bg-black/60 backdrop-blur-sm text-white px-4 py-2 rounded-full text-xs font-medium flex items-center gap-2">
-                            Quittung in Rahmen halten
-                          </div>
-                        )}
+                    </div>
+                  )}
+                  
+                  {/* Manual scan hint when auto-scan is off */}
+                  {cameraStream && !autoScanEnabled && (
+                    <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10">
+                      <div className="bg-black/60 backdrop-blur-sm text-white px-4 py-2 rounded-full text-xs font-medium">
+                        Quittung vollständig sichtbar machen
                       </div>
                     </div>
                   )}

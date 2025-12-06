@@ -86,10 +86,20 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
 
   useEffect(() => {
     if (open && person?.id) {
-      refetch();
+      refetchInvoices();
       refetchAppointments();
     }
-  }, [open, person?.id]);
+  }, [open, person?.id, refetchInvoices, refetchAppointments]);
+
+  // Update selected invoice when invoices data changes
+  useEffect(() => {
+    if (selectedInvoiceForPayment && invoices.length > 0) {
+      const updatedInvoice = invoices.find((inv: any) => inv.id === selectedInvoiceForPayment.id);
+      if (updatedInvoice) {
+        setSelectedInvoiceForPayment(updatedInvoice);
+      }
+    }
+  }, [invoices, selectedInvoiceForPayment?.id]);
 
   const refreshData = useCallback(async () => {
     await refetchInvoices();
@@ -1740,13 +1750,6 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                             setSelectedInstallment(null);
                             setPaymentAmount('');
                             await refreshData();
-                            // Refresh invoice data to update selected invoice
-                            await refetchInvoices();
-                            // Find updated invoice from invoices list
-                            const updatedInvoice = invoices.find((inv: any) => inv.id === selectedInvoiceForPayment.id);
-                            if (updatedInvoice) {
-                              setSelectedInvoiceForPayment(updatedInvoice);
-                            }
                           } catch (error: any) {
                             toast.error('Fehler: ' + error.message);
                           }

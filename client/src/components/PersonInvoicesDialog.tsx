@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Plus, Trash2, Edit2, Camera, QrCode, Copy, 
-  FileText, X, Calendar, Bell, Clock, ArrowDownLeft, ArrowUpRight, Repeat, CalendarDays, FolderOpen
+  FileText, X, Calendar, Bell, Clock, ArrowDownLeft, ArrowUpRight, Repeat, CalendarDays, FolderOpen, CreditCard
 } from 'lucide-react';
 import PersonDocumentsTab from './PersonDocumentsTab';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -47,6 +47,10 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
   const [editingAppointment, setEditingAppointment] = useState<any>(null);
   const [deleteInvoiceId, setDeleteInvoiceId] = useState<string | null>(null);
   const [deleteAppointmentId, setDeleteAppointmentId] = useState<string | null>(null);
+  const [showInstallmentPaymentDialog, setShowInstallmentPaymentDialog] = useState(false);
+  const [selectedInvoiceForPayment, setSelectedInvoiceForPayment] = useState<any>(null);
+  const [selectedInstallment, setSelectedInstallment] = useState<any>(null);
+  const [paymentAmount, setPaymentAmount] = useState('');
   const [newAppointment, setNewAppointment] = useState({
     title: '',
     type: 'termin' as 'termin' | 'aufgabe' | 'geburtstag' | 'andere',
@@ -64,6 +68,9 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     reminderDate: '',
     isRecurring: false,
     recurringInterval: 'monthly' as 'weekly' | 'monthly' | 'quarterly' | 'yearly',
+    isInstallmentPlan: false,
+    installmentCount: 2,
+    installmentInterval: 'monthly' as 'weekly' | 'monthly' | 'quarterly' | 'yearly',
     status: 'open',
     direction: 'incoming' as 'incoming' | 'outgoing', // incoming = Person schuldet mir, outgoing = Ich schulde Person
     notes: '',
@@ -211,6 +218,9 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         reminderDate: '',
         isRecurring: false,
         recurringInterval: 'monthly',
+        isInstallmentPlan: false,
+        installmentCount: 2,
+        installmentInterval: 'monthly',
         status: 'open',
         direction: person?.type === 'external' ? 'incoming' : 'outgoing',
         notes: '',
@@ -446,6 +456,48 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                       </span>
                       <span className="text-lg font-bold">{formatAmount(invoice.amount)}</span>
                     </div>
+                    
+                    {/* Installment Plan Overview */}
+                    {invoice.isInstallmentPlan && invoice.installments && (
+                      <div className="mb-3 p-3 bg-muted rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium flex items-center gap-2">
+                            <CreditCard className="w-4 h-4" />
+                            Ratenvereinbarung
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {invoice.installments.filter((inst: any) => inst.status === 'paid').length} / {invoice.installments.length} bezahlt
+                          </span>
+                        </div>
+                        <div className="w-full bg-background rounded-full h-2 mb-2">
+                          <div 
+                            className="bg-green-500 h-2 rounded-full transition-all"
+                            style={{ 
+                              width: `${(invoice.totalPaid || 0) / invoice.amount * 100}%` 
+                            }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            Bezahlt: {formatAmount((invoice.totalPaid || 0) * 100)}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {invoice.installmentEndDate ? `Fertig: ${formatDate(invoice.installmentEndDate)}` : ''}
+                          </span>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full mt-2 h-8 text-xs"
+                          onClick={() => {
+                            setSelectedInvoiceForPayment(invoice);
+                            setShowInstallmentPaymentDialog(true);
+                          }}
+                        >
+                          Rate bezahlen
+                        </Button>
+                      </div>
+                    )}
                     
                     {/* Bottom row - Actions */}
                     <div className="flex items-center gap-2">
@@ -828,6 +880,87 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   <p className="text-xs text-muted-foreground mt-1">
                     Die Rechnung wird automatisch zum Fälligkeitsdatum neu erstellt
                   </p>
+                </div>
+              )}
+            </div>
+
+            {/* Ratenvereinbarung */}
+            <div className="space-y-3 p-4 border rounded-lg">
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  id="isInstallmentPlan"
+                  checked={newInvoice.isInstallmentPlan}
+                  onCheckedChange={(checked) => setNewInvoice({ 
+                    ...newInvoice, 
+                    isInstallmentPlan: checked as boolean,
+                    isRecurring: checked ? false : newInvoice.isRecurring // Can't be both
+                  })}
+                />
+                <Label htmlFor="isInstallmentPlan" className="flex items-center gap-2 cursor-pointer">
+                  <CalendarDays className="w-4 h-4" />
+                  Ratenvereinbarung
+                </Label>
+              </div>
+              
+              {newInvoice.isInstallmentPlan && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Anzahl Raten</Label>
+                      <Input
+                        type="number"
+                        min="2"
+                        max="60"
+                        value={newInvoice.installmentCount}
+                        onChange={(e) => setNewInvoice({ 
+                          ...newInvoice, 
+                          installmentCount: parseInt(e.target.value) || 2 
+                        })}
+                        className="mt-2 h-10"
+                      />
+                    </div>
+                    <div>
+                      <Label>Ratenintervall</Label>
+                      <Select
+                        value={newInvoice.installmentInterval}
+                        onValueChange={(value: any) => setNewInvoice({ ...newInvoice, installmentInterval: value })}
+                      >
+                        <SelectTrigger className="mt-2 h-10">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="weekly">Wöchentlich</SelectItem>
+                          <SelectItem value="monthly">Monatlich</SelectItem>
+                          <SelectItem value="quarterly">Vierteljährlich</SelectItem>
+                          <SelectItem value="yearly">Jährlich</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {newInvoice.amount && newInvoice.installmentCount && (
+                    <div className="p-3 bg-muted rounded-lg">
+                      <p className="text-sm font-medium">Ratenübersicht</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Ratenbetrag: {((parseFloat(newInvoice.amount) || 0) / newInvoice.installmentCount).toFixed(2)} CHF
+                      </p>
+                      {newInvoice.dueDate && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Letzte Rate fällig: {(() => {
+                            const startDate = new Date(newInvoice.dueDate);
+                            const interval = newInvoice.installmentInterval;
+                            const lastDate = new Date(startDate);
+                            switch (interval) {
+                              case 'weekly': lastDate.setDate(lastDate.getDate() + ((newInvoice.installmentCount - 1) * 7)); break;
+                              case 'monthly': lastDate.setMonth(lastDate.getMonth() + (newInvoice.installmentCount - 1)); break;
+                              case 'quarterly': lastDate.setMonth(lastDate.getMonth() + ((newInvoice.installmentCount - 1) * 3)); break;
+                              case 'yearly': lastDate.setFullYear(lastDate.getFullYear() + (newInvoice.installmentCount - 1)); break;
+                            }
+                            return lastDate.toLocaleDateString('de-CH');
+                          })()}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1312,6 +1445,141 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Installment Payment Dialog */}
+      <Dialog open={showInstallmentPaymentDialog} onOpenChange={setShowInstallmentPaymentDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="text-xl">Rate bezahlen</DialogTitle>
+          </DialogHeader>
+          {selectedInvoiceForPayment && selectedInvoiceForPayment.installments && (
+            <div className="space-y-4">
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="text-sm font-medium">{selectedInvoiceForPayment.description}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Gesamtbetrag: {formatAmount(selectedInvoiceForPayment.amount)}
+                </p>
+              </div>
+
+              <div>
+                <Label>Rate auswählen</Label>
+                <Select
+                  value={selectedInstallment?.number?.toString() || ''}
+                  onValueChange={(value) => {
+                    const inst = selectedInvoiceForPayment.installments.find((i: any) => i.number === parseInt(value));
+                    setSelectedInstallment(inst);
+                    setPaymentAmount(inst ? (inst.amount - (inst.paidAmount || 0)).toFixed(2) : '');
+                  }}
+                >
+                  <SelectTrigger className="mt-2 h-10">
+                    <SelectValue placeholder="Rate auswählen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectedInvoiceForPayment.installments.map((inst: any) => (
+                      <SelectItem key={inst.number} value={inst.number.toString()}>
+                        <div className="flex items-center justify-between w-full">
+                          <span>Rate {inst.number} - {formatAmount(inst.amount * 100)}</span>
+                          <Badge variant={inst.status === 'paid' ? 'default' : inst.status === 'partial' ? 'secondary' : 'outline'}>
+                            {inst.status === 'paid' ? 'Bezahlt' : inst.status === 'partial' ? 'Teilweise' : 'Offen'}
+                          </Badge>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedInstallment && (
+                <div className="space-y-3 p-4 border rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Fälligkeitsdatum:</span>
+                    <span className="text-sm font-medium">
+                      {selectedInstallment.dueDate ? formatDate(selectedInstallment.dueDate) : 'Nicht gesetzt'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Rate:</span>
+                    <span className="text-sm font-medium">{formatAmount(selectedInstallment.amount * 100)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Bereits bezahlt:</span>
+                    <span className="text-sm font-medium">{formatAmount((selectedInstallment.paidAmount || 0) * 100)}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-t pt-2">
+                    <span className="text-sm font-medium">Noch zu zahlen:</span>
+                    <span className="text-sm font-bold text-red-600">
+                      {formatAmount((selectedInstallment.amount - (selectedInstallment.paidAmount || 0)) * 100)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <Label>Zahlungsbetrag (CHF) *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="mt-2 h-10"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Maximal: {selectedInstallment ? formatAmount((selectedInstallment.amount - (selectedInstallment.paidAmount || 0)) * 100) : '0.00 CHF'}
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="mt-4 gap-2">
+            <Button variant="outline" onClick={() => {
+              setShowInstallmentPaymentDialog(false);
+              setSelectedInvoiceForPayment(null);
+              setSelectedInstallment(null);
+              setPaymentAmount('');
+            }} className="h-10">
+              Abbrechen
+            </Button>
+            <Button 
+              onClick={async () => {
+                if (!selectedInvoiceForPayment || !selectedInstallment || !paymentAmount) {
+                  toast.error('Bitte alle Felder ausfüllen');
+                  return;
+                }
+                const amount = parseFloat(paymentAmount);
+                if (amount <= 0) {
+                  toast.error('Betrag muss größer als 0 sein');
+                  return;
+                }
+                const remaining = selectedInstallment.amount - (selectedInstallment.paidAmount || 0);
+                if (amount > remaining) {
+                  toast.error(`Betrag darf nicht größer als ${formatAmount(remaining * 100)} sein`);
+                  return;
+                }
+                try {
+                  await recordInstallmentPayment(
+                    person.id,
+                    selectedInvoiceForPayment.id,
+                    selectedInstallment.number,
+                    amount,
+                    new Date()
+                  );
+                  toast.success('Rate erfolgreich erfasst');
+                  setShowInstallmentPaymentDialog(false);
+                  setSelectedInvoiceForPayment(null);
+                  setSelectedInstallment(null);
+                  setPaymentAmount('');
+                  await refreshData();
+                } catch (error: any) {
+                  toast.error('Fehler: ' + error.message);
+                }
+              }}
+              className="h-10"
+            >
+              Zahlung erfassen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

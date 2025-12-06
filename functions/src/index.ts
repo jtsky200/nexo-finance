@@ -678,6 +678,46 @@ export const createInvoice = onCall(async (request) => {
     }
   }
 
+  // Handle installment plan if enabled
+  if (request.data.isInstallmentPlan && request.data.installmentCount && request.data.installmentCount > 1) {
+    const installmentAmount = parseFloat((amount / request.data.installmentCount).toFixed(2));
+    const installmentInterval = request.data.installmentInterval || 'monthly';
+    const startDate = dueDate ? new Date(dueDate) : new Date(date);
+    
+    const installments = [];
+    for (let i = 0; i < request.data.installmentCount; i++) {
+      const installmentDate = new Date(startDate);
+      switch (installmentInterval) {
+        case 'weekly': installmentDate.setDate(installmentDate.getDate() + (i * 7)); break;
+        case 'monthly': installmentDate.setMonth(installmentDate.getMonth() + i); break;
+        case 'quarterly': installmentDate.setMonth(installmentDate.getMonth() + (i * 3)); break;
+        case 'yearly': installmentDate.setFullYear(installmentDate.getFullYear() + i); break;
+      }
+      
+      installments.push({
+        number: i + 1,
+        amount: installmentAmount,
+        dueDate: admin.firestore.Timestamp.fromDate(installmentDate),
+        status: 'pending',
+        paidDate: null,
+        paidAmount: 0,
+      });
+    }
+    
+    // Adjust last installment to account for rounding
+    const totalInstallmentAmount = installments.reduce((sum, inst) => sum + inst.amount, 0);
+    if (totalInstallmentAmount !== amount) {
+      installments[installments.length - 1].amount = parseFloat((amount - (totalInstallmentAmount - installments[installments.length - 1].amount)).toFixed(2));
+    }
+    
+    invoiceData.isInstallmentPlan = true;
+    invoiceData.installmentCount = request.data.installmentCount;
+    invoiceData.installmentInterval = installmentInterval;
+    invoiceData.installments = installments;
+    invoiceData.totalPaid = 0;
+    invoiceData.installmentEndDate = admin.firestore.Timestamp.fromDate(installments[installments.length - 1].dueDate.toDate());
+  }
+
   const docRef = await personRef.collection('invoices').add(invoiceData);
 
   // Update person's totalOwed if status is open or postponed
@@ -923,6 +963,131 @@ export const deleteInvoice = onCall(async (request) => {
 
   // Delete the invoice
   await invoiceRef.delete();
+  return { success: true };
+});
+
+// ========== Installment Plan Functions ==========
+
+export const recordInstallmentPayment = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { personId, invoiceId, installmentNumber, paidAmount, paidDate } = request.data;
+
+  // Verify person belongs to user
+  const personRef = db.collection('people').doc(personId);
+  const personDoc = await personRef.get();
+
+  if (!personDoc.exists || personDoc.data()?.userId !== userId) {
+    throw new HttpsError('permission-denied', 'Not authorized to access this person');
+  }
+
+  // Get invoice
+  const invoiceRef = personRef.collection('invoices').doc(invoiceId);
+  const invoiceDoc = await invoiceRef.get();
+
+  if (!invoiceDoc.exists) {
+    throw new HttpsError('not-found', 'Invoice not found');
+  }
+
+  const invoiceData = invoiceDoc.data();
+  
+  if (!invoiceData?.isInstallmentPlan || !invoiceData?.installments) {
+    throw new HttpsError('invalid-argument', 'Invoice is not an installment plan');
+  }
+
+  const installments = invoiceData.installments;
+  const installmentIndex = installments.findIndex((inst: any) => inst.number === installmentNumber);
+
+  if (installmentIndex === -1) {
+    throw new HttpsError('not-found', 'Installment not found');
+  }
+
+  // Update installment
+  const installment = installments[installmentIndex];
+  const newPaidAmount = (installment.paidAmount || 0) + parseFloat(paidAmount);
+  const isFullyPaid = newPaidAmount >= installment.amount;
+
+  installments[installmentIndex] = {
+    ...installment,
+    paidAmount: parseFloat(newPaidAmount.toFixed(2)),
+    status: isFullyPaid ? 'paid' : 'partial',
+    paidDate: isFullyPaid ? admin.firestore.Timestamp.fromDate(new Date(paidDate || new Date())) : installment.paidDate,
+  };
+
+  // Calculate total paid
+  const totalPaid = installments.reduce((sum: number, inst: any) => sum + (inst.paidAmount || 0), 0);
+  const allPaid = installments.every((inst: any) => inst.status === 'paid');
+
+  // Update invoice
+  await invoiceRef.update({
+    installments,
+    totalPaid: parseFloat(totalPaid.toFixed(2)),
+    status: allPaid ? 'paid' : invoiceData.status,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  // Update person's totalOwed if fully paid
+  if (allPaid && invoiceData.status !== 'paid') {
+    await personRef.update({
+      totalOwed: admin.firestore.FieldValue.increment(-invoiceData.amount),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+
+  return { success: true, totalPaid: parseFloat(totalPaid.toFixed(2)), allPaid };
+});
+
+export const updateInstallmentPlan = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { personId, invoiceId, installments } = request.data;
+
+  // Verify person belongs to user
+  const personRef = db.collection('people').doc(personId);
+  const personDoc = await personRef.get();
+
+  if (!personDoc.exists || personDoc.data()?.userId !== userId) {
+    throw new HttpsError('permission-denied', 'Not authorized to access this person');
+  }
+
+  // Get invoice
+  const invoiceRef = personRef.collection('invoices').doc(invoiceId);
+  const invoiceDoc = await invoiceRef.get();
+
+  if (!invoiceDoc.exists) {
+    throw new HttpsError('not-found', 'Invoice not found');
+  }
+
+  const invoiceData = invoiceDoc.data();
+  
+  if (!invoiceData?.isInstallmentPlan) {
+    throw new HttpsError('invalid-argument', 'Invoice is not an installment plan');
+  }
+
+  // Calculate total paid
+  const totalPaid = installments.reduce((sum: number, inst: any) => sum + (inst.paidAmount || 0), 0);
+  const allPaid = installments.every((inst: any) => inst.status === 'paid');
+
+  // Update invoice
+  await invoiceRef.update({
+    installments: installments.map((inst: any) => ({
+      ...inst,
+      dueDate: inst.dueDate ? (typeof inst.dueDate === 'string' ? admin.firestore.Timestamp.fromDate(new Date(inst.dueDate)) : inst.dueDate) : inst.dueDate,
+      paidDate: inst.paidDate ? (typeof inst.paidDate === 'string' ? admin.firestore.Timestamp.fromDate(new Date(inst.paidDate)) : inst.paidDate) : inst.paidDate,
+      paidAmount: parseFloat((inst.paidAmount || 0).toFixed(2)),
+      amount: parseFloat((inst.amount || 0).toFixed(2)),
+    })),
+    totalPaid: parseFloat(totalPaid.toFixed(2)),
+    status: allPaid ? 'paid' : invoiceData.status,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
   return { success: true };
 });
 

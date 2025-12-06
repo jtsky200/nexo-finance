@@ -639,9 +639,24 @@ export async function createInvoice(personId: string, data: {
   notes?: string;
   isRecurring?: boolean;
   recurringInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  isInstallmentPlan?: boolean;
+  installmentCount?: number;
+  installmentInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
 }) {
   const createInvoiceFunc = httpsCallable(functions, 'createInvoice');
   const result = await createInvoiceFunc({ personId, ...data });
+  return result.data;
+}
+
+export async function recordInstallmentPayment(personId: string, invoiceId: string, installmentNumber: number, paidAmount: number, paidDate?: Date) {
+  const recordPaymentFunc = httpsCallable(functions, 'recordInstallmentPayment');
+  const result = await recordPaymentFunc({ 
+    personId, 
+    invoiceId, 
+    installmentNumber, 
+    paidAmount, 
+    paidDate: paidDate || new Date() 
+  });
   return result.data;
 }
 

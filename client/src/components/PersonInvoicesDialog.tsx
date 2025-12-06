@@ -81,7 +81,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     imageUrl: '',
   });
 
-  const { data: invoices = [], isLoading, refetch } = usePersonInvoices(person?.id);
+  const { data: invoices = [], isLoading, refetch: refetchInvoices } = usePersonInvoices(person?.id);
   const { data: appointments = [], isLoading: appointmentsLoading, refetch: refetchAppointments } = usePersonReminders(person?.id);
 
   useEffect(() => {
@@ -92,12 +92,12 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
   }, [open, person?.id]);
 
   const refreshData = useCallback(async () => {
-    await refetch();
+    await refetchInvoices();
     await refetchAppointments();
     if (onDataChanged) {
       onDataChanged();
     }
-  }, [refetch, refetchAppointments, onDataChanged]);
+  }, [refetchInvoices, refetchAppointments, onDataChanged]);
 
   // Appointment handlers
   const handleAddAppointment = async () => {
@@ -1741,13 +1741,11 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                             setPaymentAmount('');
                             await refreshData();
                             // Refresh invoice data to update selected invoice
-                            await refetch();
-                            const updatedInvoices = await refetch();
-                            if (updatedInvoices.data) {
-                              const updatedInvoice = updatedInvoices.data.find((inv: any) => inv.id === selectedInvoiceForPayment.id);
-                              if (updatedInvoice) {
-                                setSelectedInvoiceForPayment(updatedInvoice);
-                              }
+                            await refetchInvoices();
+                            // Find updated invoice from invoices list
+                            const updatedInvoice = invoices.find((inv: any) => inv.id === selectedInvoiceForPayment.id);
+                            if (updatedInvoice) {
+                              setSelectedInvoiceForPayment(updatedInvoice);
                             }
                           } catch (error: any) {
                             toast.error('Fehler: ' + error.message);

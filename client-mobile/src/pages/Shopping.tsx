@@ -73,6 +73,20 @@ const categories = [
 
 export default function MobileShopping() {
   const { t } = useTranslation();
+  
+  // Add scan line animation style
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes scan-line {
+        0% { transform: translateY(0); opacity: 0.3; }
+        50% { transform: translateY(100%); opacity: 1; }
+        100% { transform: translateY(0); opacity: 0.3; }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
   const { data: items = [], isLoading, refetch } = useShoppingList();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newItem, setNewItem] = useState({
@@ -1411,36 +1425,45 @@ export default function MobileShopping() {
             </div>
           )}
 
-          {/* COMPLETELY REBUILT SINGLE ITEM SCANNER - WIDE SCREEN & USER FRIENDLY */}
+          {/* COMPLETELY REBUILT CAMERA UI FROM SCRATCH - MODERN & USER FRIENDLY */}
           {scannerMode === 'camera' && scannerType === 'single' && (
             <div className="flex-1 flex flex-col bg-background w-full h-full overflow-hidden">
-              {/* Top Bar - Status & Controls */}
-              <div className="w-full px-4 py-3 bg-background border-b border-border flex-shrink-0">
+              {/* Modern Top Bar */}
+              <div className="w-full px-4 py-3 bg-background/95 backdrop-blur-sm border-b border-border/50 flex-shrink-0">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-muted-foreground">Scanner</p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className={`w-2 h-2 rounded-full ${cameraStream ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {cameraStream ? 'Kamera aktiv' : 'Kamera inaktiv'}
+                      </p>
+                    </div>
                     <p className="text-sm font-bold truncate">
-                      {isScanning ? 'Scanne...' : 
+                      {isScanning ? 'Analysiere...' : 
                        autoScanEnabled ? `${scannedPositions.size} Positionen erkannt` : 
+                       liveScannedItems.length > 0 ? `${liveScannedItems.length} Artikel gescannt` :
                        'Bereit zum Scannen'}
                     </p>
                   </div>
                   <button
                     onClick={() => setAutoScanEnabled(!autoScanEnabled)}
-                    className={`px-3 py-2 rounded-lg flex items-center gap-1.5 flex-shrink-0 transition-colors ${
-                      autoScanEnabled ? 'bg-green-500 text-white' : 'bg-muted text-foreground'
-                    }`}
+                    disabled={!cameraStream}
+                    className={`px-3 py-2 rounded-lg flex items-center gap-1.5 flex-shrink-0 transition-all ${
+                      autoScanEnabled && cameraStream
+                        ? 'bg-green-500 text-white shadow-lg' 
+                        : 'bg-muted text-muted-foreground'
+                    } ${!cameraStream ? 'opacity-50' : ''}`}
                   >
-                    <div className={`w-2 h-2 rounded-full ${autoScanEnabled ? 'bg-white' : 'bg-foreground/50'}`} />
+                    <div className={`w-2 h-2 rounded-full ${autoScanEnabled && cameraStream ? 'bg-white' : 'bg-foreground/50'}`} />
                     <span className="text-xs font-semibold">Auto</span>
                   </button>
                 </div>
               </div>
 
-              {/* Main Content - Responsive Layout */}
-              <div className="flex-1 flex flex-col w-full overflow-hidden min-h-0">
-                {/* Camera Section - Takes 40% on mobile, 50% on wide screens */}
-                <div className="relative bg-black w-full flex-shrink-0" style={{ height: '40vh', minHeight: '250px' }}>
+              {/* Main Camera View - Full Screen Experience */}
+              <div className="flex-1 flex flex-col w-full overflow-hidden min-h-0 relative">
+                {/* Camera Preview - Full Height */}
+                <div className="relative bg-black w-full flex-1 flex-shrink-0 min-h-0">
                   <video
                     ref={videoRef}
                     autoPlay
@@ -1451,140 +1474,217 @@ export default function MobileShopping() {
                   />
                   <canvas ref={canvasRef} className="hidden" />
                   
-                  {/* Scan Window Overlay */}
+                  {/* Professional Scan Window Overlay */}
                   {cameraStream && (
                     <div className="absolute inset-0 pointer-events-none">
-                      {/* Dimmed background */}
-                      <div className="absolute inset-0 bg-black/40" />
-                      {/* Scan window */}
+                      {/* Dimmed outer area */}
+                      <svg className="absolute inset-0 w-full h-full" style={{ mixBlendMode: 'multiply' }}>
+                        <defs>
+                          <mask id="scan-window-mask">
+                            <rect width="100%" height="100%" fill="white" />
+                            <rect 
+                              x="10%" 
+                              y="20%" 
+                              width="80%" 
+                              height="50%" 
+                              rx="12" 
+                              fill="black"
+                            />
+                          </mask>
+                        </defs>
+                        <rect 
+                          width="100%" 
+                          height="100%" 
+                          fill="rgba(0,0,0,0.5)" 
+                          mask="url(#scan-window-mask)"
+                        />
+                      </svg>
+                      
+                      {/* Scan window frame */}
                       <div 
-                        className="absolute inset-8 border-2 rounded-lg"
-                        style={{ borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.7)' }}
+                        className="absolute left-[10%] top-[20%] w-[80%] h-[50%] border-2 rounded-xl"
+                        style={{ 
+                          borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.8)',
+                          boxShadow: autoScanEnabled 
+                            ? '0 0 20px rgba(16, 185, 129, 0.3)' 
+                            : '0 0 10px rgba(255,255,255,0.2)'
+                        }}
                       >
-                        {/* Corner indicators */}
-                        <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 rounded-tl" 
-                             style={{ borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.9)' }} />
-                        <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 rounded-tr"
-                             style={{ borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.9)' }} />
-                        <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 rounded-bl"
-                             style={{ borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.9)' }} />
-                        <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 rounded-br"
-                             style={{ borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.9)' }} />
+                        {/* Animated corner indicators */}
+                        <div className="absolute -top-1 -left-1 w-6 h-6">
+                          <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 rounded-tl"
+                               style={{ borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.9)' }} />
+                        </div>
+                        <div className="absolute -top-1 -right-1 w-6 h-6">
+                          <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 rounded-tr"
+                               style={{ borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.9)' }} />
+                        </div>
+                        <div className="absolute -bottom-1 -left-1 w-6 h-6">
+                          <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 rounded-bl"
+                               style={{ borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.9)' }} />
+                        </div>
+                        <div className="absolute -bottom-1 -right-1 w-6 h-6">
+                          <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 rounded-br"
+                               style={{ borderColor: autoScanEnabled ? '#10b981' : 'rgba(255,255,255,0.9)' }} />
+                        </div>
+                        
+                        {/* Scanning line animation when auto-scan is active */}
+                        {autoScanEnabled && isScanning && (
+                          <div 
+                            className="absolute left-0 right-0 h-0.5 bg-green-500 opacity-75"
+                            style={{
+                              top: '0%',
+                              animation: 'scan-line 2s ease-in-out infinite',
+                              boxShadow: '0 0 10px rgba(16, 185, 129, 0.8)',
+                              transform: 'translateY(0)'
+                            }}
+                          />
+                        )}
                       </div>
                       
-                      {/* Auto-Scan Indicator */}
-                      {autoScanEnabled && (
-                        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-4 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2">
-                          <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                          Auto-Scan aktiv
-                        </div>
-                      )}
+                      {/* Status indicator */}
+                      <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-10">
+                        {autoScanEnabled ? (
+                          <div className="bg-green-500/90 backdrop-blur-sm text-white px-4 py-2 rounded-full text-xs font-semibold flex items-center gap-2 shadow-lg">
+                            <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                            Auto-Scan aktiv
+                          </div>
+                        ) : (
+                          <div className="bg-black/60 backdrop-blur-sm text-white px-4 py-2 rounded-full text-xs font-medium flex items-center gap-2">
+                            Quittung in Rahmen halten
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                   
-                  {/* Camera Controls */}
+                  {/* Modern Camera Controls */}
                   {cameraStream && !pendingItem && (
-                    <div className="absolute bottom-3 left-0 right-0 z-20 px-3">
+                    <div className="absolute bottom-0 left-0 right-0 z-20 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
                       <button
                         onClick={scanAllItems}
                         disabled={isScanning}
-                        className={`w-full py-3 rounded-lg shadow-lg flex items-center justify-center gap-2 transition-all ${
-                          isScanning ? 'bg-gray-600' : 'bg-green-500 active:bg-green-600'
+                        className={`w-full py-4 rounded-xl shadow-2xl flex items-center justify-center gap-3 transition-all transform ${
+                          isScanning 
+                            ? 'bg-gray-600/90' 
+                            : 'bg-green-500 hover:bg-green-600 active:scale-95'
                         }`}
                       >
                         {isScanning ? (
-                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <>
+                            <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            <span className="font-bold text-white text-lg">Analysiere...</span>
+                          </>
                         ) : (
-                          <ScanLine className="w-5 h-5 text-white" />
+                          <>
+                            <ScanLine className="w-6 h-6 text-white" />
+                            <span className="font-bold text-white text-lg">ALLE SCANNEN</span>
+                          </>
                         )}
-                        <span className="font-bold text-white text-base">
-                          {isScanning ? 'Scanne...' : 'ALLE SCANNEN'}
-                        </span>
                       </button>
                     </div>
                   )}
                   
-                  {/* Start Camera Button */}
+                  {/* Start Camera - Modern Design */}
                   {!cameraStream && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-black/90 to-black/70">
+                      <div className="text-center mb-8">
+                        <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-white/10 backdrop-blur-sm flex items-center justify-center">
+                          <Camera className="w-10 h-10 text-white" />
+                        </div>
+                        <p className="text-white text-lg font-semibold mb-2">Kamera starten</p>
+                        <p className="text-white/70 text-sm">Für das Scannen von Quittungen</p>
+                      </div>
                       <button
                         onClick={startCamera}
-                        className="px-5 py-2.5 rounded-lg bg-white shadow-lg flex items-center justify-center gap-2"
+                        className="px-8 py-4 rounded-xl bg-white shadow-2xl flex items-center justify-center gap-3 hover:bg-gray-50 active:scale-95 transition-all"
                       >
-                        <Camera className="w-5 h-5 text-gray-800" />
-                        <span className="font-semibold text-gray-800 text-sm">Kamera starten</span>
+                        <Camera className="w-6 h-6 text-gray-800" />
+                        <span className="font-bold text-gray-800 text-base">Kamera aktivieren</span>
                       </button>
                     </div>
                   )}
                 </div>
                 
-                {/* Items List & Controls - Scrollable */}
-                <div className="flex-1 overflow-y-auto bg-background w-full p-3 min-h-0">
-                  {/* Error Message */}
+                {/* Items List & Controls - Modern Scrollable Design */}
+                <div className="flex-1 overflow-y-auto bg-background w-full p-4 min-h-0">
+                  {/* Error Message - Modern Design */}
                   {scanError && !pendingItem && (
-                    <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-                      <p className="text-red-600 font-semibold text-center">{scanError}</p>
-                      <p className="text-red-500/70 text-sm text-center mt-1">Quittung näher halten und erneut scannen</p>
+                    <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl backdrop-blur-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 rounded-full bg-red-500" />
+                        <p className="text-red-600 font-semibold text-sm">Fehler</p>
+                      </div>
+                      <p className="text-red-600 font-medium text-center text-sm">{scanError}</p>
+                      <p className="text-red-500/70 text-xs text-center mt-1">Quittung näher halten und erneut scannen</p>
                     </div>
                   )}
                   
-                  {/* PENDING ITEM - Confirmation */}
+                  {/* PENDING ITEM - Modern Confirmation Card */}
                   {pendingItem && (
-                    <div className="mb-4 p-5 bg-green-500/10 border border-green-500 rounded-lg">
-                      <p className="text-green-600 font-bold text-sm mb-3">ERKANNT:</p>
-                      
-                      <div className="bg-background rounded-lg p-4 mb-4">
-                        <p className="font-bold text-lg mb-1">{pendingItem.name}</p>
-                        <p className="text-sm text-muted-foreground">CHF {pendingItem.unitPrice.toFixed(2)} pro Stück</p>
+                    <div className="mb-4 p-5 bg-green-500/10 border border-green-500/40 rounded-xl backdrop-blur-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        <p className="text-green-600 font-bold text-sm">ERKANNT</p>
                       </div>
                       
-                      {/* Quantity Selector */}
+                      <div className="bg-background/80 backdrop-blur-sm rounded-lg p-4 mb-4 border border-border/50">
+                        <p className="font-bold text-base mb-1">{pendingItem.name}</p>
+                        <p className="text-xs text-muted-foreground">CHF {pendingItem.unitPrice.toFixed(2)} pro Stück</p>
+                      </div>
+                      
+                      {/* Quantity Selector - Modern */}
                       <div className="flex items-center justify-center gap-4 mb-4">
                         <button
                           onClick={() => setPendingQuantity(q => Math.max(1, q - 1))}
-                          className="w-12 h-12 rounded-full bg-muted flex items-center justify-center text-2xl font-bold"
+                          className="w-11 h-11 rounded-full bg-muted flex items-center justify-center text-xl font-bold active:scale-95 transition-transform"
                         >
                           −
                         </button>
-                        <span className="text-3xl font-bold w-16 text-center">{pendingQuantity}</span>
+                        <div className="w-16 h-11 rounded-lg bg-background border border-border flex items-center justify-center">
+                          <span className="text-2xl font-bold">{pendingQuantity}</span>
+                        </div>
                         <button
                           onClick={() => setPendingQuantity(q => q + 1)}
-                          className="w-12 h-12 rounded-full bg-muted flex items-center justify-center text-2xl font-bold"
+                          className="w-11 h-11 rounded-full bg-muted flex items-center justify-center text-xl font-bold active:scale-95 transition-transform"
                         >
                           +
                         </button>
                       </div>
                       
-                      <p className="text-center text-xl font-bold mb-4">
-                        Total: CHF {(pendingItem.unitPrice * pendingQuantity).toFixed(2)}
-                      </p>
+                      <div className="text-center mb-4 p-3 bg-background/50 rounded-lg border border-border/50">
+                        <p className="text-xs text-muted-foreground mb-1">Total</p>
+                        <p className="text-xl font-bold">CHF {(pendingItem.unitPrice * pendingQuantity).toFixed(2)}</p>
+                      </div>
                       
-                      {/* Action Buttons */}
-                      <div className="flex gap-3">
+                      {/* Action Buttons - Modern */}
+                      <div className="flex gap-2">
                         <button
                           onClick={cancelPendingItem}
-                          className="flex-1 py-3 rounded-lg bg-muted flex items-center justify-center gap-2 font-semibold"
+                          className="flex-1 py-3 rounded-lg bg-muted flex items-center justify-center gap-2 text-sm font-semibold active:scale-95 transition-transform"
                         >
-                          <X className="w-5 h-5" />
+                          <X className="w-4 h-4" />
                           Abbrechen
                         </button>
                         <button
                           onClick={confirmPendingItem}
-                          className="flex-1 py-3 rounded-lg bg-green-500 text-white flex items-center justify-center gap-2 font-semibold"
+                          className="flex-1 py-3 rounded-lg bg-green-500 text-white flex items-center justify-center gap-2 text-sm font-semibold shadow-lg active:scale-95 transition-transform"
                         >
-                          <Check className="w-5 h-5" />
+                          <Check className="w-4 h-4" />
                           Hinzufügen
                         </button>
                       </div>
                     </div>
                   )}
                   
-                  {/* Instructions */}
+                  {/* Instructions - Modern Empty State */}
                   {!pendingItem && liveScannedItems.length === 0 && !scanError && (
-                    <div className="text-center py-6">
-                      <ScanLine className="w-16 h-16 mx-auto mb-4 text-muted-foreground/30" />
-                      <p className="text-lg font-bold text-muted-foreground mb-2">Artikel scannen</p>
-                      <p className="text-sm text-muted-foreground/70">
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-muted/50 flex items-center justify-center">
+                        <ScanLine className="w-8 h-8 text-muted-foreground/40" />
+                      </div>
+                      <p className="text-base font-bold text-foreground mb-2">Artikel scannen</p>
+                      <p className="text-xs text-muted-foreground/70 px-4">
                         {autoScanEnabled ? (
                           <>Auto-Scan aktiv: Quittung in den Rahmen halten</>
                         ) : (
@@ -1594,78 +1694,91 @@ export default function MobileShopping() {
                     </div>
                   )}
                   
-                  {/* Scanned Items List - Clean Design */}
+                  {/* Scanned Items List - Modern Design */}
                   {liveScannedItems.length > 0 && (
                     <div>
-                      {/* Summary Header */}
-                      <div className="flex items-center justify-between mb-4 p-4 bg-green-500/10 rounded-lg border border-green-500/30">
+                      {/* Summary Header - Modern */}
+                      <div className="flex items-center justify-between mb-3 p-3 bg-green-500/10 rounded-xl border border-green-500/30 backdrop-blur-sm">
                         <div className="flex items-center gap-2">
-                          <ShoppingCart className="w-6 h-6 text-green-600" />
-                          <span className="font-bold">{liveScannedItems.reduce((sum, i) => sum + i.quantity, 0)} Artikel</span>
+                          <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+                            <ShoppingCart className="w-4 h-4 text-green-600" />
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Gesamt</p>
+                            <p className="font-bold text-sm">{liveScannedItems.reduce((sum, i) => sum + i.quantity, 0)} Artikel</p>
+                          </div>
                         </div>
-                        <span className="text-2xl font-bold text-green-600">CHF {liveTotal.toFixed(2)}</span>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Total</p>
+                          <p className="text-xl font-bold text-green-600">CHF {liveTotal.toFixed(2)}</p>
+                        </div>
                       </div>
                       
-                      {/* Items List */}
-                      <div className="space-y-3 mb-4">
+                      {/* Items List - Modern Cards */}
+                      <div className="space-y-2.5 mb-3">
                         {liveScannedItems.map((item, idx) => (
                           <div 
                             key={idx}
-                            className="p-4 bg-muted rounded-lg border border-border"
+                            className="p-3 bg-muted/80 backdrop-blur-sm rounded-xl border border-border/50"
                           >
-                            <div className="flex items-start justify-between mb-3">
-                              <div className="flex items-center gap-3 flex-1 min-w-0">
-                                <div className="w-10 h-10 rounded-full bg-green-500 text-white text-sm font-bold flex items-center justify-center flex-shrink-0">
+                            <div className="flex items-start justify-between mb-2.5">
+                              <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                <div className="w-9 h-9 rounded-full bg-green-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0 shadow-sm">
                                   {item.quantity}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="font-bold text-base mb-1 truncate">{item.name}</p>
-                                  <p className="text-sm text-muted-foreground">
+                                  <p className="font-bold text-sm mb-0.5 truncate">{item.name}</p>
+                                  <p className="text-xs text-muted-foreground">
                                     CHF {item.unitPrice.toFixed(2)} pro Stück
                                   </p>
                                 </div>
                               </div>
                               <button
                                 onClick={() => removeLiveItem(idx)}
-                                className="w-9 h-9 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0"
+                                className="w-8 h-8 rounded-full bg-red-500/10 flex items-center justify-center flex-shrink-0 active:scale-95 transition-transform"
                               >
-                                <X className="w-5 h-5 text-red-500" />
+                                <X className="w-4 h-4 text-red-500" />
                               </button>
                             </div>
                             
-                            {/* Quantity Controls */}
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
+                            {/* Quantity Controls - Modern */}
+                            <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                              <div className="flex items-center gap-2">
                                 <button
                                   onClick={() => updateItemQuantity(idx, item.quantity - 1)}
-                                  className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-xl font-bold"
+                                  className="w-9 h-9 rounded-full bg-background border border-border flex items-center justify-center text-lg font-bold active:scale-95 transition-transform"
                                 >
                                   −
                                 </button>
-                                <span className="text-2xl font-bold w-12 text-center">{item.quantity}</span>
+                                <div className="w-10 h-9 rounded-lg bg-background border border-border flex items-center justify-center">
+                                  <span className="text-lg font-bold">{item.quantity}</span>
+                                </div>
                                 <button
                                   onClick={() => updateItemQuantity(idx, item.quantity + 1)}
-                                  className="w-10 h-10 rounded-full bg-background flex items-center justify-center text-xl font-bold"
+                                  className="w-9 h-9 rounded-full bg-background border border-border flex items-center justify-center text-lg font-bold active:scale-95 transition-transform"
                                 >
                                   +
                                 </button>
                               </div>
-                              <span className="font-bold text-lg">CHF {item.totalPrice.toFixed(2)}</span>
+                              <div className="text-right">
+                                <p className="text-xs text-muted-foreground">Total</p>
+                                <p className="font-bold text-base">CHF {item.totalPrice.toFixed(2)}</p>
+                              </div>
                             </div>
                           </div>
                         ))}
                       </div>
                       
-                      {/* Action Buttons */}
-                      <div className="flex gap-3">
+                      {/* Action Buttons - Modern */}
+                      <div className="flex gap-2">
                         <button
                           onClick={() => { 
                             setScannedPositions(new Set()); 
                             toast.success('Positionen zurückgesetzt');
                           }}
-                          className="px-4 py-3 rounded-lg bg-muted flex items-center justify-center gap-2 text-sm font-semibold"
+                          className="px-3 py-2.5 rounded-lg bg-muted flex items-center justify-center gap-1.5 text-xs font-semibold active:scale-95 transition-transform"
                         >
-                          <RotateCcw className="w-4 h-4" />
+                          <RotateCcw className="w-3.5 h-3.5" />
                           Reset
                         </button>
                         <button
@@ -1674,16 +1787,16 @@ export default function MobileShopping() {
                             setLiveTotal(0); 
                             setScannedPositions(new Set());
                           }}
-                          className="flex-1 py-3 rounded-lg bg-muted flex items-center justify-center gap-2 font-semibold"
+                          className="flex-1 py-2.5 rounded-lg bg-muted flex items-center justify-center gap-1.5 text-xs font-semibold active:scale-95 transition-transform"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                           Alle löschen
                         </button>
                         <button
                           onClick={addLiveItemsToList}
-                          className="flex-1 py-3 rounded-lg bg-primary text-primary-foreground flex items-center justify-center gap-2 font-semibold"
+                          className="flex-1 py-2.5 rounded-lg bg-primary text-primary-foreground flex items-center justify-center gap-1.5 text-xs font-semibold shadow-lg active:scale-95 transition-transform"
                         >
-                          <Check className="w-4 h-4" />
+                          <Check className="w-3.5 h-3.5" />
                           Fertig
                         </button>
                       </div>

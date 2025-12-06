@@ -600,12 +600,29 @@ export function usePersonInvoices(personId: string | undefined) {
       const result = await getInvoicesFunc({ personId });
       const data = result.data as { invoices: any[] };
       
-      const mappedInvoices = data.invoices.map((inv: any) => ({
-        ...inv,
-        date: inv.date?.toDate ? inv.date.toDate() : new Date(inv.date),
-        createdAt: inv.createdAt?.toDate ? inv.createdAt.toDate() : new Date(inv.createdAt),
-        updatedAt: inv.updatedAt?.toDate ? inv.updatedAt.toDate() : new Date(inv.updatedAt),
-      }));
+      const mappedInvoices = data.invoices.map((inv: any) => {
+        const mapped = {
+          ...inv,
+          date: inv.date?.toDate ? inv.date.toDate() : new Date(inv.date),
+          createdAt: inv.createdAt?.toDate ? inv.createdAt.toDate() : new Date(inv.createdAt),
+          updatedAt: inv.updatedAt?.toDate ? inv.updatedAt.toDate() : new Date(inv.updatedAt),
+        };
+        
+        // Convert installment dates if present
+        if (inv.installments && Array.isArray(inv.installments)) {
+          mapped.installments = inv.installments.map((inst: any) => ({
+            ...inst,
+            dueDate: inst.dueDate?.toDate ? inst.dueDate.toDate() : (inst.dueDate ? new Date(inst.dueDate) : null),
+            paidDate: inst.paidDate?.toDate ? inst.paidDate.toDate() : (inst.paidDate ? new Date(inst.paidDate) : null),
+          }));
+        }
+        
+        if (inv.installmentEndDate) {
+          mapped.installmentEndDate = inv.installmentEndDate?.toDate ? inv.installmentEndDate.toDate() : new Date(inv.installmentEndDate);
+        }
+        
+        return mapped;
+      });
       
       setInvoices(mappedInvoices);
       setError(null);

@@ -676,7 +676,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   personId={person?.id}
                   personName={person?.name}
                   onInvoiceCreated={() => {
-                    refetch();
+                    refetchInvoices();
                     onDataChanged?.();
                   }}
                   onReminderCreated={() => {

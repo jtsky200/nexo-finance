@@ -541,6 +541,16 @@ exports.getPersonInvoices = (0, https_1.onCall)(async (request) => {
         if (data.updatedAt && typeof data.updatedAt.toDate === 'function') {
             invoice.updatedAt = data.updatedAt.toDate().toISOString();
         }
+        if (data.dueDate && typeof data.dueDate.toDate === 'function') {
+            invoice.dueDate = data.dueDate.toDate().toISOString();
+        }
+        if (data.installmentEndDate && typeof data.installmentEndDate.toDate === 'function') {
+            invoice.installmentEndDate = data.installmentEndDate.toDate().toISOString();
+        }
+        // Convert installment dates
+        if (data.installments && Array.isArray(data.installments)) {
+            invoice.installments = data.installments.map((inst) => (Object.assign(Object.assign({}, inst), { dueDate: inst.dueDate && typeof inst.dueDate.toDate === 'function' ? inst.dueDate.toDate().toISOString() : inst.dueDate, paidDate: inst.paidDate && typeof inst.paidDate.toDate === 'function' ? inst.paidDate.toDate().toISOString() : inst.paidDate })));
+        }
         return invoice;
     });
     return { invoices };

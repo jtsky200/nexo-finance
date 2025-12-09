@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -37,11 +37,14 @@ interface PersonInvoicesDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDataChanged?: () => void;
+  highlightInvoiceId?: string | null;
 }
 
-export default function PersonInvoicesDialog({ person, open, onOpenChange, onDataChanged }: PersonInvoicesDialogProps) {
+export default function PersonInvoicesDialog({ person, open, onOpenChange, onDataChanged, highlightInvoiceId }: PersonInvoicesDialogProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'invoices' | 'appointments' | 'documents'>('invoices');
+  const invoiceRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const [highlightedInvoiceId, setHighlightedInvoiceId] = useState<string | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showAddAppointmentDialog, setShowAddAppointmentDialog] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
@@ -97,6 +100,24 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, person?.id]);
+
+  // Scroll to and highlight invoice when highlightInvoiceId is set
+  useEffect(() => {
+    if (highlightInvoiceId && open && activeTab === 'invoices') {
+      // Wait for invoices to load
+      setTimeout(() => {
+        const invoiceElement = invoiceRefs.current[highlightInvoiceId];
+        if (invoiceElement) {
+          invoiceElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setHighlightedInvoiceId(highlightInvoiceId);
+          // Remove highlight after 3 seconds
+          setTimeout(() => {
+            setHighlightedInvoiceId(null);
+          }, 3000);
+        }
+      }, 500);
+    }
+  }, [highlightInvoiceId, open, activeTab, invoices.length]);
 
   // Update selected invoice when invoices data changes
   useEffect(() => {
@@ -536,7 +557,14 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 {invoices.map((invoice: any) => (
                   <div 
                     key={invoice.id}
-                    className={`rounded-xl p-4 border ${
+                    ref={(el) => {
+                      if (invoice.id) {
+                        invoiceRefs.current[invoice.id] = el;
+                      }
+                    }}
+                    className={`rounded-xl p-4 border transition-all duration-300 ${
+                      highlightedInvoiceId === invoice.id ? 'ring-2 ring-primary ring-offset-2 bg-primary/5' : ''
+                    } ${
                       invoice.status === 'paid' 
                         ? 'bg-green-50/50 border-green-200 dark:bg-green-950/20 dark:border-green-800' 
                         : invoice.status === 'postponed'

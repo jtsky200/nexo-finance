@@ -922,6 +922,7 @@ export default function Bills() {
             onDataChanged={() => {
               refetch();
             }}
+            highlightInvoiceId={selectedInvoiceId || null}
           />
         )}
       </Layout>

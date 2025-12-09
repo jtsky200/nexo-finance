@@ -1564,7 +1564,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Noch offen</p>
                     <p className="text-sm font-semibold text-red-600">
-                      {formatAmount((selectedInvoiceForPayment.amount - (selectedInvoiceForPayment.totalPaid || 0)) * 100)}
+                      {formatAmount((selectedInvoiceForPayment.amount - (selectedInvoiceForPayment.totalPaid || 0) * 100))}
                     </p>
                   </div>
                   <div>

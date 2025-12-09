@@ -51,6 +51,69 @@ const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
 const db = admin.firestore();
+// ========== Validation Helpers ==========
+function validateString(value, fieldName, maxLength = 1000, required = false) {
+    if (required && (!value || typeof value !== 'string' || value.trim().length === 0)) {
+        throw new https_1.HttpsError('invalid-argument', `${fieldName} is required and must be a non-empty string`);
+    }
+    if (value && typeof value !== 'string') {
+        throw new https_1.HttpsError('invalid-argument', `${fieldName} must be a string`);
+    }
+    if (value && value.length > maxLength) {
+        throw new https_1.HttpsError('invalid-argument', `${fieldName} must not exceed ${maxLength} characters`);
+    }
+    return value ? value.trim() : value;
+}
+function validateNumber(value, fieldName, min = 0, max = Number.MAX_SAFE_INTEGER, required = false) {
+    if (required && (value === undefined || value === null)) {
+        throw new https_1.HttpsError('invalid-argument', `${fieldName} is required`);
+    }
+    if (value !== undefined && value !== null) {
+        const num = typeof value === 'string' ? parseFloat(value) : value;
+        if (isNaN(num) || !isFinite(num)) {
+            throw new https_1.HttpsError('invalid-argument', `${fieldName} must be a valid number`);
+        }
+        if (num < min || num > max) {
+            throw new https_1.HttpsError('invalid-argument', `${fieldName} must be between ${min} and ${max}`);
+        }
+        return num;
+    }
+    return value;
+}
+function validateEmail(value, fieldName = 'email') {
+    if (!value)
+        return null;
+    if (typeof value !== 'string') {
+        throw new https_1.HttpsError('invalid-argument', `${fieldName} must be a string`);
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(value.trim())) {
+        throw new https_1.HttpsError('invalid-argument', `${fieldName} must be a valid email address`);
+    }
+    return value.trim();
+}
+function validateDate(value, fieldName, required = false) {
+    if (required && !value) {
+        throw new https_1.HttpsError('invalid-argument', `${fieldName} is required`);
+    }
+    if (value) {
+        const date = new Date(value);
+        if (isNaN(date.getTime())) {
+            throw new https_1.HttpsError('invalid-argument', `${fieldName} must be a valid date`);
+        }
+        return date;
+    }
+    return value;
+}
+function validateEnum(value, fieldName, allowedValues, required = false) {
+    if (required && !value) {
+        throw new https_1.HttpsError('invalid-argument', `${fieldName} is required`);
+    }
+    if (value && !allowedValues.includes(value)) {
+        throw new https_1.HttpsError('invalid-argument', `${fieldName} must be one of: ${allowedValues.join(', ')}`);
+    }
+    return value || null;
+}
 // ========== Reminders Functions ==========
 exports.getReminders = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
@@ -95,33 +158,34 @@ exports.createReminder = (0, https_1.onCall)(async (request) => {
     }
     const userId = request.auth.uid;
     const { title, type, dueDate, isAllDay, amount, currency, notes, recurrenceRule, personId, personName } = request.data;
+    // Validate inputs
+    const validatedTitle = validateString(title, 'title', 500, true);
+    const validatedType = validateEnum(type, 'type', ['termin', 'erinnerung'], false) || 'termin';
+    const validatedCurrency = validateEnum(currency, 'currency', ['CHF', 'EUR', 'USD'], false);
+    const validatedAmount = amount ? validateNumber(amount, 'amount', 0, 1000000000) : null;
+    const validatedNotes = validateString(notes, 'notes', 5000, false);
+    const validatedPersonName = validateString(personName, 'personName', 200, false);
     // Parse and validate dueDate
     let parsedDueDate = null;
     if (dueDate) {
-        const dateObj = new Date(dueDate);
-        if (!isNaN(dateObj.getTime())) {
-            parsedDueDate = admin.firestore.Timestamp.fromDate(dateObj);
-        }
-        else {
-            // If date string parsing fails, try to create from current date
-            parsedDueDate = admin.firestore.Timestamp.fromDate(new Date());
-        }
+        const dateObj = validateDate(dueDate, 'dueDate', false);
+        parsedDueDate = admin.firestore.Timestamp.fromDate(dateObj);
     }
     else {
         parsedDueDate = admin.firestore.Timestamp.fromDate(new Date());
     }
     const reminderData = {
         userId,
-        title: title || 'Neuer Termin',
-        type: type || 'termin',
+        title: validatedTitle,
+        type: validatedType,
         dueDate: parsedDueDate,
-        isAllDay: isAllDay || false,
-        amount: amount || null,
-        currency: currency || null,
-        notes: notes || null,
-        recurrenceRule: recurrenceRule || null,
-        personId: personId || null,
-        personName: personName || null,
+        isAllDay: isAllDay === true,
+        amount: validatedAmount,
+        currency: validatedCurrency,
+        notes: validatedNotes,
+        recurrenceRule: validateString(recurrenceRule, 'recurrenceRule', 200, false),
+        personId: personId ? validateString(personId, 'personId', 100, false) : null,
+        personName: validatedPersonName,
         status: 'offen',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -210,17 +274,26 @@ exports.createFinanceEntry = (0, https_1.onCall)(async (request) => {
     }
     const userId = request.auth.uid;
     const { date, type, category, amount, currency, paymentMethod, notes, isRecurring, recurrenceRule } = request.data;
+    // Validate inputs
+    const validatedDate = validateDate(date, 'date', true);
+    const validatedType = validateEnum(type, 'type', ['einnahme', 'ausgabe'], true);
+    const validatedCategory = validateString(category, 'category', 200, true);
+    const validatedAmount = validateNumber(amount, 'amount', 0, 1000000000, true);
+    const validatedCurrency = validateEnum(currency, 'currency', ['CHF', 'EUR', 'USD'], false) || 'CHF';
+    const validatedPaymentMethod = validateString(paymentMethod, 'paymentMethod', 100, false);
+    const validatedNotes = validateString(notes, 'notes', 5000, false);
+    const validatedRecurrenceRule = validateString(recurrenceRule, 'recurrenceRule', 200, false);
     const entryData = {
         userId,
-        date: admin.firestore.Timestamp.fromDate(new Date(date)),
-        type,
-        category,
-        amount,
-        currency,
-        paymentMethod: paymentMethod || null,
-        notes: notes || null,
-        isRecurring: isRecurring || false,
-        recurrenceRule: recurrenceRule || null,
+        date: admin.firestore.Timestamp.fromDate(validatedDate),
+        type: validatedType,
+        category: validatedCategory,
+        amount: validatedAmount,
+        currency: validatedCurrency,
+        paymentMethod: validatedPaymentMethod,
+        notes: validatedNotes,
+        isRecurring: isRecurring === true,
+        recurrenceRule: validatedRecurrenceRule,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
@@ -429,18 +502,28 @@ exports.createPerson = (0, https_1.onCall)(async (request) => {
     }
     const userId = request.auth.uid;
     const { name, email, phone, currency, type, relationship, notes } = request.data;
+    // Validate inputs
+    const validatedName = validateString(name, 'name', 200, true);
+    const validatedEmail = validateEmail(email, 'email');
+    const validatedPhone = validateString(phone, 'phone', 50, false);
+    const validatedCurrency = validateEnum(currency, 'currency', ['CHF', 'EUR', 'USD'], false) || 'CHF';
+    const validatedType = validateEnum(type, 'type', ['household', 'external'], false) || 'household';
+    const validatedRelationship = type === 'external'
+        ? (validateEnum(relationship, 'relationship', ['creditor', 'debtor', 'both'], false) || 'both')
+        : null;
+    const validatedNotes = validateString(notes, 'notes', 5000, false);
     // type: "household" (Haushaltsmitglied) | "external" (Externe Person)
     // relationship (nur für external): "creditor" (Ich schulde) | "debtor" (Schuldet mir) | "both"
     const personData = {
         userId,
-        name,
-        email: email || null,
-        phone: phone || null,
-        type: type || 'household', // Default: Haushaltsmitglied
-        relationship: type === 'external' ? (relationship || 'both') : null,
-        notes: notes || null,
+        name: validatedName,
+        email: validatedEmail,
+        phone: validatedPhone,
+        type: validatedType,
+        relationship: validatedRelationship,
+        notes: validatedNotes,
         totalOwed: 0,
-        currency: currency || 'CHF',
+        currency: validatedCurrency,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
@@ -459,12 +542,30 @@ exports.updatePerson = (0, https_1.onCall)(async (request) => {
     if (!personDoc.exists || ((_a = personDoc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
         throw new https_1.HttpsError('permission-denied', 'Not authorized to update this person');
     }
+    // Validate inputs if provided
+    const validatedName = name !== undefined ? validateString(name, 'name', 200, true) : undefined;
+    const validatedEmail = email !== undefined ? validateEmail(email, 'email') : undefined;
+    const validatedPhone = phone !== undefined ? validateString(phone, 'phone', 50, false) : undefined;
+    const validatedNotes = notes !== undefined ? validateString(notes, 'notes', 5000, false) : undefined;
+    const validatedType = type !== undefined ? validateEnum(type, 'type', ['household', 'external'], false) : undefined;
+    const validatedRelationship = (type === 'external' && relationship !== undefined)
+        ? validateEnum(relationship, 'relationship', ['creditor', 'debtor', 'both'], false)
+        : undefined;
     const updateData = {
-        name,
-        email: email || null,
-        phone: phone || null,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
+    if (validatedName !== undefined)
+        updateData.name = validatedName;
+    if (validatedEmail !== undefined)
+        updateData.email = validatedEmail;
+    if (validatedPhone !== undefined)
+        updateData.phone = validatedPhone;
+    if (validatedNotes !== undefined)
+        updateData.notes = validatedNotes;
+    if (validatedType !== undefined)
+        updateData.type = validatedType;
+    if (validatedRelationship !== undefined)
+        updateData.relationship = validatedRelationship;
     // Only update type/relationship/notes if provided
     if (type !== undefined) {
         updateData.type = type;
@@ -562,6 +663,15 @@ exports.createInvoice = (0, https_1.onCall)(async (request) => {
     }
     const userId = request.auth.uid;
     const { personId, amount, description, date, status, direction, dueDate, reminderDate, reminderEnabled, notes, isRecurring, recurringInterval } = request.data;
+    // Validate inputs
+    if (!personId || typeof personId !== 'string') {
+        throw new https_1.HttpsError('invalid-argument', 'personId is required and must be a string');
+    }
+    const validatedAmount = validateNumber(amount, 'amount', 1, 1000000000, true);
+    const validatedDescription = validateString(description, 'description', 500, true);
+    const validatedDate = validateDate(date, 'date', true);
+    const validatedStatus = validateEnum(status, 'status', ['open', 'paid', 'postponed', 'cancelled'], false) || 'open';
+    const validatedNotes = validateString(notes, 'notes', 5000, false);
     // Verify person belongs to user
     const personRef = db.collection('people').doc(personId);
     const personDoc = await personRef.get();
@@ -570,30 +680,35 @@ exports.createInvoice = (0, https_1.onCall)(async (request) => {
     }
     // direction: "incoming" (Person schuldet mir) | "outgoing" (Ich schulde Person)
     const personData = personDoc.data();
-    const invoiceDirection = direction || ((personData === null || personData === void 0 ? void 0 : personData.type) === 'external' ? 'incoming' : 'outgoing');
+    const invoiceDirection = direction
+        ? validateEnum(direction, 'direction', ['incoming', 'outgoing'], false)
+        : ((personData === null || personData === void 0 ? void 0 : personData.type) === 'external' ? 'incoming' : 'outgoing');
     const invoiceData = {
-        amount,
-        description,
-        date: admin.firestore.Timestamp.fromDate(new Date(date)),
-        status: status || 'open',
+        amount: validatedAmount,
+        description: validatedDescription,
+        date: admin.firestore.Timestamp.fromDate(validatedDate),
+        status: validatedStatus,
         direction: invoiceDirection,
-        notes: notes || null,
+        notes: validatedNotes,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
     // Add due date if provided
     if (dueDate) {
-        invoiceData.dueDate = admin.firestore.Timestamp.fromDate(new Date(dueDate));
+        const validatedDueDate = validateDate(dueDate, 'dueDate', false);
+        invoiceData.dueDate = admin.firestore.Timestamp.fromDate(validatedDueDate);
     }
     // Add reminder if enabled
     if (reminderEnabled && reminderDate) {
+        const validatedReminderDate = validateDate(reminderDate, 'reminderDate', false);
         invoiceData.reminderEnabled = true;
-        invoiceData.reminderDate = admin.firestore.Timestamp.fromDate(new Date(reminderDate));
+        invoiceData.reminderDate = admin.firestore.Timestamp.fromDate(validatedReminderDate);
     }
     // Add recurring settings
     if (isRecurring && recurringInterval) {
+        const validatedInterval = validateEnum(recurringInterval, 'recurringInterval', ['weekly', 'monthly', 'quarterly', 'yearly'], false);
         invoiceData.isRecurring = true;
-        invoiceData.recurringInterval = recurringInterval;
+        invoiceData.recurringInterval = validatedInterval;
         // Calculate next due date based on interval
         if (dueDate) {
             const nextDue = new Date(dueDate);
@@ -697,6 +812,17 @@ exports.updateInvoice = (0, https_1.onCall)(async (request) => {
     }
     const userId = request.auth.uid;
     const { personId, invoiceId, amount, description, date, dueDate, reminderDate, reminderEnabled, notes, isRecurring, recurringInterval } = request.data;
+    // Validate inputs
+    if (!personId || typeof personId !== 'string') {
+        throw new https_1.HttpsError('invalid-argument', 'personId is required and must be a string');
+    }
+    if (!invoiceId || typeof invoiceId !== 'string') {
+        throw new https_1.HttpsError('invalid-argument', 'invoiceId is required and must be a string');
+    }
+    const validatedAmount = amount !== undefined ? validateNumber(amount, 'amount', 1, 1000000000, true) : undefined;
+    const validatedDescription = description !== undefined ? validateString(description, 'description', 500, true) : undefined;
+    const validatedDate = date !== undefined ? validateDate(date, 'date', true) : undefined;
+    const validatedNotes = notes !== undefined ? validateString(notes, 'notes', 5000, false) : undefined;
     // Verify person belongs to user
     const personRef = db.collection('people').doc(personId);
     const personDoc = await personRef.get();
@@ -714,21 +840,25 @@ exports.updateInvoice = (0, https_1.onCall)(async (request) => {
     const updateData = {
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
-    if (description !== undefined)
-        updateData.description = description;
-    if (date !== undefined)
-        updateData.date = admin.firestore.Timestamp.fromDate(new Date(date));
-    if (notes !== undefined)
-        updateData.notes = notes;
+    if (validatedDescription !== undefined)
+        updateData.description = validatedDescription;
+    if (validatedDate !== undefined)
+        updateData.date = admin.firestore.Timestamp.fromDate(validatedDate);
+    if (validatedNotes !== undefined)
+        updateData.notes = validatedNotes;
+    if (validatedAmount !== undefined)
+        updateData.amount = validatedAmount;
     // Handle due date
     if (dueDate !== undefined) {
-        updateData.dueDate = dueDate ? admin.firestore.Timestamp.fromDate(new Date(dueDate)) : null;
+        const validatedDueDate = dueDate ? validateDate(dueDate, 'dueDate', false) : null;
+        updateData.dueDate = validatedDueDate ? admin.firestore.Timestamp.fromDate(validatedDueDate) : null;
     }
     // Handle reminder
     if (reminderEnabled !== undefined) {
         updateData.reminderEnabled = reminderEnabled;
         if (reminderEnabled && reminderDate) {
-            updateData.reminderDate = admin.firestore.Timestamp.fromDate(new Date(reminderDate));
+            const validatedReminderDate = validateDate(reminderDate, 'reminderDate', false);
+            updateData.reminderDate = admin.firestore.Timestamp.fromDate(validatedReminderDate);
         }
         else if (!reminderEnabled) {
             updateData.reminderDate = null;

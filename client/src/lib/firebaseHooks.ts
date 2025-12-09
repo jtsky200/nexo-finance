@@ -64,8 +64,6 @@ async function callFunctionWithTimeout<T = any>(
           throw new Error('Service nicht verfügbar. Bitte überprüfen Sie Ihre Internetverbindung');
         case 'data-loss':
           throw new Error('Datenverlust aufgetreten');
-        case 'unauthenticated':
-          throw new Error('Bitte melden Sie sich an');
         default:
           throw new Error(error.message || 'Ein Fehler ist aufgetreten');
       }

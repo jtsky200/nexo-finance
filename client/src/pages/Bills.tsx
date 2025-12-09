@@ -23,11 +23,9 @@ import { toast } from 'sonner';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import InvoiceScanner, { ScannedInvoiceData } from '@/components/InvoiceScanner';
 import PersonInvoicesDialog from '@/components/PersonInvoicesDialog';
-import { useLocation } from 'wouter';
 
 export default function Bills() {
   const { t } = useTranslation();
-  const [, setLocation] = useLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<Reminder | null>(null);

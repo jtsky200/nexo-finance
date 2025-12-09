@@ -25,7 +25,8 @@ import {
   usePersonReminders,
   createReminder,
   updateReminder,
-  deleteReminder
+  deleteReminder,
+  recordInstallmentPayment
 } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
 import InvoiceScanner, { ScannedInvoiceData } from './InvoiceScanner';
@@ -89,7 +90,8 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       refetchInvoices();
       refetchAppointments();
     }
-  }, [open, person?.id, refetchInvoices, refetchAppointments]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, person?.id]);
 
   // Update selected invoice when invoices data changes
   useEffect(() => {

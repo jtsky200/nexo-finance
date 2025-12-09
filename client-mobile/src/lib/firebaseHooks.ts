@@ -431,7 +431,27 @@ export interface Invoice {
   amount: number;
   description: string;
   date: Date;
+  dueDate?: Date; // Fälligkeitsdatum
+  reminderDate?: Date; // Erinnerungsdatum
+  reminderEnabled?: boolean;
+  isRecurring?: boolean; // Wiederkehrende Rechnung
+  recurringInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  isInstallmentPlan?: boolean; // Ratenvereinbarung
+  installmentCount?: number; // Anzahl Raten
+  installmentInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly'; // Ratenintervall
+  installments?: Array<{
+    number: number;
+    amount: number;
+    dueDate: Date | null;
+    paidAmount?: number;
+    paidDate?: Date | null;
+    status: 'open' | 'partial' | 'paid';
+  }>;
+  totalPaid?: number; // Gesamt bezahlt
+  installmentEndDate?: Date; // Enddatum der Ratenvereinbarung
   status: 'open' | 'paid' | 'postponed';
+  direction: 'incoming' | 'outgoing'; // incoming = Person schuldet mir, outgoing = Ich schulde Person
+  notes?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -451,12 +471,40 @@ export function usePersonInvoices(personId: string) {
       const result = await getInvoicesFunc({ personId });
       const data = result.data as { invoices: any[] };
       
-      const mappedInvoices = data.invoices.map((inv: any) => ({
-        ...inv,
-        date: inv.date?.toDate ? inv.date.toDate() : new Date(inv.date),
-        createdAt: inv.createdAt?.toDate ? inv.createdAt.toDate() : new Date(inv.createdAt),
-        updatedAt: inv.updatedAt?.toDate ? inv.updatedAt.toDate() : new Date(inv.updatedAt),
-      }));
+      const mappedInvoices = data.invoices.map((inv: any) => {
+        try {
+          const mapped: any = {
+            ...inv,
+            date: inv.date?.toDate ? inv.date.toDate() : (inv.date ? (typeof inv.date === 'string' ? new Date(inv.date) : new Date(inv.date)) : new Date()),
+            createdAt: inv.createdAt?.toDate ? inv.createdAt.toDate() : (inv.createdAt ? (typeof inv.createdAt === 'string' ? new Date(inv.createdAt) : new Date(inv.createdAt)) : new Date()),
+            updatedAt: inv.updatedAt?.toDate ? inv.updatedAt.toDate() : (inv.updatedAt ? (typeof inv.updatedAt === 'string' ? new Date(inv.updatedAt) : new Date(inv.updatedAt)) : new Date()),
+          };
+          
+          // Convert installment dates if present
+          if (inv.installments && Array.isArray(inv.installments)) {
+            mapped.installments = inv.installments.map((inst: any) => ({
+              ...inst,
+              dueDate: inst.dueDate?.toDate ? inst.dueDate.toDate() : (inst.dueDate ? (typeof inst.dueDate === 'string' ? new Date(inst.dueDate) : new Date(inst.dueDate)) : null),
+              paidDate: inst.paidDate?.toDate ? inst.paidDate.toDate() : (inst.paidDate ? (typeof inst.paidDate === 'string' ? new Date(inst.paidDate) : new Date(inst.paidDate)) : null),
+            }));
+          }
+          
+          if (inv.installmentEndDate) {
+            mapped.installmentEndDate = inv.installmentEndDate?.toDate ? inv.installmentEndDate.toDate() : (typeof inv.installmentEndDate === 'string' ? new Date(inv.installmentEndDate) : new Date(inv.installmentEndDate));
+          }
+          
+          return mapped;
+        } catch (err) {
+          console.error('Error mapping invoice:', inv, err);
+          // Return invoice with safe defaults
+          return {
+            ...inv,
+            date: new Date(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+        }
+      });
       
       setInvoices(mappedInvoices);
       setError(null);
@@ -478,13 +526,41 @@ export function usePersonInvoices(personId: string) {
   return { data: invoices, isLoading, error, refetch };
 }
 
-export async function createInvoice(personId: string, data: { amount: number; description: string; date: Date; status?: string }) {
+export async function createInvoice(personId: string, data: { 
+  amount: number; 
+  description: string; 
+  date: Date; 
+  status?: string; 
+  direction?: 'incoming' | 'outgoing';
+  dueDate?: Date;
+  reminderDate?: Date;
+  reminderEnabled?: boolean;
+  notes?: string;
+  isRecurring?: boolean;
+  recurringInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  isInstallmentPlan?: boolean;
+  installmentCount?: number;
+  installmentInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+}) {
   const createInvoiceFunc = httpsCallable(functions, 'createInvoice');
   const result = await createInvoiceFunc({ personId, ...data });
   return result.data;
 }
 
-export async function updateInvoice(personId: string, invoiceId: string, data: { amount?: number; description?: string; date?: Date }) {
+export async function updateInvoice(personId: string, invoiceId: string, data: { 
+  amount?: number; 
+  description?: string; 
+  date?: Date;
+  dueDate?: Date;
+  reminderDate?: Date;
+  reminderEnabled?: boolean;
+  notes?: string;
+  isRecurring?: boolean;
+  recurringInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  isInstallmentPlan?: boolean;
+  installmentCount?: number;
+  installmentInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+}) {
   const updateInvoiceFunc = httpsCallable(functions, 'updateInvoice');
   await updateInvoiceFunc({ personId, invoiceId, ...data });
 }
@@ -497,4 +573,26 @@ export async function updateInvoiceStatus(personId: string, invoiceId: string, s
 export async function deleteInvoice(personId: string, invoiceId: string) {
   const deleteInvoiceFunc = httpsCallable(functions, 'deleteInvoice');
   await deleteInvoiceFunc({ personId, invoiceId });
+}
+
+export async function recordInstallmentPayment(personId: string, invoiceId: string, installmentNumber: number, paidAmount: number, paidDate?: Date) {
+  const recordPaymentFunc = httpsCallable(functions, 'recordInstallmentPayment');
+  const result = await recordPaymentFunc({ 
+    personId, 
+    invoiceId, 
+    installmentNumber, 
+    paidAmount, 
+    paidDate: paidDate || new Date() 
+  });
+  return result.data;
+}
+
+export async function updateInstallmentPlan(personId: string, invoiceId: string, data: {
+  installmentCount?: number;
+  installmentInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  startDate?: Date;
+}) {
+  const updatePlanFunc = httpsCallable(functions, 'updateInstallmentPlan');
+  const result = await updatePlanFunc({ personId, invoiceId, ...data });
+  return result.data;
 }

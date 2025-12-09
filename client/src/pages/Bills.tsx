@@ -16,7 +16,7 @@ import {
   Plus, Search, Filter, Calendar, Clock, AlertTriangle, 
   CheckCircle2, FileText, Trash2, Edit2, 
   MoreVertical, Camera, Copy, Building2, Banknote,
-  ClipboardList, CalendarClock
+  ClipboardList, CalendarClock, Eye, Files
 } from 'lucide-react';
 import { useReminders, createReminder, updateReminder, deleteReminder, useFinanceEntries, createFinanceEntry, Reminder, useAllBills, Bill, updateInvoiceStatus, usePeople } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
@@ -24,7 +24,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import InvoiceScanner, { ScannedInvoiceData } from '@/components/InvoiceScanner';
 import PersonInvoicesDialog from '@/components/PersonInvoicesDialog';
 import { useLocation } from 'wouter';
-import { Eye, Copy, Files, Share2, Download } from 'lucide-react';
 
 export default function Bills() {
   const { t } = useTranslation();

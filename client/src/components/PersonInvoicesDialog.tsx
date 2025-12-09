@@ -542,13 +542,15 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                         <Button
                           variant="outline"
                           size="sm"
-                          className="w-full mt-2 h-8 text-xs"
+                          className="w-full mt-2 h-9 text-sm font-medium"
                           onClick={() => {
+                            console.log('Opening installment dialog for invoice:', invoice);
                             setSelectedInvoiceForPayment(invoice);
                             setShowInstallmentPaymentDialog(true);
                           }}
                         >
-                          Rate bezahlen
+                          <CreditCard className="w-4 h-4 mr-2" />
+                          Ratenverwaltung öffnen
                         </Button>
                       </div>
                     )}
@@ -1586,7 +1588,15 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 <div className="space-y-2 max-h-[400px] overflow-y-auto">
                   {selectedInvoiceForPayment.installments.map((inst: any, idx: number) => {
                     const remaining = inst.amount - (inst.paidAmount || 0);
-                    const isOverdue = inst.dueDate && new Date(inst.dueDate.toDate ? inst.dueDate.toDate() : inst.dueDate) < new Date() && inst.status !== 'paid';
+                    let dueDateObj: Date | null = null;
+                    if (inst.dueDate) {
+                      try {
+                        dueDateObj = inst.dueDate?.toDate ? inst.dueDate.toDate() : (typeof inst.dueDate === 'string' ? new Date(inst.dueDate) : new Date(inst.dueDate));
+                      } catch (e) {
+                        console.error('Error parsing dueDate:', e);
+                      }
+                    }
+                    const isOverdue = dueDateObj && dueDateObj < new Date() && inst.status !== 'paid';
                     
                     return (
                       <div 
@@ -1832,7 +1842,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               )}
             </div>
           )}
-          <DialogFooter className="mt-4 gap-2">
+          <DialogFooter className="mt-6 pt-4 border-t gap-2">
             <Button 
               variant="outline" 
               onClick={() => {
@@ -1845,6 +1855,26 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
             >
               Schliessen
             </Button>
+            {selectedInvoiceForPayment && selectedInvoiceForPayment.installments && selectedInvoiceForPayment.installments.length > 0 && (
+              <Button 
+                variant="default"
+                onClick={async () => {
+                  try {
+                    await refreshData();
+                    const updatedInvoice = invoices.find((inv: any) => inv.id === selectedInvoiceForPayment.id);
+                    if (updatedInvoice) {
+                      setSelectedInvoiceForPayment(updatedInvoice);
+                      toast.success('Daten aktualisiert');
+                    }
+                  } catch (error) {
+                    console.error('Error refreshing:', error);
+                  }
+                }}
+                className="h-10"
+              >
+                Aktualisieren
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

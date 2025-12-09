@@ -24,7 +24,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import InvoiceScanner, { ScannedInvoiceData } from '@/components/InvoiceScanner';
 import PersonInvoicesDialog from '@/components/PersonInvoicesDialog';
 import { useLocation } from 'wouter';
-import { Eye, Copy, FileCopy, Share2, Download } from 'lucide-react';
+import { Eye, Copy, Files, Share2, Download } from 'lucide-react';
 
 export default function Bills() {
   const { t } = useTranslation();
@@ -424,7 +424,7 @@ export default function Bills() {
                   
                   {bill.reference && (
                     <DropdownMenuItem onClick={() => copyToClipboard(bill.reference!, 'Referenz')}>
-                      <FileCopy className="w-4 h-4 mr-2" />
+                      <Files className="w-4 h-4 mr-2" />
                       Referenz kopieren
                     </DropdownMenuItem>
                   )}
@@ -433,8 +433,8 @@ export default function Bills() {
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => handleDuplicateInvoice(bill)}>
-                        <FileCopy className="w-4 h-4 mr-2" />
-                        Rechnung duplizieren
+                      <Files className="w-4 h-4 mr-2" />
+                      Rechnung duplizieren
                       </DropdownMenuItem>
                     </>
                   )}

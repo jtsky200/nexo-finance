@@ -26,7 +26,8 @@ import {
   createReminder,
   updateReminder,
   deleteReminder,
-  recordInstallmentPayment
+  recordInstallmentPayment,
+  convertToInstallmentPlan
 } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
 import InvoiceScanner, { ScannedInvoiceData } from './InvoiceScanner';
@@ -52,6 +53,10 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
   const [selectedInvoiceForPayment, setSelectedInvoiceForPayment] = useState<any>(null);
   const [selectedInstallment, setSelectedInstallment] = useState<any>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [showConvertToInstallmentDialog, setShowConvertToInstallmentDialog] = useState(false);
+  const [invoiceToConvert, setInvoiceToConvert] = useState<any>(null);
+  const [convertInstallmentCount, setConvertInstallmentCount] = useState('3');
+  const [convertInstallmentInterval, setConvertInstallmentInterval] = useState<'weekly' | 'monthly' | 'quarterly' | 'yearly'>('monthly');
   const [newAppointment, setNewAppointment] = useState({
     title: '',
     type: 'termin' as 'termin' | 'aufgabe' | 'geburtstag' | 'andere',
@@ -278,6 +283,34 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     }
   };
 
+  const handleConvertToInstallment = async () => {
+    if (!invoiceToConvert || !convertInstallmentCount || parseInt(convertInstallmentCount) < 2) {
+      toast.error('Bitte Anzahl Raten eingeben (mindestens 2)');
+      return;
+    }
+
+    try {
+      await convertToInstallmentPlan(person.id, invoiceToConvert.id, {
+        installmentCount: parseInt(convertInstallmentCount),
+        installmentInterval: convertInstallmentInterval,
+        startDate: invoiceToConvert.dueDate ? new Date(invoiceToConvert.dueDate) : new Date(),
+      });
+      toast.success('Rechnung erfolgreich in Raten umgewandelt');
+      setShowConvertToInstallmentDialog(false);
+      setInvoiceToConvert(null);
+      setConvertInstallmentCount('3');
+      setConvertInstallmentInterval('monthly');
+      try {
+        await refreshData();
+      } catch (refreshError) {
+        console.error('Error refreshing data:', refreshError);
+      }
+    } catch (error: any) {
+      console.error('Error converting to installment:', error);
+      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+    }
+  };
+
   const handleUpdateInvoice = async () => {
     if (!editingInvoice || !editingInvoice.amount || !editingInvoice.description) {
       toast.error('Bitte alle Felder ausfüllen');
@@ -428,6 +461,23 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                     <Camera className="w-4 h-4 mr-2" />
                     Scannen
                   </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setNewInvoice({
+                        ...newInvoice,
+                        isInstallmentPlan: true,
+                        installmentCount: 3,
+                        installmentInterval: 'monthly',
+                      });
+                      setShowAddDialog(true);
+                    }} 
+                    size="sm"
+                    className="border-primary/20 text-primary hover:bg-primary/5"
+                  >
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    Raten
+                  </Button>
                   <Button onClick={() => setShowAddDialog(true)} size="sm">
                     <Plus className="w-4 h-4 mr-2" />
                     Rechnung
@@ -551,6 +601,24 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                         >
                           <CreditCard className="w-4 h-4 mr-2" />
                           Ratenverwaltung öffnen
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {/* Convert to Installment Button (for non-installment invoices) */}
+                    {!invoice.isInstallmentPlan && invoice.status !== 'paid' && (
+                      <div className="mb-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full h-9 text-sm font-medium border-primary/20 text-primary hover:bg-primary/5"
+                          onClick={() => {
+                            setInvoiceToConvert(invoice);
+                            setShowConvertToInstallmentDialog(true);
+                          }}
+                        >
+                          <CreditCard className="w-4 h-4 mr-2" />
+                          In Raten umwandeln
                         </Button>
                       </div>
                     )}
@@ -1875,6 +1943,98 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 Aktualisieren
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Convert to Installment Dialog */}
+      <Dialog open={showConvertToInstallmentDialog} onOpenChange={setShowConvertToInstallmentDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <CreditCard className="w-5 h-5" />
+              In Raten umwandeln
+            </DialogTitle>
+            {invoiceToConvert && (
+              <p className="text-sm text-muted-foreground mt-1">
+                Rechnung: {invoiceToConvert.description} - {formatAmount(invoiceToConvert.amount)}
+              </p>
+            )}
+          </DialogHeader>
+          
+          {invoiceToConvert && (
+            <div className="space-y-4 py-4">
+              <div>
+                <Label>Anzahl Raten *</Label>
+                <Input
+                  type="number"
+                  min="2"
+                  max="60"
+                  value={convertInstallmentCount}
+                  onChange={(e) => setConvertInstallmentCount(e.target.value)}
+                  placeholder="z.B. 3"
+                  className="mt-2 h-10"
+                />
+              </div>
+              
+              <div>
+                <Label>Ratenintervall *</Label>
+                <Select
+                  value={convertInstallmentInterval}
+                  onValueChange={(value: any) => setConvertInstallmentInterval(value)}
+                >
+                  <SelectTrigger className="mt-2 h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="weekly">Wöchentlich</SelectItem>
+                    <SelectItem value="monthly">Monatlich</SelectItem>
+                    <SelectItem value="quarterly">Vierteljährlich</SelectItem>
+                    <SelectItem value="yearly">Jährlich</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {convertInstallmentCount && parseInt(convertInstallmentCount) >= 2 && (
+                <div className="p-4 bg-muted rounded-lg">
+                  <p className="text-sm font-medium mb-2">Ratenübersicht</p>
+                  <p className="text-xs text-muted-foreground">
+                    Ratenbetrag: {((invoiceToConvert.amount / 100) / parseInt(convertInstallmentCount)).toFixed(2)} CHF
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {(() => {
+                      const startDate = invoiceToConvert.dueDate ? new Date(invoiceToConvert.dueDate) : new Date();
+                      const lastDate = new Date(startDate);
+                      switch (convertInstallmentInterval) {
+                        case 'weekly': lastDate.setDate(lastDate.getDate() + ((parseInt(convertInstallmentCount) - 1) * 7)); break;
+                        case 'monthly': lastDate.setMonth(lastDate.getMonth() + (parseInt(convertInstallmentCount) - 1)); break;
+                        case 'quarterly': lastDate.setMonth(lastDate.getMonth() + ((parseInt(convertInstallmentCount) - 1) * 3)); break;
+                        case 'yearly': lastDate.setFullYear(lastDate.getFullYear() + (parseInt(convertInstallmentCount) - 1)); break;
+                      }
+                      return `Letzte Rate fällig: ${lastDate.toLocaleDateString('de-CH')}`;
+                    })()}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          
+          <DialogFooter className="mt-4 gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowConvertToInstallmentDialog(false);
+                setInvoiceToConvert(null);
+                setConvertInstallmentCount('3');
+                setConvertInstallmentInterval('monthly');
+              }} 
+              className="h-10"
+            >
+              Abbrechen
+            </Button>
+            <Button onClick={handleConvertToInstallment} className="h-10">
+              Umwandeln
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

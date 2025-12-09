@@ -44,8 +44,8 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSchoolSchedules = exports.createSchoolSchedule = exports.getChildren = exports.deleteVacation = exports.updateVacation = exports.createVacation = exports.getVacations = exports.deleteWorkSchedule = exports.updateWorkSchedule = exports.createWorkSchedule = exports.getWorkSchedules = exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.getAllBills = exports.updateInstallmentPlan = exports.recordInstallmentPayment = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
-exports.getReceipts = exports.getStores = exports.getStoreItems = exports.saveReceipt = exports.analyzeSingleLine = exports.analyzeReceipt = exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = exports.createSchoolHoliday = exports.deleteSchoolSchedule = void 0;
+exports.createSchoolSchedule = exports.getChildren = exports.deleteVacation = exports.updateVacation = exports.createVacation = exports.getVacations = exports.deleteWorkSchedule = exports.updateWorkSchedule = exports.createWorkSchedule = exports.getWorkSchedules = exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.getAllBills = exports.convertToInstallmentPlan = exports.updateInstallmentPlan = exports.recordInstallmentPayment = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
+exports.getReceipts = exports.getStores = exports.getStoreItems = exports.saveReceipt = exports.analyzeSingleLine = exports.analyzeReceipt = exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
@@ -960,6 +960,95 @@ exports.updateInstallmentPlan = (0, https_1.onCall)(async (request) => {
         installments: installments.map((inst) => (Object.assign(Object.assign({}, inst), { dueDate: inst.dueDate ? (typeof inst.dueDate === 'string' ? admin.firestore.Timestamp.fromDate(new Date(inst.dueDate)) : inst.dueDate) : inst.dueDate, paidDate: inst.paidDate ? (typeof inst.paidDate === 'string' ? admin.firestore.Timestamp.fromDate(new Date(inst.paidDate)) : inst.paidDate) : inst.paidDate, paidAmount: parseFloat((inst.paidAmount || 0).toFixed(2)), amount: parseFloat((inst.amount || 0).toFixed(2)) }))),
         totalPaid: parseFloat(totalPaid.toFixed(2)),
         status: allPaid ? 'paid' : invoiceData.status,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { success: true };
+});
+exports.convertToInstallmentPlan = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { personId, invoiceId, installmentCount, installmentInterval, startDate } = request.data;
+    // Verify person belongs to user
+    const personRef = db.collection('people').doc(personId);
+    const personDoc = await personRef.get();
+    if (!personDoc.exists || ((_a = personDoc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized to access this person');
+    }
+    // Get invoice
+    const invoiceRef = personRef.collection('invoices').doc(invoiceId);
+    const invoiceDoc = await invoiceRef.get();
+    if (!invoiceDoc.exists) {
+        throw new https_1.HttpsError('not-found', 'Invoice not found');
+    }
+    const invoiceData = invoiceDoc.data();
+    if (invoiceData === null || invoiceData === void 0 ? void 0 : invoiceData.isInstallmentPlan) {
+        throw new https_1.HttpsError('invalid-argument', 'Invoice is already an installment plan');
+    }
+    if ((invoiceData === null || invoiceData === void 0 ? void 0 : invoiceData.status) === 'paid') {
+        throw new https_1.HttpsError('invalid-argument', 'Cannot convert paid invoice to installment plan');
+    }
+    const amount = invoiceData.amount / 100; // Convert from cents to CHF
+    const installmentAmount = parseFloat((amount / installmentCount).toFixed(2));
+    const interval = installmentInterval || 'monthly';
+    const start = startDate ? new Date(startDate) : (invoiceData.dueDate ? new Date(invoiceData.dueDate.toDate ? invoiceData.dueDate.toDate() : invoiceData.dueDate) : new Date());
+    const installments = [];
+    for (let i = 0; i < installmentCount; i++) {
+        const installmentDate = new Date(start);
+        switch (interval) {
+            case 'weekly':
+                installmentDate.setDate(installmentDate.getDate() + (i * 7));
+                break;
+            case 'monthly':
+                installmentDate.setMonth(installmentDate.getMonth() + i);
+                break;
+            case 'quarterly':
+                installmentDate.setMonth(installmentDate.getMonth() + (i * 3));
+                break;
+            case 'yearly':
+                installmentDate.setFullYear(installmentDate.getFullYear() + i);
+                break;
+        }
+        installments.push({
+            number: i + 1,
+            amount: installmentAmount,
+            dueDate: admin.firestore.Timestamp.fromDate(installmentDate),
+            status: 'open',
+            paidDate: null,
+            paidAmount: 0,
+        });
+    }
+    // Adjust last installment to account for rounding
+    const totalInstallmentAmount = installments.reduce((sum, inst) => sum + inst.amount, 0);
+    if (totalInstallmentAmount !== amount) {
+        installments[installments.length - 1].amount = parseFloat((amount - (totalInstallmentAmount - installments[installments.length - 1].amount)).toFixed(2));
+    }
+    // Calculate end date
+    const endDate = new Date(start);
+    switch (interval) {
+        case 'weekly':
+            endDate.setDate(endDate.getDate() + ((installmentCount - 1) * 7));
+            break;
+        case 'monthly':
+            endDate.setMonth(endDate.getMonth() + (installmentCount - 1));
+            break;
+        case 'quarterly':
+            endDate.setMonth(endDate.getMonth() + ((installmentCount - 1) * 3));
+            break;
+        case 'yearly':
+            endDate.setFullYear(endDate.getFullYear() + (installmentCount - 1));
+            break;
+    }
+    // Update invoice
+    await invoiceRef.update({
+        isInstallmentPlan: true,
+        installmentCount,
+        installmentInterval: interval,
+        installments,
+        totalPaid: 0,
+        installmentEndDate: admin.firestore.Timestamp.fromDate(endDate),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     return { success: true };

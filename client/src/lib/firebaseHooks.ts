@@ -716,6 +716,16 @@ export async function deleteInvoice(personId: string, invoiceId: string) {
   await deleteInvoiceFunc({ personId, invoiceId });
 }
 
+export async function convertToInstallmentPlan(personId: string, invoiceId: string, data: {
+  installmentCount: number;
+  installmentInterval: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  startDate?: Date;
+}) {
+  const convertFunc = httpsCallable(functions, 'convertToInstallmentPlan');
+  const result = await convertFunc({ personId, invoiceId, ...data });
+  return result.data;
+}
+
 // ========== Stores & Receipt Hooks ==========
 
 export interface StoreItem {

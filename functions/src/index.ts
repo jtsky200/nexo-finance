@@ -1105,6 +1105,94 @@ export const updateInstallmentPlan = onCall(async (request) => {
   return { success: true };
 });
 
+export const convertToInstallmentPlan = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { personId, invoiceId, installmentCount, installmentInterval, startDate } = request.data;
+
+  // Verify person belongs to user
+  const personRef = db.collection('people').doc(personId);
+  const personDoc = await personRef.get();
+
+  if (!personDoc.exists || personDoc.data()?.userId !== userId) {
+    throw new HttpsError('permission-denied', 'Not authorized to access this person');
+  }
+
+  // Get invoice
+  const invoiceRef = personRef.collection('invoices').doc(invoiceId);
+  const invoiceDoc = await invoiceRef.get();
+
+  if (!invoiceDoc.exists) {
+    throw new HttpsError('not-found', 'Invoice not found');
+  }
+
+  const invoiceData = invoiceDoc.data();
+  
+  if (invoiceData?.isInstallmentPlan) {
+    throw new HttpsError('invalid-argument', 'Invoice is already an installment plan');
+  }
+
+  if (invoiceData?.status === 'paid') {
+    throw new HttpsError('invalid-argument', 'Cannot convert paid invoice to installment plan');
+  }
+
+  const amount = invoiceData.amount / 100; // Convert from cents to CHF
+  const installmentAmount = parseFloat((amount / installmentCount).toFixed(2));
+  const interval = installmentInterval || 'monthly';
+  const start = startDate ? new Date(startDate) : (invoiceData.dueDate ? new Date(invoiceData.dueDate.toDate ? invoiceData.dueDate.toDate() : invoiceData.dueDate) : new Date());
+  
+  const installments = [];
+  for (let i = 0; i < installmentCount; i++) {
+    const installmentDate = new Date(start);
+    switch (interval) {
+      case 'weekly': installmentDate.setDate(installmentDate.getDate() + (i * 7)); break;
+      case 'monthly': installmentDate.setMonth(installmentDate.getMonth() + i); break;
+      case 'quarterly': installmentDate.setMonth(installmentDate.getMonth() + (i * 3)); break;
+      case 'yearly': installmentDate.setFullYear(installmentDate.getFullYear() + i); break;
+    }
+    
+    installments.push({
+      number: i + 1,
+      amount: installmentAmount,
+      dueDate: admin.firestore.Timestamp.fromDate(installmentDate),
+      status: 'open',
+      paidDate: null,
+      paidAmount: 0,
+    });
+  }
+  
+  // Adjust last installment to account for rounding
+  const totalInstallmentAmount = installments.reduce((sum, inst) => sum + inst.amount, 0);
+  if (totalInstallmentAmount !== amount) {
+    installments[installments.length - 1].amount = parseFloat((amount - (totalInstallmentAmount - installments[installments.length - 1].amount)).toFixed(2));
+  }
+  
+  // Calculate end date
+  const endDate = new Date(start);
+  switch (interval) {
+    case 'weekly': endDate.setDate(endDate.getDate() + ((installmentCount - 1) * 7)); break;
+    case 'monthly': endDate.setMonth(endDate.getMonth() + (installmentCount - 1)); break;
+    case 'quarterly': endDate.setMonth(endDate.getMonth() + ((installmentCount - 1) * 3)); break;
+    case 'yearly': endDate.setFullYear(endDate.getFullYear() + (installmentCount - 1)); break;
+  }
+
+  // Update invoice
+  await invoiceRef.update({
+    isInstallmentPlan: true,
+    installmentCount,
+    installmentInterval: interval,
+    installments,
+    totalPaid: 0,
+    installmentEndDate: admin.firestore.Timestamp.fromDate(endDate),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { success: true };
+});
+
 // ========== Bills Functions (All Invoices) ==========
 
 export const getAllBills = onCall(async (request) => {

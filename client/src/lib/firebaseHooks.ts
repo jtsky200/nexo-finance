@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+
 import { 
   collection, 
   query, 
@@ -12,8 +13,9 @@ import {
   Timestamp,
   QueryConstraint
 } from 'firebase/firestore';
-import { db, functions } from './firebase';
 import { httpsCallable } from 'firebase/functions';
+
+import { db, functions } from './firebase';
 
 // ========== Reminders Hooks ==========
 
@@ -669,6 +671,7 @@ export async function createInvoice(personId: string, data: {
   recurringInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
   isInstallmentPlan?: boolean;
   installmentCount?: number;
+  installmentDuration?: number;
   installmentInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
 }) {
   const createInvoiceFunc = httpsCallable(functions, 'createInvoice');
@@ -716,8 +719,15 @@ export async function deleteInvoice(personId: string, invoiceId: string) {
   await deleteInvoiceFunc({ personId, invoiceId });
 }
 
+export async function updateInstallmentPlan(personId: string, invoiceId: string, installments: any[]) {
+  const updateFunc = httpsCallable(functions, 'updateInstallmentPlan');
+  const result = await updateFunc({ personId, invoiceId, installments });
+  return result.data;
+}
+
 export async function convertToInstallmentPlan(personId: string, invoiceId: string, data: {
-  installmentCount: number;
+  installmentDuration?: number;
+  installmentCount?: number;
   installmentInterval: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
   startDate?: Date;
 }) {

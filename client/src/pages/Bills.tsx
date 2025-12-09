@@ -108,7 +108,7 @@ export default function Bills() {
 
   const getStatusInfo = (bill: Bill | Reminder) => {
     const dueDate = 'dueDate' in bill ? bill.dueDate : null;
-    const daysUntil = dueDate ? getDaysUntilDue(dueDate) : 999;
+    const daysUntil = dueDate ? getDaysUntilDue(dueDate instanceof Date ? dueDate : new Date(dueDate)) : 999;
     const status = 'status' in bill ? bill.status : 'open';
     
     if (status === 'paid' || status === 'erledigt') {

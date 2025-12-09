@@ -556,7 +556,7 @@ exports.getPersonInvoices = (0, https_1.onCall)(async (request) => {
     return { invoices };
 });
 exports.createInvoice = (0, https_1.onCall)(async (request) => {
-    var _a;
+    var _a, _b;
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
@@ -615,12 +615,34 @@ exports.createInvoice = (0, https_1.onCall)(async (request) => {
         }
     }
     // Handle installment plan if enabled
-    if (request.data.isInstallmentPlan && request.data.installmentCount && request.data.installmentCount > 1) {
-        const installmentAmount = parseFloat((amount / request.data.installmentCount).toFixed(2));
+    if (request.data.isInstallmentPlan) {
         const installmentInterval = request.data.installmentInterval || 'monthly';
         const startDate = dueDate ? new Date(dueDate) : new Date(date);
+        // Calculate installment count from duration or use provided count (backward compatibility)
+        let installmentCount = request.data.installmentCount;
+        if (request.data.installmentDuration && request.data.installmentDuration > 0) {
+            // Calculate count based on duration and interval
+            switch (installmentInterval) {
+                case 'weekly':
+                    installmentCount = request.data.installmentDuration;
+                    break;
+                case 'monthly':
+                    installmentCount = request.data.installmentDuration;
+                    break;
+                case 'quarterly':
+                    installmentCount = request.data.installmentDuration * 3;
+                    break;
+                case 'yearly':
+                    installmentCount = request.data.installmentDuration;
+                    break;
+            }
+        }
+        if (!installmentCount || installmentCount < 2) {
+            throw new https_1.HttpsError('invalid-argument', 'Installment count must be at least 2');
+        }
+        const installmentAmount = parseFloat((amount / installmentCount).toFixed(2));
         const installments = [];
-        for (let i = 0; i < request.data.installmentCount; i++) {
+        for (let i = 0; i < installmentCount; i++) {
             const installmentDate = new Date(startDate);
             switch (installmentInterval) {
                 case 'weekly':
@@ -643,6 +665,7 @@ exports.createInvoice = (0, https_1.onCall)(async (request) => {
                 status: 'pending',
                 paidDate: null,
                 paidAmount: 0,
+                notes: ((_b = request.data.installmentNotes) === null || _b === void 0 ? void 0 : _b[i]) || '', // Add notes field per installment
             });
         }
         // Adjust last installment to account for rounding
@@ -651,7 +674,7 @@ exports.createInvoice = (0, https_1.onCall)(async (request) => {
             installments[installments.length - 1].amount = parseFloat((amount - (totalInstallmentAmount - installments[installments.length - 1].amount)).toFixed(2));
         }
         invoiceData.isInstallmentPlan = true;
-        invoiceData.installmentCount = request.data.installmentCount;
+        invoiceData.installmentCount = installmentCount;
         invoiceData.installmentInterval = installmentInterval;
         invoiceData.installments = installments;
         invoiceData.totalPaid = 0;
@@ -970,7 +993,7 @@ exports.convertToInstallmentPlan = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
     const userId = request.auth.uid;
-    const { personId, invoiceId, installmentCount, installmentInterval, startDate } = request.data;
+    const { personId, invoiceId, installmentDuration, installmentInterval, startDate, installmentCount } = request.data;
     // Verify person belongs to user
     const personRef = db.collection('people').doc(personId);
     const personDoc = await personRef.get();
@@ -994,11 +1017,33 @@ exports.convertToInstallmentPlan = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('invalid-argument', 'Cannot convert paid invoice to installment plan');
     }
     const amount = invoiceData.amount / 100; // Convert from cents to CHF
-    const installmentAmount = parseFloat((amount / installmentCount).toFixed(2));
     const interval = installmentInterval || 'monthly';
     const start = startDate ? new Date(startDate) : (invoiceData.dueDate ? new Date(invoiceData.dueDate.toDate ? invoiceData.dueDate.toDate() : invoiceData.dueDate) : new Date());
+    // Calculate installment count from duration or use provided count (backward compatibility)
+    let count = installmentCount;
+    if (installmentDuration && installmentDuration > 0) {
+        // Calculate count based on duration and interval
+        switch (interval) {
+            case 'weekly':
+                count = installmentDuration;
+                break;
+            case 'monthly':
+                count = installmentDuration;
+                break;
+            case 'quarterly':
+                count = installmentDuration * 3;
+                break;
+            case 'yearly':
+                count = installmentDuration;
+                break;
+        }
+    }
+    if (!count || count < 2) {
+        throw new https_1.HttpsError('invalid-argument', 'Installment count must be at least 2');
+    }
+    const installmentAmount = parseFloat((amount / count).toFixed(2));
     const installments = [];
-    for (let i = 0; i < installmentCount; i++) {
+    for (let i = 0; i < count; i++) {
         const installmentDate = new Date(start);
         switch (interval) {
             case 'weekly':
@@ -1021,6 +1066,7 @@ exports.convertToInstallmentPlan = (0, https_1.onCall)(async (request) => {
             status: 'open',
             paidDate: null,
             paidAmount: 0,
+            notes: '', // Add notes field
         });
     }
     // Adjust last installment to account for rounding
@@ -1032,22 +1078,22 @@ exports.convertToInstallmentPlan = (0, https_1.onCall)(async (request) => {
     const endDate = new Date(start);
     switch (interval) {
         case 'weekly':
-            endDate.setDate(endDate.getDate() + ((installmentCount - 1) * 7));
+            endDate.setDate(endDate.getDate() + ((count - 1) * 7));
             break;
         case 'monthly':
-            endDate.setMonth(endDate.getMonth() + (installmentCount - 1));
+            endDate.setMonth(endDate.getMonth() + (count - 1));
             break;
         case 'quarterly':
-            endDate.setMonth(endDate.getMonth() + ((installmentCount - 1) * 3));
+            endDate.setMonth(endDate.getMonth() + ((count - 1) * 3));
             break;
         case 'yearly':
-            endDate.setFullYear(endDate.getFullYear() + (installmentCount - 1));
+            endDate.setFullYear(endDate.getFullYear() + (count - 1));
             break;
     }
     // Update invoice
     await invoiceRef.update({
         isInstallmentPlan: true,
-        installmentCount,
+        installmentCount: count,
         installmentInterval: interval,
         installments,
         totalPaid: 0,

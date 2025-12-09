@@ -18,11 +18,13 @@ import {
   MoreVertical, Camera, Copy, Building2, Banknote,
   ClipboardList, CalendarClock
 } from 'lucide-react';
-import { useReminders, createReminder, updateReminder, deleteReminder, useFinanceEntries, createFinanceEntry, Reminder, useAllBills, Bill, updateInvoiceStatus } from '@/lib/firebaseHooks';
+import { useReminders, createReminder, updateReminder, deleteReminder, useFinanceEntries, createFinanceEntry, Reminder, useAllBills, Bill, updateInvoiceStatus, usePeople } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import InvoiceScanner, { ScannedInvoiceData } from '@/components/InvoiceScanner';
+import PersonInvoicesDialog from '@/components/PersonInvoicesDialog';
 import { useLocation } from 'wouter';
+import { Eye, Copy, FileCopy, Share2, Download } from 'lucide-react';
 
 export default function Bills() {
   const { t } = useTranslation();
@@ -34,9 +36,13 @@ export default function Bills() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('pending');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [showPersonDialog, setShowPersonDialog] = useState(false);
+  const [selectedPerson, setSelectedPerson] = useState<any>(null);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
 
   // Fetch ALL bills (from people/invoices AND payment reminders)
   const { data: allBills = [], stats, isLoading, refetch } = useAllBills();
+  const { data: people = [] } = usePeople();
   
   // For backward compatibility with existing code, map bills
   const bills = allBills;
@@ -378,25 +384,61 @@ export default function Bills() {
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end" className="w-56">
                   {bill.status !== 'paid' && (
                     <DropdownMenuItem onClick={() => handleMarkBillAsPaid(bill)}>
                       <CheckCircle2 className="w-4 h-4 mr-2 text-green-600" />
                       {t('bills.markAsPaid', 'Als bezahlt markieren')}
                     </DropdownMenuItem>
                   )}
+                  
                   {bill.source === 'person' && bill.personId && (
-                    <DropdownMenuItem onClick={() => setLocation('/people')}>
-                      <FileText className="w-4 h-4 mr-2" />
-                      Zur Person
-                    </DropdownMenuItem>
+                    <>
+                      <DropdownMenuItem onClick={() => handleOpenPersonDialog(bill.personId!, bill.id)}>
+                        <Eye className="w-4 h-4 mr-2" />
+                        Rechnung anzeigen
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleOpenPersonDialog(bill.personId!)}>
+                        <FileText className="w-4 h-4 mr-2" />
+                        Zur Person
+                      </DropdownMenuItem>
+                    </>
                   )}
+                  
                   {bill.source === 'reminder' && (
                     <DropdownMenuItem onClick={() => openEditDialogFromBill(bill)}>
                       <Edit2 className="w-4 h-4 mr-2" />
                       {t('common.edit', 'Bearbeiten')}
                     </DropdownMenuItem>
                   )}
+                  
+                  {bill.iban && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => copyToClipboard(bill.iban!, 'IBAN')}>
+                        <Copy className="w-4 h-4 mr-2" />
+                        IBAN kopieren
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  
+                  {bill.reference && (
+                    <DropdownMenuItem onClick={() => copyToClipboard(bill.reference!, 'Referenz')}>
+                      <FileCopy className="w-4 h-4 mr-2" />
+                      Referenz kopieren
+                    </DropdownMenuItem>
+                  )}
+                  
+                  {bill.source === 'person' && bill.personId && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => handleDuplicateInvoice(bill)}>
+                        <FileCopy className="w-4 h-4 mr-2" />
+                        Rechnung duplizieren
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  
                   <DropdownMenuSeparator />
                   <DropdownMenuItem 
                     onClick={() => handleDeleteBill(bill)}
@@ -453,6 +495,43 @@ export default function Bills() {
       return;
     }
     setDeleteConfirmId(bill.id);
+  };
+
+  // Handle open person dialog
+  const handleOpenPersonDialog = (personId: string, invoiceId?: string) => {
+    const person = people.find(p => p.id === personId);
+    if (person) {
+      setSelectedPerson(person);
+      if (invoiceId) {
+        setSelectedInvoiceId(invoiceId);
+      }
+      setShowPersonDialog(true);
+    } else {
+      toast.error('Person nicht gefunden');
+    }
+  };
+
+  // Handle duplicate invoice
+  const handleDuplicateInvoice = async (bill: Bill) => {
+    if (bill.source !== 'person' || !bill.personId) {
+      toast.error('Nur Rechnungen von Personen können dupliziert werden');
+      return;
+    }
+    
+    try {
+      const person = people.find(p => p.id === bill.personId);
+      if (!person) {
+        toast.error('Person nicht gefunden');
+        return;
+      }
+      
+      // Open person dialog
+      setSelectedPerson(person);
+      setShowPersonDialog(true);
+      toast.info('Bitte die Rechnung im Dialog duplizieren');
+    } catch (error: any) {
+      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+    }
   };
 
   // Open edit dialog from Bill type
@@ -826,8 +905,26 @@ export default function Bills() {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>
-    </Layout>
-  );
-}
+        </AlertDialog>
+
+        {/* Person Invoices Dialog */}
+        {selectedPerson && (
+          <PersonInvoicesDialog
+            person={selectedPerson}
+            open={showPersonDialog}
+            onOpenChange={(open) => {
+              setShowPersonDialog(open);
+              if (!open) {
+                setSelectedPerson(null);
+                setSelectedInvoiceId(null);
+              }
+            }}
+            onDataChanged={() => {
+              refetch();
+            }}
+          />
+        )}
+      </Layout>
+    );
+  }
 

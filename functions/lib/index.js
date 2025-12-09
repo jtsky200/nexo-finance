@@ -984,10 +984,13 @@ exports.convertToInstallmentPlan = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('not-found', 'Invoice not found');
     }
     const invoiceData = invoiceDoc.data();
-    if (invoiceData === null || invoiceData === void 0 ? void 0 : invoiceData.isInstallmentPlan) {
+    if (!invoiceData) {
+        throw new https_1.HttpsError('not-found', 'Invoice data not found');
+    }
+    if (invoiceData.isInstallmentPlan) {
         throw new https_1.HttpsError('invalid-argument', 'Invoice is already an installment plan');
     }
-    if ((invoiceData === null || invoiceData === void 0 ? void 0 : invoiceData.status) === 'paid') {
+    if (invoiceData.status === 'paid') {
         throw new https_1.HttpsError('invalid-argument', 'Cannot convert paid invoice to installment plan');
     }
     const amount = invoiceData.amount / 100; // Convert from cents to CHF

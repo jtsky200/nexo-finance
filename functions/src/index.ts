@@ -1131,11 +1131,15 @@ export const convertToInstallmentPlan = onCall(async (request) => {
 
   const invoiceData = invoiceDoc.data();
   
-  if (invoiceData?.isInstallmentPlan) {
+  if (!invoiceData) {
+    throw new HttpsError('not-found', 'Invoice data not found');
+  }
+  
+  if (invoiceData.isInstallmentPlan) {
     throw new HttpsError('invalid-argument', 'Invoice is already an installment plan');
   }
 
-  if (invoiceData?.status === 'paid') {
+  if (invoiceData.status === 'paid') {
     throw new HttpsError('invalid-argument', 'Cannot convert paid invoice to installment plan');
   }
 

@@ -22,6 +22,7 @@ import { httpsCallable } from 'firebase/functions';
 import { useReminders, createReminder, updateReminder, deleteReminder } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
 import { useLocation } from 'wouter';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import WorkScheduleDialog from '@/components/WorkScheduleDialog';
 import VacationPlannerDialog from '@/components/VacationPlannerDialog';
 import SchoolPlannerDialog from '@/components/SchoolPlannerDialog';
@@ -540,7 +541,7 @@ export default function Calendar() {
             notes: newEvent.description,
             dueDate: date.toISOString(),
             type: newEvent.category || 'termin',
-            priority: newEvent.priority,
+            isAllDay: !newEvent.time,
           });
         }
         toast.success(`${dates.length} wiederkehrende Termine erstellt`);
@@ -550,7 +551,7 @@ export default function Calendar() {
           notes: newEvent.description,
           dueDate: baseDate.toISOString(),
           type: newEvent.category || 'termin',
-          priority: newEvent.priority,
+          isAllDay: !newEvent.time,
         });
         toast.success('Termin erstellt');
       }
@@ -866,9 +867,14 @@ export default function Calendar() {
         {/* Header Row 1: Navigation */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={goToPreviousMonth}>
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="icon" onClick={goToPreviousMonth}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Vorheriger Monat</TooltipContent>
+            </Tooltip>
             <h2 className="text-xl font-bold min-w-[180px] text-center">
               {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
             </h2>
@@ -988,8 +994,17 @@ export default function Calendar() {
         {/* Statistics */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           <Card 
-            className={`cursor-pointer transition-all hover:bg-accent ${filterType === 'all' ? 'bg-accent' : ''}`} 
+            className={`cursor-pointer transition-all hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${filterType === 'all' ? 'bg-accent' : ''}`} 
             onClick={() => setFilterType('all')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setFilterType('all');
+              }
+            }}
+            tabIndex={0}
+            role="button"
+            aria-label="Alle anzeigen"
           >
             <CardContent className="pt-4 pb-4">
               <p className="text-sm text-muted-foreground">Gesamt</p>
@@ -997,8 +1012,17 @@ export default function Calendar() {
             </CardContent>
           </Card>
           <Card 
-            className="cursor-pointer transition-all hover:bg-accent"
+            className="cursor-pointer transition-all hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             onClick={() => setFilterType('all')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setFilterType('all');
+              }
+            }}
+            tabIndex={0}
+            role="button"
+            aria-label="Überfällige anzeigen"
           >
             <CardContent className="pt-4 pb-4">
               <p className="text-sm text-muted-foreground">Überfällig</p>
@@ -1006,8 +1030,17 @@ export default function Calendar() {
             </CardContent>
           </Card>
           <Card 
-            className={`cursor-pointer transition-all hover:bg-accent ${filterType === 'due' ? 'bg-accent' : ''}`} 
+            className={`cursor-pointer transition-all hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${filterType === 'due' ? 'bg-accent' : ''}`} 
             onClick={() => setFilterType('due')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setFilterType('due');
+              }
+            }}
+            tabIndex={0}
+            role="button"
+            aria-label="Rechnungen anzeigen"
           >
             <CardContent className="pt-4 pb-4">
               <p className="text-sm text-muted-foreground">Rechnungen</p>
@@ -1015,8 +1048,17 @@ export default function Calendar() {
             </CardContent>
           </Card>
           <Card 
-            className={`cursor-pointer transition-all hover:bg-accent ${filterType === 'reminder' ? 'bg-accent' : ''}`} 
+            className={`cursor-pointer transition-all hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${filterType === 'reminder' ? 'bg-accent' : ''}`} 
             onClick={() => setFilterType('reminder')}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setFilterType('reminder');
+              }
+            }}
+            tabIndex={0}
+            role="button"
+            aria-label="Erinnerungen anzeigen"
           >
             <CardContent className="pt-4 pb-4">
               <p className="text-sm text-muted-foreground">Erinnerungen</p>

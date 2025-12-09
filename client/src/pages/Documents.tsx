@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import { functions } from '@/lib/firebase';
@@ -257,17 +258,25 @@ export default function Documents() {
     }
   };
 
-  const handleDeleteDocument = async (personId: string, documentId: string) => {
-    if (!confirm('Dokument wirklich löschen?')) return;
+  const [deleteDocumentConfirm, setDeleteDocumentConfirm] = useState<{ personId: string; documentId: string } | null>(null);
+
+  const handleDeleteDocument = (personId: string, documentId: string) => {
+    setDeleteDocumentConfirm({ personId, documentId });
+  };
+
+  const confirmDeleteDocument = async () => {
+    if (!deleteDocumentConfirm) return;
     
     try {
       const deleteDocument = httpsCallable(functions, 'deleteDocument');
-      await deleteDocument({ personId, documentId });
+      await deleteDocument({ personId: deleteDocumentConfirm.personId, documentId: deleteDocumentConfirm.documentId });
       toast.success('Dokument gelöscht');
       fetchDocuments();
+      setDeleteDocumentConfirm(null);
     } catch (error) {
       console.error('Error deleting document:', error);
       toast.error('Fehler beim Löschen');
+      setDeleteDocumentConfirm(null);
     }
   };
 
@@ -391,10 +400,19 @@ export default function Documents() {
             
             {/* Upload Area - Always visible */}
             <div
-              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer hover:border-primary/50 hover:bg-slate-50 ${
+              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer hover:border-primary/50 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                 isUploading ? 'border-primary bg-primary/5' : 'border-gray-200'
               }`}
               onClick={() => !isUploading && fileInputRef.current?.click()}
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' || e.key === ' ') && !isUploading) {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+              tabIndex={0}
+              role="button"
+              aria-label="Datei hochladen"
               onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
               onDrop={(e) => {
                 e.preventDefault();
@@ -730,6 +748,23 @@ export default function Documents() {
         </DialogContent>
       </Dialog>
     </div>
-    </Layout>
-  );
-}
+      {/* Delete Document Confirmation */}
+      <AlertDialog open={!!deleteDocumentConfirm} onOpenChange={(open) => !open && setDeleteDocumentConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Dokument löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Das Dokument wird unwiderruflich gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteDocument} className="bg-red-600 hover:bg-red-700">
+              Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      </Layout>
+    );
+  }

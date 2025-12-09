@@ -222,8 +222,17 @@ export default function Dashboard() {
                   return (
                     <div
                       key={item.id}
-                      className={`flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer ${isOverdue ? 'bg-red-50 dark:bg-red-900/20' : ''}`}
+                      className={`flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${isOverdue ? 'bg-red-50 dark:bg-red-900/20' : ''}`}
                       onClick={() => setLocation('/reminders')}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setLocation('/reminders');
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`${item.type === 'termin' ? 'Termin' : 'Erinnerung'}: ${item.title}`}
                     >
                       <div className={`p-1.5 rounded ${item.type === 'termin' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
                         {getTypeIcon(item.type)}
@@ -296,8 +305,17 @@ export default function Dashboard() {
                   return (
                     <div
                       key={bill.id}
-                      className={`flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer ${isOverdue ? 'bg-red-50 dark:bg-red-900/20' : isDueSoon ? 'bg-orange-50 dark:bg-orange-900/20' : ''}`}
+                      className={`flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${isOverdue ? 'bg-red-50 dark:bg-red-900/20' : isDueSoon ? 'bg-orange-50 dark:bg-orange-900/20' : ''}`}
                       onClick={() => bill.personId ? setLocation('/people') : setLocation('/bills')}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          bill.personId ? setLocation('/people') : setLocation('/bills');
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Rechnung: ${bill.description || 'Unbenannt'}`}
                     >
                       <div className="p-1.5 rounded bg-muted">
                         <ClipboardList className="w-4 h-4" />

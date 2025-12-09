@@ -16,6 +16,7 @@ import {
   Phone, Mail, Filter, FileText, Users, UserPlus, Building2,
   ArrowDownLeft, ArrowUpRight, Home
 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { usePeople, createPerson, deletePerson, updatePerson } from '@/lib/firebaseHooks';
 import PersonInvoicesDialog from '@/components/PersonInvoicesDialog';
 import { toast } from 'sonner';
@@ -273,21 +274,31 @@ export default function People() {
                 <Eye className="w-4 h-4 mr-1" />
                 Details
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => openEditDialog(person)}
-              >
-                <Edit2 className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                onClick={() => setDeletePersonId(person.id)}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => openEditDialog(person)}
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Bearbeiten</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    onClick={() => setDeletePersonId(person.id)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Löschen</TooltipContent>
+              </Tooltip>
             </div>
           </div>
         </div>

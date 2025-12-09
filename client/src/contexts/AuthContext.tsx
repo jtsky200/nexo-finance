@@ -54,7 +54,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         prompt: 'select_account'
       });
       const result = await signInWithPopup(auth, provider);
-      console.log('Google Sign-In successful:', result.user.email);
     } catch (err: any) {
       console.error('Google Sign-In Error:', err);
       console.error('Error code:', err.code);

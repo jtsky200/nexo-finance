@@ -618,29 +618,27 @@ exports.createInvoice = (0, https_1.onCall)(async (request) => {
     if (request.data.isInstallmentPlan) {
         const installmentInterval = request.data.installmentInterval || 'monthly';
         const startDate = dueDate ? new Date(dueDate) : new Date(date);
-        // Calculate installment count from duration or use provided count (backward compatibility)
+        // Calculate installment count from rate amount or use provided count (backward compatibility)
         let installmentCount = request.data.installmentCount;
-        if (request.data.installmentDuration && request.data.installmentDuration > 0) {
-            // Calculate count based on duration and interval
-            switch (installmentInterval) {
-                case 'weekly':
-                    installmentCount = request.data.installmentDuration;
-                    break;
-                case 'monthly':
-                    installmentCount = request.data.installmentDuration;
-                    break;
-                case 'quarterly':
-                    installmentCount = request.data.installmentDuration * 3;
-                    break;
-                case 'yearly':
-                    installmentCount = request.data.installmentDuration;
-                    break;
+        let installmentAmountValue;
+        if (request.data.installmentAmount && request.data.installmentAmount > 0) {
+            // Round to 5 Rappen (0.05 CHF)
+            installmentAmountValue = Math.round(request.data.installmentAmount * 20) / 20;
+            installmentCount = Math.ceil(amount / 100 / installmentAmountValue);
+            if (installmentCount < 2) {
+                throw new https_1.HttpsError('invalid-argument', 'Rate amount is too high. At least 2 installments required.');
             }
         }
-        if (!installmentCount || installmentCount < 2) {
-            throw new https_1.HttpsError('invalid-argument', 'Installment count must be at least 2');
+        else if (installmentCount && installmentCount >= 2) {
+            // Use provided count and calculate amount
+            installmentAmountValue = parseFloat((amount / installmentCount / 100).toFixed(2));
+            // Round to 5 Rappen
+            installmentAmountValue = Math.round(installmentAmountValue * 20) / 20;
         }
-        const installmentAmount = parseFloat((amount / installmentCount).toFixed(2));
+        else {
+            throw new https_1.HttpsError('invalid-argument', 'Either installment amount or count must be provided');
+        }
+        const installmentAmount = installmentAmountValue;
         const installments = [];
         for (let i = 0; i < installmentCount; i++) {
             const installmentDate = new Date(startDate);
@@ -658,9 +656,11 @@ exports.createInvoice = (0, https_1.onCall)(async (request) => {
                     installmentDate.setFullYear(installmentDate.getFullYear() + i);
                     break;
             }
+            // Round each installment amount to 5 Rappen
+            const roundedAmount = Math.round(installmentAmount * 20) / 20;
             installments.push({
                 number: i + 1,
-                amount: installmentAmount,
+                amount: roundedAmount,
                 dueDate: admin.firestore.Timestamp.fromDate(installmentDate),
                 status: 'pending',
                 paidDate: null,
@@ -993,7 +993,7 @@ exports.convertToInstallmentPlan = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
     const userId = request.auth.uid;
-    const { personId, invoiceId, installmentDuration, installmentInterval, startDate, installmentCount } = request.data;
+    const { personId, invoiceId, installmentAmount, installmentInterval, startDate, installmentCount } = request.data;
     // Verify person belongs to user
     const personRef = db.collection('people').doc(personId);
     const personDoc = await personRef.get();
@@ -1019,29 +1019,27 @@ exports.convertToInstallmentPlan = (0, https_1.onCall)(async (request) => {
     const amount = invoiceData.amount / 100; // Convert from cents to CHF
     const interval = installmentInterval || 'monthly';
     const start = startDate ? new Date(startDate) : (invoiceData.dueDate ? new Date(invoiceData.dueDate.toDate ? invoiceData.dueDate.toDate() : invoiceData.dueDate) : new Date());
-    // Calculate installment count from duration or use provided count (backward compatibility)
+    // Calculate installment count from rate amount or use provided count
     let count = installmentCount;
-    if (installmentDuration && installmentDuration > 0) {
-        // Calculate count based on duration and interval
-        switch (interval) {
-            case 'weekly':
-                count = installmentDuration;
-                break;
-            case 'monthly':
-                count = installmentDuration;
-                break;
-            case 'quarterly':
-                count = installmentDuration * 3;
-                break;
-            case 'yearly':
-                count = installmentDuration;
-                break;
+    let installmentAmountValue;
+    if (installmentAmount && installmentAmount > 0) {
+        // Round to 5 Rappen (0.05 CHF)
+        installmentAmountValue = Math.round(installmentAmount * 20) / 20;
+        count = Math.ceil(amount / installmentAmountValue);
+        if (count < 2) {
+            throw new https_1.HttpsError('invalid-argument', 'Rate amount is too high. At least 2 installments required.');
         }
     }
-    if (!count || count < 2) {
-        throw new https_1.HttpsError('invalid-argument', 'Installment count must be at least 2');
+    else if (count && count >= 2) {
+        // Use provided count and calculate amount
+        installmentAmountValue = parseFloat((amount / count).toFixed(2));
+        // Round to 5 Rappen
+        installmentAmountValue = Math.round(installmentAmountValue * 20) / 20;
     }
-    const installmentAmount = parseFloat((amount / count).toFixed(2));
+    else {
+        throw new https_1.HttpsError('invalid-argument', 'Either installment amount or count must be provided');
+    }
+    const finalInstallmentAmount = installmentAmountValue;
     const installments = [];
     for (let i = 0; i < count; i++) {
         const installmentDate = new Date(start);
@@ -1061,7 +1059,7 @@ exports.convertToInstallmentPlan = (0, https_1.onCall)(async (request) => {
         }
         installments.push({
             number: i + 1,
-            amount: installmentAmount,
+            amount: finalInstallmentAmount,
             dueDate: admin.firestore.Timestamp.fromDate(installmentDate),
             status: 'open',
             paidDate: null,

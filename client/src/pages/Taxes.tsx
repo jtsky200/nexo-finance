@@ -63,11 +63,11 @@ const swissCantons: Record<string, string> = {
 
 export default function Taxes() {
   const { t } = useTranslation();
-  const { data: profiles, isLoading, error } = useTaxProfiles();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const { data: profiles, isLoading, error } = useTaxProfiles(refreshKey);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editProfile, setEditProfile] = useState<TaxProfile | null>(null);
   const [deleteProfileId, setDeleteProfileId] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -113,9 +113,7 @@ export default function Taxes() {
       await createTaxProfile(data as any);
       toast.success(t('taxes.profileCreated', 'Steuerprofil erfolgreich erstellt'));
       setRefreshKey(prev => prev + 1);
-      window.location.reload(); // Refresh to get new data
     } catch (error) {
-      console.error('Error creating profile:', error);
       toast.error(t('taxes.errorCreating', 'Fehler beim Erstellen des Profils'));
     }
   };
@@ -126,9 +124,8 @@ export default function Taxes() {
       await updateTaxProfile(editProfile.id, data);
       toast.success(t('taxes.profileUpdated', 'Steuerprofil erfolgreich aktualisiert'));
       setEditProfile(null);
-      window.location.reload();
+      setRefreshKey(prev => prev + 1);
     } catch (error) {
-      console.error('Error updating profile:', error);
       toast.error(t('taxes.errorUpdating', 'Fehler beim Aktualisieren des Profils'));
     }
   };
@@ -139,9 +136,8 @@ export default function Taxes() {
       await deleteTaxProfile(deleteProfileId);
       toast.success(t('taxes.profileDeleted', 'Steuerprofil erfolgreich gelöscht'));
       setDeleteProfileId(null);
-      window.location.reload();
+      setRefreshKey(prev => prev + 1);
     } catch (error) {
-      console.error('Error deleting profile:', error);
       toast.error(t('taxes.errorDeleting', 'Fehler beim Löschen des Profils'));
     }
   };
@@ -150,9 +146,8 @@ export default function Taxes() {
     try {
       await updateTaxProfile(profileId, { status: newStatus as any });
       toast.success(t('taxes.statusUpdated', 'Status erfolgreich aktualisiert'));
-      window.location.reload();
+      setRefreshKey(prev => prev + 1);
     } catch (error) {
-      console.error('Error updating status:', error);
       toast.error(t('taxes.errorUpdating', 'Fehler beim Aktualisieren'));
     }
   };

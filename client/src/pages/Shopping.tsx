@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tooltip as UITooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
 import { 
@@ -179,6 +180,9 @@ export default function Shopping() {
   // Confirm dialog state
   const [showFinanceConfirm, setShowFinanceConfirm] = useState(false);
   const [pendingFinanceAmount, setPendingFinanceAmount] = useState(0);
+  const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
+  const [deleteQuickAddId, setDeleteQuickAddId] = useState<string | null>(null);
+  const [deleteTemplateId, setDeleteTemplateId] = useState<string | null>(null);
   
   // Shopping list scanner & archive state
   const [showListScanner, setShowListScanner] = useState(false);
@@ -328,8 +332,14 @@ export default function Shopping() {
   };
 
   const handleDeleteQuickAdd = (id: string) => {
-    setQuickAddTemplates(prev => prev.filter(t => t.id !== id));
+    setDeleteQuickAddId(id);
+  };
+
+  const confirmDeleteQuickAdd = () => {
+    if (!deleteQuickAddId) return;
+    setQuickAddTemplates(prev => prev.filter(t => t.id !== deleteQuickAddId));
     toast.success('Artikel entfernt');
+    setDeleteQuickAddId(null);
   };
 
   const handleResetQuickAdd = () => {
@@ -476,14 +486,21 @@ export default function Shopping() {
   };
 
   // Delete template
-  const handleDeleteTemplate = async (templateId: string) => {
+  const handleDeleteTemplate = (templateId: string) => {
+    setDeleteTemplateId(templateId);
+  };
+
+  const confirmDeleteTemplate = async () => {
+    if (!deleteTemplateId) return;
     try {
       const deleteTemplate = httpsCallable(functions, 'deleteShoppingListTemplate');
-      await deleteTemplate({ templateId });
+      await deleteTemplate({ templateId: deleteTemplateId });
       toast.success('Liste aus Archiv gelöscht');
       loadTemplates();
+      setDeleteTemplateId(null);
     } catch (error: any) {
       toast.error('Fehler: ' + error.message);
+      setDeleteTemplateId(null);
     }
   };
 
@@ -544,13 +561,20 @@ export default function Shopping() {
     }
   };
 
-  const handleDelete = async (itemId: string) => {
+  const handleDelete = (itemId: string) => {
+    setDeleteItemId(itemId);
+  };
+
+  const confirmDeleteItem = async () => {
+    if (!deleteItemId) return;
     try {
-      await deleteShoppingItem(itemId);
+      await deleteShoppingItem(deleteItemId);
       toast.success('Artikel entfernt');
       refetch();
+      setDeleteItemId(null);
     } catch (error: any) {
       toast.error('Fehler: ' + error.message);
+      setDeleteItemId(null);
     }
   };
 
@@ -935,7 +959,6 @@ export default function Shopping() {
           });
           
           const data = result.data as any;
-          console.log('Receipt analysis result:', data);
           
           if (data.success && data.items && data.items.length > 0) {
             setReceiptData({
@@ -950,7 +973,6 @@ export default function Shopping() {
           } else if (data.rawText) {
             // Show raw text for debugging
             toast.error(`Keine Artikel erkannt. Text gefunden: "${data.rawText.substring(0, 100)}..."`);
-            console.log('Raw OCR text:', data.rawText);
           } else {
             toast.error(data.error || 'Keine Artikel erkannt. Versuche bessere Bildqualität.');
           }
@@ -1042,6 +1064,8 @@ export default function Shopping() {
         date: receiptData.purchase.date || new Date().toISOString().split('T')[0],
         paymentMethod: receiptData.purchase.paymentMethod || 'Karte',
         status: 'bezahlt',
+        currency: 'CHF',
+        isRecurring: false,
       });
       toast.success('Zu Finanzen hinzugefügt!');
       closeReceiptScanner();
@@ -1147,12 +1171,22 @@ export default function Shopping() {
                 <CardTitle className="text-sm font-medium">Budget-Übersicht</CardTitle>
                 {budget.isSet && (
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => setShowBudgetDialog(true)}>
-                      <Edit2 className="w-3 h-3" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={handleClearBudget}>
-                      <X className="w-3 h-3" />
-                    </Button>
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="ghost" size="sm" onClick={() => setShowBudgetDialog(true)}>
+                          <Edit2 className="w-3 h-3" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Budget bearbeiten</TooltipContent>
+                    </UITooltip>
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="ghost" size="sm" onClick={handleClearBudget}>
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Budget löschen</TooltipContent>
+                    </UITooltip>
                   </div>
                 )}
               </div>
@@ -1834,9 +1868,19 @@ export default function Shopping() {
                     onChange={(e) => setNewQuickAdd({ ...newQuickAdd, price: parseFloat(e.target.value) || 0 })}
                     step={0.1}
                   />
-                  <Button size="icon" onClick={handleSaveQuickAdd} disabled={!newQuickAdd.name.trim()}>
-                    <Plus className="w-4 h-4" />
-                  </Button>
+                  <UITooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        size="icon" 
+                        onClick={handleSaveQuickAdd} 
+                        disabled={!newQuickAdd.name.trim()}
+                        aria-label="Schnell-Artikel hinzufügen"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Schnell-Artikel hinzufügen</TooltipContent>
+                  </UITooltip>
                 </div>
               </div>
             </div>
@@ -1859,24 +1903,44 @@ export default function Shopping() {
                         className="w-20"
                         step={0.1}
                       />
-                      <Button size="icon" variant="ghost" onClick={handleSaveQuickAdd}>
-                        <Save className="w-4 h-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" onClick={() => setEditingQuickAdd(null)}>
-                        <X className="w-4 h-4" />
-                      </Button>
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <Button size="icon" variant="ghost" onClick={handleSaveQuickAdd} aria-label="Speichern">
+                            <Save className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Speichern</TooltipContent>
+                      </UITooltip>
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <Button size="icon" variant="ghost" onClick={() => setEditingQuickAdd(null)} aria-label="Abbrechen">
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Abbrechen</TooltipContent>
+                      </UITooltip>
                     </>
                   ) : (
                     <>
                       <span className="flex-1 text-sm">{template.name}</span>
                       <Badge variant="secondary">{template.category}</Badge>
                       <span className="text-sm text-muted-foreground">CHF {template.price.toFixed(2)}</span>
-                      <Button size="icon" variant="ghost" onClick={() => setEditingQuickAdd(template)}>
-                        <Edit2 className="w-4 h-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" onClick={() => handleDeleteQuickAdd(template.id)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <Button size="icon" variant="ghost" onClick={() => setEditingQuickAdd(template)} aria-label="Bearbeiten">
+                            <Edit2 className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Bearbeiten</TooltipContent>
+                      </UITooltip>
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <Button size="icon" variant="ghost" onClick={() => handleDeleteQuickAdd(template.id)} aria-label="Löschen">
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Löschen</TooltipContent>
+                      </UITooltip>
                     </>
                   )}
                 </div>
@@ -1934,8 +1998,17 @@ export default function Shopping() {
                 {/* Upload Area */}
                 {scannerMode === 'upload' && (
                   <div 
-                    className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                    className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     onClick={() => fileInputRef.current?.click()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        fileInputRef.current?.click();
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-label="Datei hochladen"
                   >
                     <FileText className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
                     <p className="text-sm text-muted-foreground">
@@ -2338,6 +2411,60 @@ export default function Shopping() {
           <AlertDialogFooter>
             <AlertDialogCancel>Abbrechen</AlertDialogCancel>
             <AlertDialogAction onClick={handleClearBought}>Löschen</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Shopping Item Confirmation */}
+      <AlertDialog open={!!deleteItemId} onOpenChange={(open) => !open && setDeleteItemId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Artikel löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Dieser Artikel wird aus der Einkaufsliste entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteItem} className="bg-red-600 hover:bg-red-700">
+              Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Quick Add Template Confirmation */}
+      <AlertDialog open={!!deleteQuickAddId} onOpenChange={(open) => !open && setDeleteQuickAddId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Schnell-Artikel löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Dieser Schnell-Artikel wird entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteQuickAdd} className="bg-red-600 hover:bg-red-700">
+              Löschen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Template Confirmation */}
+      <AlertDialog open={!!deleteTemplateId} onOpenChange={(open) => !open && setDeleteTemplateId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Liste aus Archiv löschen?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Diese gespeicherte Liste wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteTemplate} className="bg-red-600 hover:bg-red-700">
+              Löschen
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -17,6 +17,74 @@ import { httpsCallable } from 'firebase/functions';
 
 import { db, functions } from './firebase';
 
+// Helper function to handle Firebase function calls with timeout and better error handling
+async function callFunctionWithTimeout<T = any>(
+  functionName: string,
+  data: any,
+  timeout: number = 30000 // 30 seconds default
+): Promise<T> {
+  const func = httpsCallable(functions, functionName);
+  
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      reject(new Error(`Request timeout: ${functionName} took longer than ${timeout}ms`));
+    }, timeout);
+  });
+
+  try {
+    const result = await Promise.race([func(data), timeoutPromise]);
+    return result.data as T;
+  } catch (error: any) {
+    // Handle specific Firebase errors
+    if (error?.code && typeof error.code === 'string') {
+      switch (error.code) {
+        case 'unauthenticated':
+          throw new Error('Bitte melden Sie sich an');
+        case 'permission-denied':
+          throw new Error('Sie haben keine Berechtigung für diese Aktion');
+        case 'not-found':
+          throw new Error('Ressource nicht gefunden');
+        case 'invalid-argument':
+          throw new Error(error.message || 'Ungültige Eingabe');
+        case 'deadline-exceeded':
+          throw new Error('Anfrage dauerte zu lange. Bitte versuchen Sie es erneut');
+        case 'resource-exhausted':
+          throw new Error('Service vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut');
+        case 'failed-precondition':
+          throw new Error('Vorbedingung nicht erfüllt');
+        case 'aborted':
+          throw new Error('Anfrage wurde abgebrochen');
+        case 'out-of-range':
+          throw new Error('Wert außerhalb des gültigen Bereichs');
+        case 'unimplemented':
+          throw new Error('Funktion nicht implementiert');
+        case 'internal':
+          throw new Error('Interner Serverfehler. Bitte versuchen Sie es später erneut');
+        case 'unavailable':
+          throw new Error('Service nicht verfügbar. Bitte überprüfen Sie Ihre Internetverbindung');
+        case 'data-loss':
+          throw new Error('Datenverlust aufgetreten');
+        case 'unauthenticated':
+          throw new Error('Bitte melden Sie sich an');
+        default:
+          throw new Error(error.message || 'Ein Fehler ist aufgetreten');
+      }
+    }
+    
+    // Handle network errors
+    if (error.message?.includes('timeout') || error.message?.includes('Timeout')) {
+      throw new Error('Anfrage dauerte zu lange. Bitte überprüfen Sie Ihre Internetverbindung');
+    }
+    
+    if (error.message?.includes('network') || error.message?.includes('Network') || error.message?.includes('fetch')) {
+      throw new Error('Netzwerkfehler. Bitte überprüfen Sie Ihre Internetverbindung');
+    }
+    
+    // Re-throw with original message if it's already a user-friendly error
+    throw error;
+  }
+}
+
 // ========== Reminders Hooks ==========
 
 export interface Reminder {
@@ -46,9 +114,7 @@ export function useReminders(filters?: { startDate?: Date; endDate?: Date; statu
     const fetchReminders = async () => {
       try {
         setIsLoading(true);
-        const getRemindersFunc = httpsCallable(functions, 'getReminders');
-        const result = await getRemindersFunc(filters || {});
-        const data = result.data as { reminders: any[] };
+        const data = await callFunctionWithTimeout<{ reminders: any[] }>('getReminders', filters || {});
         
         const mappedReminders = data.reminders.map((r: any) => ({
           ...r,
@@ -90,9 +156,7 @@ export function usePersonReminders(personId: string | undefined) {
 
     try {
       setIsLoading(true);
-      const getRemindersFunc = httpsCallable(functions, 'getReminders');
-      const result = await getRemindersFunc({ personId });
-      const data = result.data as { reminders: any[] };
+      const data = await callFunctionWithTimeout<{ reminders: any[] }>('getReminders', { personId });
       
       const mappedReminders = data.reminders.map((r: any) => ({
         ...r,
@@ -169,9 +233,7 @@ export function useAllBills() {
     const fetchBills = async () => {
       try {
         setIsLoading(true);
-        const getAllBillsFunc = httpsCallable(functions, 'getAllBills');
-        const result = await getAllBillsFunc({});
-        const data = result.data as { bills: any[]; stats: BillStats };
+        const data = await callFunctionWithTimeout<{ bills: any[]; stats: BillStats }>('getAllBills', {});
         
         const mappedBills = data.bills.map((b: any) => ({
           ...b,
@@ -201,19 +263,15 @@ export function useAllBills() {
 }
 
 export async function createReminder(data: Omit<Reminder, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'status'>) {
-  const createReminderFunc = httpsCallable(functions, 'createReminder');
-  const result = await createReminderFunc(data);
-  return result.data;
+  return await callFunctionWithTimeout('createReminder', data);
 }
 
 export async function updateReminder(id: string, data: Partial<Reminder>) {
-  const updateReminderFunc = httpsCallable(functions, 'updateReminder');
-  await updateReminderFunc({ id, ...data });
+  return await callFunctionWithTimeout('updateReminder', { id, ...data });
 }
 
 export async function deleteReminder(id: string) {
-  const deleteReminderFunc = httpsCallable(functions, 'deleteReminder');
-  await deleteReminderFunc({ id });
+  return await callFunctionWithTimeout('deleteReminder', { id });
 }
 
 // ========== Finance Hooks ==========
@@ -242,11 +300,9 @@ export function useFinanceEntries(filters?: { startDate?: Date; endDate?: Date; 
   const [error, setError] = useState<Error | null>(null);
 
   const fetchEntries = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const getEntriesFunc = httpsCallable(functions, 'getFinanceEntries');
-      const result = await getEntriesFunc(filters || {});
-      const data = result.data as { entries: any[] };
+      try {
+        setIsLoading(true);
+        const data = await callFunctionWithTimeout<{ entries: any[] }>('getFinanceEntries', filters || {});
       
       const mappedEntries = data.entries.map((e: any) => ({
         ...e,
@@ -277,19 +333,15 @@ export function useFinanceEntries(filters?: { startDate?: Date; endDate?: Date; 
 }
 
 export async function createFinanceEntry(data: Omit<FinanceEntry, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) {
-  const createEntryFunc = httpsCallable(functions, 'createFinanceEntry');
-  const result = await createEntryFunc(data);
-  return result.data;
+  return await callFunctionWithTimeout('createFinanceEntry', data);
 }
 
 export async function updateFinanceEntry(id: string, data: Partial<FinanceEntry>) {
-  const updateEntryFunc = httpsCallable(functions, 'updateFinanceEntry');
-  await updateEntryFunc({ id, ...data });
+  return await callFunctionWithTimeout('updateFinanceEntry', { id, ...data });
 }
 
 export async function deleteFinanceEntry(id: string) {
-  const deleteEntryFunc = httpsCallable(functions, 'deleteFinanceEntry');
-  await deleteEntryFunc({ id });
+  return await callFunctionWithTimeout('deleteFinanceEntry', { id });
 }
 
 // ========== Tax Profile Hooks ==========
@@ -311,36 +363,38 @@ export interface TaxProfile {
   updatedAt: Date;
 }
 
-export function useTaxProfiles() {
+export function useTaxProfiles(refreshKey?: number) {
   const [profiles, setProfiles] = useState<TaxProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  useEffect(() => {
-    const fetchProfiles = async () => {
-      try {
-        setIsLoading(true);
-        const getProfilesFunc = httpsCallable(functions, 'getTaxProfiles');
-        const result = await getProfilesFunc({});
-        const data = result.data as { profiles: any[] };
-        
-        const mappedProfiles = data.profiles.map((p: any) => ({
-          ...p,
-          createdAt: p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.createdAt),
-          updatedAt: p.updatedAt?.toDate ? p.updatedAt.toDate() : new Date(p.updatedAt),
-        }));
-        
-        setProfiles(mappedProfiles);
-        setError(null);
-      } catch (err) {
-        setError(err as Error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchProfiles();
+  const fetchProfiles = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const getProfilesFunc = httpsCallable(functions, 'getTaxProfiles');
+      const result = await getProfilesFunc({});
+      const data = result.data as { profiles: any[] };
+      
+      const mappedProfiles = data.profiles.map((p: any) => ({
+        ...p,
+        createdAt: p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.createdAt),
+        updatedAt: p.updatedAt?.toDate ? p.updatedAt.toDate() : new Date(p.updatedAt),
+      }));
+      
+      setProfiles(mappedProfiles);
+      setError(null);
+    } catch (err) {
+      setError(err as Error);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchProfiles();
+  }, [fetchProfiles, refreshKey]);
+
+  return { data: profiles, isLoading, error, refetch: fetchProfiles };
 
   return { data: profiles, isLoading, error };
 }
@@ -671,7 +725,7 @@ export async function createInvoice(personId: string, data: {
   recurringInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
   isInstallmentPlan?: boolean;
   installmentCount?: number;
-  installmentDuration?: number;
+  installmentAmount?: number;
   installmentInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
 }) {
   const createInvoiceFunc = httpsCallable(functions, 'createInvoice');
@@ -726,7 +780,7 @@ export async function updateInstallmentPlan(personId: string, invoiceId: string,
 }
 
 export async function convertToInstallmentPlan(personId: string, invoiceId: string, data: {
-  installmentDuration?: number;
+  installmentAmount?: number;
   installmentCount?: number;
   installmentInterval: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
   startDate?: Date;

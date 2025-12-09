@@ -49,6 +49,9 @@ interface PersonInvoicesDialogProps {
 export default function PersonInvoicesDialog({ person, open, onOpenChange, onDataChanged, highlightInvoiceId }: PersonInvoicesDialogProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'invoices' | 'appointments' | 'documents'>('invoices');
+  const [isSubmittingInvoice, setIsSubmittingInvoice] = useState(false);
+  const [isSubmittingAppointment, setIsSubmittingAppointment] = useState(false);
+  const [isSubmittingInstallment, setIsSubmittingInstallment] = useState(false);
   const invoiceRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   const [highlightedInvoiceId, setHighlightedInvoiceId] = useState<string | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -64,7 +67,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
   const [paymentAmount, setPaymentAmount] = useState('');
   const [showConvertToInstallmentDialog, setShowConvertToInstallmentDialog] = useState(false);
   const [invoiceToConvert, setInvoiceToConvert] = useState<any>(null);
-  const [convertInstallmentDuration, setConvertInstallmentDuration] = useState('3');
+  const [convertInstallmentAmount, setConvertInstallmentAmount] = useState('');
   const [convertInstallmentInterval, setConvertInstallmentInterval] = useState<'weekly' | 'monthly' | 'quarterly' | 'yearly'>('monthly');
   const [editingInstallment, setEditingInstallment] = useState<any>(null);
   const [installmentNote, setInstallmentNote] = useState('');
@@ -88,7 +91,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     recurringInterval: 'monthly' as 'weekly' | 'monthly' | 'quarterly' | 'yearly',
     isInstallmentPlan: false,
     installmentCount: 2,
-    installmentDuration: 0, // Duration in months/weeks/years
+    installmentAmount: '', // Rate amount in CHF (e.g., 500 CHF per month)
     installmentInterval: 'monthly' as 'weekly' | 'monthly' | 'quarterly' | 'yearly',
     status: 'open',
     direction: 'incoming' as 'incoming' | 'outgoing', // incoming = Person schuldet mir, outgoing = Ich schulde Person
@@ -159,6 +162,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       return;
     }
 
+    setIsSubmittingAppointment(true);
     try {
       await createReminder({
         title: newAppointment.title,
@@ -189,6 +193,8 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     } catch (error: any) {
       console.error('Error adding appointment:', error);
       toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+    } finally {
+      setIsSubmittingAppointment(false);
     }
   };
 
@@ -218,6 +224,8 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     } catch (error: any) {
       console.error('Error updating appointment:', error);
       toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+    } finally {
+      setIsSubmittingAppointment(false);
     }
   };
 
@@ -254,14 +262,30 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     return new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' }).format(amount / 100);
   };
 
+  // Round to 5 Rappen (0.05 CHF)
+  const roundTo5Rappen = (amount: number): number => {
+    return Math.round(amount * 20) / 20;
+  };
+
   const handleAddInvoice = async () => {
     if (!newInvoice.amount || !newInvoice.description) {
       toast.error('Bitte Beschreibung und Betrag eingeben');
       return;
     }
 
+    setIsSubmittingInvoice(true);
     try {
-      const amountInCents = Math.round(parseFloat(newInvoice.amount) * 100);
+      const amountInCents = Math.round(roundTo5Rappen(parseFloat(newInvoice.amount)) * 100);
+      
+      // Calculate installment count from rate amount if installment plan
+      let installmentCount = newInvoice.installmentCount;
+      let installmentAmount = undefined;
+      if (newInvoice.isInstallmentPlan && newInvoice.installmentAmount && parseFloat(newInvoice.installmentAmount) > 0) {
+        installmentAmount = roundTo5Rappen(parseFloat(newInvoice.installmentAmount));
+        installmentCount = Math.ceil(amountInCents / 100 / installmentAmount);
+        if (installmentCount < 2) installmentCount = 2;
+      }
+      
       await createInvoice(person.id, {
         amount: amountInCents,
         description: newInvoice.description,
@@ -275,8 +299,8 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         isRecurring: newInvoice.isRecurring,
         recurringInterval: newInvoice.isRecurring ? newInvoice.recurringInterval : undefined,
         isInstallmentPlan: newInvoice.isInstallmentPlan,
-        installmentCount: newInvoice.isInstallmentPlan ? newInvoice.installmentCount : undefined,
-        installmentDuration: newInvoice.isInstallmentPlan && newInvoice.installmentDuration ? newInvoice.installmentDuration : undefined,
+        installmentCount: newInvoice.isInstallmentPlan ? installmentCount : undefined,
+        installmentAmount: installmentAmount,
         installmentInterval: newInvoice.isInstallmentPlan ? newInvoice.installmentInterval : undefined,
       });
       
@@ -292,7 +316,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         recurringInterval: 'monthly',
         isInstallmentPlan: false,
         installmentCount: 2,
-        installmentDuration: 0,
+        installmentAmount: '',
         installmentInterval: 'monthly',
         status: 'open',
         direction: person?.type === 'external' ? 'incoming' : 'outgoing',
@@ -313,25 +337,38 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     } catch (error: any) {
       console.error('Error adding invoice:', error);
       toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+    } finally {
+      setIsSubmittingInvoice(false);
     }
   };
 
   const handleConvertToInstallment = async () => {
-    if (!invoiceToConvert || !convertInstallmentDuration || parseInt(convertInstallmentDuration) < 1) {
-      toast.error('Bitte Dauer eingeben (mindestens 1)');
+    if (!invoiceToConvert || !convertInstallmentAmount || parseFloat(convertInstallmentAmount) <= 0) {
+      toast.error('Bitte Rate-Betrag eingeben (größer als 0)');
       return;
     }
 
+    setIsSubmittingInstallment(true);
     try {
+      const totalAmount = invoiceToConvert.amount / 100; // Convert from cents to CHF
+      const rateAmount = roundTo5Rappen(parseFloat(convertInstallmentAmount));
+      const installmentCount = Math.ceil(totalAmount / rateAmount);
+      
+      if (installmentCount < 2) {
+        toast.error('Rate-Betrag ist zu hoch. Mindestens 2 Raten erforderlich.');
+        return;
+      }
+
       await convertToInstallmentPlan(person.id, invoiceToConvert.id, {
-        installmentDuration: parseInt(convertInstallmentDuration),
+        installmentAmount: rateAmount,
+        installmentCount: installmentCount,
         installmentInterval: convertInstallmentInterval,
         startDate: invoiceToConvert.dueDate ? new Date(invoiceToConvert.dueDate) : new Date(),
       });
       toast.success('Rechnung erfolgreich in Raten umgewandelt');
                 setShowConvertToInstallmentDialog(false);
                 setInvoiceToConvert(null);
-                setConvertInstallmentDuration('3');
+                setConvertInstallmentAmount('');
                 setConvertInstallmentInterval('monthly');
       try {
         await refreshData();
@@ -341,6 +378,8 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     } catch (error: any) {
       console.error('Error converting to installment:', error);
       toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+    } finally {
+      setIsSubmittingInstallment(false);
     }
   };
 
@@ -382,6 +421,8 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     } catch (error: any) {
       console.error('Error updating invoice:', error);
       toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+    } finally {
+      setIsSubmittingInvoice(false);
     }
   };
 
@@ -500,8 +541,8 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                       setNewInvoice({
                         ...newInvoice,
                         isInstallmentPlan: true,
-                        installmentCount: 3,
-                        installmentDuration: 3,
+                        installmentCount: 2,
+                        installmentAmount: '',
                         installmentInterval: 'monthly',
                       });
                       setShowAddDialog(true);
@@ -635,7 +676,6 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                           size="sm"
                           className="w-full mt-2 h-9 text-sm font-medium"
                           onClick={() => {
-                            console.log('Opening installment dialog for invoice:', invoice);
                             setSelectedInvoiceForPayment(invoice);
                             setShowInstallmentPaymentDialog(true);
                           }}
@@ -1071,42 +1111,54 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label>Dauer *</Label>
+                      <Label>
+                        {newInvoice.installmentInterval === 'weekly' && 'Wöchentliche Rate *'}
+                        {newInvoice.installmentInterval === 'monthly' && 'Monatliche Rate *'}
+                        {newInvoice.installmentInterval === 'quarterly' && 'Quartalsrate *'}
+                        {newInvoice.installmentInterval === 'yearly' && 'Jährliche Rate *'}
+                      </Label>
                       <Input
                         type="number"
-                        min="1"
-                        max="120"
-                        value={newInvoice.installmentDuration || ''}
+                        step="0.05"
+                        min="0.05"
+                        value={newInvoice.installmentAmount || ''}
                         onChange={(e) => {
-                          const duration = parseInt(e.target.value) || 0;
-                          setNewInvoice({ 
-                            ...newInvoice, 
-                            installmentDuration: duration,
-                            // Calculate count based on duration and interval
-                            installmentCount: duration > 0 ? (newInvoice.installmentInterval === 'quarterly' ? duration * 3 : duration) : 2
-                          });
+                          const rateAmount = parseFloat(e.target.value) || 0;
+                          const totalAmount = parseFloat(newInvoice.amount) || 0;
+                          if (rateAmount > 0 && totalAmount > 0) {
+                            // Calculate number of installments needed
+                            const count = Math.ceil(totalAmount / rateAmount);
+                            setNewInvoice({ 
+                              ...newInvoice, 
+                              installmentAmount: e.target.value,
+                              installmentCount: count >= 2 ? count : 2
+                            });
+                          } else {
+                            setNewInvoice({ 
+                              ...newInvoice, 
+                              installmentAmount: e.target.value,
+                              installmentCount: 2
+                            });
+                          }
                         }}
-                        placeholder="z.B. 12"
+                        placeholder="z.B. 500.00"
                         className="mt-2 h-10"
                       />
                       <p className="text-xs text-muted-foreground mt-1">
-                        {newInvoice.installmentInterval === 'weekly' && 'Wochen'}
-                        {newInvoice.installmentInterval === 'monthly' && 'Monate'}
-                        {newInvoice.installmentInterval === 'quarterly' && 'Quartale'}
-                        {newInvoice.installmentInterval === 'yearly' && 'Jahre'}
+                        Betrag pro {newInvoice.installmentInterval === 'weekly' ? 'Woche' : newInvoice.installmentInterval === 'monthly' ? 'Monat' : newInvoice.installmentInterval === 'quarterly' ? 'Quartal' : 'Jahr'} in CHF
                       </p>
                     </div>
                     <div>
-                      <Label>Ratenintervall</Label>
+                      <Label>Ratenintervall *</Label>
                       <Select
                         value={newInvoice.installmentInterval}
                         onValueChange={(value: any) => {
-                          const duration = newInvoice.installmentDuration || 0;
                           setNewInvoice({ 
                             ...newInvoice, 
                             installmentInterval: value,
                             // Recalculate count when interval changes
-                            installmentCount: duration > 0 ? (value === 'quarterly' ? duration * 3 : duration) : 2
+                            installmentAmount: newInvoice.installmentAmount || '',
+                            installmentCount: newInvoice.installmentCount || 2
                           });
                         }}
                       >
@@ -1122,14 +1174,14 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                       </Select>
                     </div>
                   </div>
-                  {newInvoice.amount && newInvoice.installmentDuration && newInvoice.installmentDuration > 0 && (
+                  {newInvoice.amount && newInvoice.installmentAmount && parseFloat(newInvoice.installmentAmount) > 0 && (
                     <div className="p-3 bg-muted rounded-lg">
                       <p className="text-sm font-medium">Ratenübersicht</p>
                       <p className="text-xs text-muted-foreground mt-1">
                         Anzahl Raten: {newInvoice.installmentCount}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Ratenbetrag: {((parseFloat(newInvoice.amount) || 0) / newInvoice.installmentCount).toFixed(2)} CHF
+                        Rate-Betrag: {roundTo5Rappen(parseFloat(newInvoice.installmentAmount)).toFixed(2)} CHF
                       </p>
                       {newInvoice.dueDate && (
                         <p className="text-xs text-muted-foreground mt-1">
@@ -1398,8 +1450,8 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               <Button variant="outline" onClick={() => setEditingInvoice(null)} className="h-10">
                 Abbrechen
               </Button>
-              <Button onClick={handleUpdateInvoice} className="h-10">
-                Speichern
+              <Button onClick={handleUpdateInvoice} className="h-10" disabled={isSubmittingInvoice}>
+                {isSubmittingInvoice ? 'Wird gespeichert...' : 'Speichern'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -2056,21 +2108,25 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
           {invoiceToConvert && (
             <div className="space-y-4 py-4">
               <div>
-                <Label>Dauer *</Label>
+                <Label>
+                  {convertInstallmentInterval === 'weekly' && 'Wöchentliche Rate *'}
+                  {convertInstallmentInterval === 'monthly' && 'Monatliche Rate *'}
+                  {convertInstallmentInterval === 'quarterly' && 'Quartalsrate *'}
+                  {convertInstallmentInterval === 'yearly' && 'Jährliche Rate *'}
+                </Label>
                 <Input
                   type="number"
-                  min="1"
-                  max="120"
-                  value={convertInstallmentDuration}
-                  onChange={(e) => setConvertInstallmentDuration(e.target.value)}
-                  placeholder="z.B. 12"
+                  step="0.05"
+                  min="0.05"
+                  value={convertInstallmentAmount}
+                  onChange={(e) => {
+                    setConvertInstallmentAmount(e.target.value);
+                  }}
+                  placeholder="z.B. 500.00"
                   className="mt-2 h-10"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  {convertInstallmentInterval === 'weekly' && 'Wochen'}
-                  {convertInstallmentInterval === 'monthly' && 'Monate'}
-                  {convertInstallmentInterval === 'quarterly' && 'Quartale'}
-                  {convertInstallmentInterval === 'yearly' && 'Jahre'}
+                  Betrag pro {convertInstallmentInterval === 'weekly' ? 'Woche' : convertInstallmentInterval === 'monthly' ? 'Monat' : convertInstallmentInterval === 'quarterly' ? 'Quartal' : 'Jahr'} in CHF
                 </p>
               </div>
               
@@ -2092,28 +2148,26 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 </Select>
               </div>
               
-              {convertInstallmentDuration && parseInt(convertInstallmentDuration) >= 1 && (
+              {convertInstallmentAmount && parseFloat(convertInstallmentAmount) > 0 && (
                 <div className="p-4 bg-muted rounded-lg">
                   <p className="text-sm font-medium mb-2">Ratenübersicht</p>
                   <p className="text-xs text-muted-foreground">
                     Anzahl Raten: {(() => {
-                      const duration = parseInt(convertInstallmentDuration);
-                      return convertInstallmentInterval === 'quarterly' ? duration * 3 : duration;
+                      const totalAmount = invoiceToConvert.amount / 100;
+                      const rateAmount = roundTo5Rappen(parseFloat(convertInstallmentAmount));
+                      return Math.ceil(totalAmount / rateAmount);
                     })()}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Ratenbetrag: {(() => {
-                      const duration = parseInt(convertInstallmentDuration);
-                      const count = convertInstallmentInterval === 'quarterly' ? duration * 3 : duration;
-                      return ((invoiceToConvert.amount / 100) / count).toFixed(2);
-                    })()} CHF
+                    Rate-Betrag: {roundTo5Rappen(parseFloat(convertInstallmentAmount)).toFixed(2)} CHF
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     {(() => {
                       const startDate = invoiceToConvert.dueDate ? new Date(invoiceToConvert.dueDate) : new Date();
                       const lastDate = new Date(startDate);
-                      const duration = parseInt(convertInstallmentDuration);
-                      const count = convertInstallmentInterval === 'quarterly' ? duration * 3 : duration;
+                      const totalAmount = invoiceToConvert.amount / 100;
+                      const rateAmount = roundTo5Rappen(parseFloat(convertInstallmentAmount));
+                      const count = Math.ceil(totalAmount / rateAmount);
                       switch (convertInstallmentInterval) {
                         case 'weekly': lastDate.setDate(lastDate.getDate() + ((count - 1) * 7)); break;
                         case 'monthly': lastDate.setMonth(lastDate.getMonth() + (count - 1)); break;
@@ -2134,15 +2188,15 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               onClick={() => {
                 setShowConvertToInstallmentDialog(false);
                 setInvoiceToConvert(null);
-                setConvertInstallmentDuration('3');
+                setConvertInstallmentAmount('');
                 setConvertInstallmentInterval('monthly');
               }} 
               className="h-10"
             >
               Abbrechen
             </Button>
-            <Button onClick={handleConvertToInstallment} className="h-10">
-              Umwandeln
+            <Button onClick={handleConvertToInstallment} className="h-10" disabled={isSubmittingInstallment}>
+              {isSubmittingInstallment ? 'Wird umgewandelt...' : 'Umwandeln'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2233,11 +2287,14 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 } catch (error: any) {
                   console.error('Error updating installment:', error);
                   toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+                } finally {
+                  setIsSubmittingInstallment(false);
                 }
               }}
               className="h-10"
+              disabled={isSubmittingInstallment}
             >
-              Speichern
+              {isSubmittingInstallment ? 'Wird gespeichert...' : 'Speichern'}
             </Button>
           </DialogFooter>
         </DialogContent>

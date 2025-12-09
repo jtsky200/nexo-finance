@@ -102,10 +102,15 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
   }, [invoices, selectedInvoiceForPayment?.id]);
 
   const refreshData = useCallback(async () => {
-    await refetchInvoices();
-    await refetchAppointments();
-    if (onDataChanged) {
-      onDataChanged();
+    try {
+      await refetchInvoices();
+      await refetchAppointments();
+      if (onDataChanged) {
+        onDataChanged();
+      }
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      // Silently fail - data will refresh on next dialog open
     }
   }, [refetchInvoices, refetchAppointments, onDataChanged]);
 
@@ -138,9 +143,14 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         recurrenceRule: 'none',
       });
       setShowAddAppointmentDialog(false);
-      await refreshData();
+      try {
+        await refreshData();
+      } catch (refreshError) {
+        console.error('Error refreshing data:', refreshError);
+      }
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      console.error('Error adding appointment:', error);
+      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
     }
   };
 
@@ -162,9 +172,14 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       
       toast.success('Termin aktualisiert');
       setEditingAppointment(null);
-      await refreshData();
+      try {
+        await refreshData();
+      } catch (refreshError) {
+        console.error('Error refreshing data:', refreshError);
+      }
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      console.error('Error updating appointment:', error);
+      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
     }
   };
 
@@ -174,10 +189,15 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     try {
       await deleteReminder(deleteAppointmentId);
       toast.success('Termin gelöscht');
-      await refreshData();
       setDeleteAppointmentId(null);
+      try {
+        await refreshData();
+      } catch (refreshError) {
+        console.error('Error refreshing data:', refreshError);
+      }
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      console.error('Error deleting appointment:', error);
+      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
     }
   };
 
@@ -216,6 +236,9 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         notes: newInvoice.notes || undefined,
         isRecurring: newInvoice.isRecurring,
         recurringInterval: newInvoice.isRecurring ? newInvoice.recurringInterval : undefined,
+        isInstallmentPlan: newInvoice.isInstallmentPlan,
+        installmentCount: newInvoice.isInstallmentPlan ? newInvoice.installmentCount : undefined,
+        installmentInterval: newInvoice.isInstallmentPlan ? newInvoice.installmentInterval : undefined,
       });
       
       toast.success('Rechnung hinzugefügt');
@@ -241,9 +264,15 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         imageUrl: '',
       });
       setShowAddDialog(false);
-      await refreshData();
+      try {
+        await refreshData();
+      } catch (refreshError) {
+        console.error('Error refreshing data:', refreshError);
+        // Don't show error to user, data will refresh on next open
+      }
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      console.error('Error adding invoice:', error);
+      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
     }
   };
 
@@ -265,6 +294,9 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         notes: editingInvoice.notes || undefined,
         isRecurring: editingInvoice.isRecurring,
         recurringInterval: editingInvoice.isRecurring ? editingInvoice.recurringInterval : undefined,
+        isInstallmentPlan: editingInvoice.isInstallmentPlan,
+        installmentCount: editingInvoice.isInstallmentPlan ? editingInvoice.installmentCount : undefined,
+        installmentInterval: editingInvoice.isInstallmentPlan ? editingInvoice.installmentInterval : undefined,
       });
 
       // Update status separately if changed
@@ -274,9 +306,14 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       
       toast.success('Rechnung aktualisiert');
       setEditingInvoice(null);
-      await refreshData();
+      try {
+        await refreshData();
+      } catch (refreshError) {
+        console.error('Error refreshing data:', refreshError);
+      }
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      console.error('Error updating invoice:', error);
+      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
     }
   };
 
@@ -284,9 +321,14 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     try {
       await updateInvoiceStatus(person.id, invoiceId, newStatus);
       toast.success('Status aktualisiert');
-      await refreshData();
+      try {
+        await refreshData();
+      } catch (refreshError) {
+        console.error('Error refreshing data:', refreshError);
+      }
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      console.error('Error updating status:', error);
+      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
     }
   };
 
@@ -1487,7 +1529,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   <div 
                     className="bg-green-500 h-3 rounded-full transition-all"
                     style={{ 
-                      width: `${Math.min(100, ((selectedInvoiceForPayment.totalPaid || 0) / selectedInvoiceForPayment.amount) * 100))}%` 
+                      width: `${Math.min(100, selectedInvoiceForPayment.amount > 0 ? ((selectedInvoiceForPayment.totalPaid || 0) / selectedInvoiceForPayment.amount) * 100 : 0)}%` 
                     }}
                   />
                 </div>
@@ -1749,9 +1791,19 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                             toast.success('Zahlung erfolgreich erfasst');
                             setSelectedInstallment(null);
                             setPaymentAmount('');
-                            await refreshData();
+                            try {
+                              await refreshData();
+                              // Update selected invoice to show latest data
+                              const updatedInvoice = invoices.find((inv: any) => inv.id === selectedInvoiceForPayment.id);
+                              if (updatedInvoice) {
+                                setSelectedInvoiceForPayment(updatedInvoice);
+                              }
+                            } catch (refreshError) {
+                              console.error('Error refreshing data:', refreshError);
+                            }
                           } catch (error: any) {
-                            toast.error('Fehler: ' + error.message);
+                            console.error('Error recording payment:', error);
+                            toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
                           }
                         }}
                       >

@@ -687,6 +687,9 @@ export async function updateInvoice(personId: string, invoiceId: string, data: {
   notes?: string;
   isRecurring?: boolean;
   recurringInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  isInstallmentPlan?: boolean;
+  installmentCount?: number;
+  installmentInterval?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
 }) {
   const updateInvoiceFunc = httpsCallable(functions, 'updateInvoice');
   await updateInvoiceFunc({ personId, invoiceId, ...data });

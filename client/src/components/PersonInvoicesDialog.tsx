@@ -1500,16 +1500,31 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Complete Installment Management Dialog */}
+      {/* Complete Installment Management Dialog - Separate Modal within PersonInvoicesDialog */}
       <Dialog open={showInstallmentPaymentDialog} onOpenChange={setShowInstallmentPaymentDialog}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader className="pb-4">
-            <DialogTitle className="text-xl flex items-center gap-2">
-              <CreditCard className="w-5 h-5" />
+        <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="pb-4 border-b">
+            <DialogTitle className="text-2xl flex items-center gap-2">
+              <CreditCard className="w-6 h-6" />
               Ratenverwaltung
             </DialogTitle>
+            {selectedInvoiceForPayment && (
+              <p className="text-sm text-muted-foreground mt-1">
+                Rechnung: {selectedInvoiceForPayment.description}
+              </p>
+            )}
           </DialogHeader>
-          {selectedInvoiceForPayment && selectedInvoiceForPayment.installments && (
+          {!selectedInvoiceForPayment ? (
+            <div className="py-8 text-center text-muted-foreground">
+              <p>Keine Rechnung ausgewählt</p>
+            </div>
+          ) : !selectedInvoiceForPayment.installments || !Array.isArray(selectedInvoiceForPayment.installments) || selectedInvoiceForPayment.installments.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground">
+              <CreditCard className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <p className="font-medium mb-2">Keine Raten gefunden</p>
+              <p className="text-sm">Diese Rechnung hat noch keine Ratenvereinbarung oder die Raten wurden noch nicht erstellt.</p>
+            </div>
+          ) : (
             <div className="space-y-6">
               {/* Invoice Overview */}
               <div className="p-4 bg-muted rounded-lg">
@@ -1612,16 +1627,16 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                                   </Badge>
                                 </div>
                                 <div className="text-xs text-muted-foreground">
-                                  {inst.dueDate ? (
+                                  {dueDateObj ? (
                                     <span className={isOverdue ? 'text-red-600 font-medium' : ''}>
-                                      Fällig: {formatDate(inst.dueDate.toDate ? inst.dueDate.toDate() : inst.dueDate)}
+                                      Fällig: {formatDate(dueDateObj)}
                                     </span>
                                   ) : (
                                     <span>Kein Fälligkeitsdatum</span>
                                   )}
                                   {inst.paidDate && (
                                     <span className="ml-3 text-green-600">
-                                      Bezahlt: {formatDate(inst.paidDate.toDate ? inst.paidDate.toDate() : inst.paidDate)}
+                                      Bezahlt: {formatDate(inst.paidDate?.toDate ? inst.paidDate.toDate() : (typeof inst.paidDate === 'string' ? new Date(inst.paidDate) : new Date(inst.paidDate)))}
                                     </span>
                                   )}
                                 </div>
@@ -1727,7 +1742,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                         <div>
                           <p className="text-muted-foreground mb-1">Fälligkeitsdatum</p>
                           <p className="font-semibold">
-                            {selectedInstallment.dueDate ? formatDate(selectedInstallment.dueDate.toDate ? selectedInstallment.dueDate.toDate() : selectedInstallment.dueDate) : 'Nicht gesetzt'}
+                            {selectedInstallment.dueDate ? formatDate(selectedInstallment.dueDate?.toDate ? selectedInstallment.dueDate.toDate() : (typeof selectedInstallment.dueDate === 'string' ? new Date(selectedInstallment.dueDate) : new Date(selectedInstallment.dueDate))) : 'Nicht gesetzt'}
                           </p>
                         </div>
                         <div>

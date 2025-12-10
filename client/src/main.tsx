@@ -30,19 +30,20 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   window.location.href = loginUrl || '/login';
 };
 
+// Only redirect on query errors, not mutation errors (mutations handle their own errors)
 queryClient.getQueryCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {
     const error = event.query.state.error;
-    redirectToLoginIfUnauthorized(error);
+    // Only redirect for auth queries, not for AI chat mutations
+    const queryKey = event.query.queryKey;
+    if (Array.isArray(queryKey) && queryKey[0] === 'auth' && queryKey[1] === 'me') {
+      redirectToLoginIfUnauthorized(error);
+    }
   }
 });
 
-queryClient.getMutationCache().subscribe(event => {
-  if (event.type === "updated" && event.action.type === "error") {
-    const error = event.mutation.state.error;
-    redirectToLoginIfUnauthorized(error);
-  }
-});
+// Don't auto-redirect on mutation errors - let components handle them
+// This prevents logout when clicking on chat messages that trigger errors
 
 const trpcClient = trpc.createClient({
   links: [

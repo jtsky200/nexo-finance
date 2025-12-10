@@ -37,11 +37,8 @@ exports.trpc = exports.protectedProcedure = exports.publicProcedure = exports.ro
 const fetch_1 = require("@trpc/server/adapters/fetch");
 const server_1 = require("@trpc/server");
 const https_1 = require("firebase-functions/v2/https");
-const params_1 = require("firebase-functions/params");
 const zod_1 = require("zod");
 const admin = __importStar(require("firebase-admin"));
-// Define secret for Forge API Key
-const forgeApiKeySecret = (0, params_1.defineSecret)('BUILT_IN_FORGE_API_KEY');
 // Initialize tRPC for Firebase Functions without transformer (superjson is ESM only)
 // We'll handle serialization manually if needed
 const t = server_1.initTRPC.context().create();
@@ -131,8 +128,15 @@ const appRouter = (0, exports.router)({
             .mutation(async ({ ctx, input }) => {
             var _a;
             try {
-                // Get API key from secret
-                const apiKey = forgeApiKeySecret.value();
+                // Get API key from environment variable or secret
+                // Try environment variable first (for backward compatibility)
+                const apiKey = process.env.BUILT_IN_FORGE_API_KEY || process.env.FORGE_API_KEY || '';
+                if (!apiKey) {
+                    throw new server_1.TRPCError({
+                        code: 'INTERNAL_SERVER_ERROR',
+                        message: 'BUILT_IN_FORGE_API_KEY or FORGE_API_KEY is not configured. Please set it in Firebase Functions environment variables or secrets.',
+                    });
+                }
                 const result = await invokeLLM({
                     messages: input.messages,
                 }, apiKey);
@@ -169,7 +173,6 @@ const appRouter = (0, exports.router)({
 exports.trpc = (0, https_1.onRequest)({
     cors: true,
     maxInstances: 10,
-    secrets: [forgeApiKeySecret],
 }, async (req, res) => {
     try {
         // Build full URL

@@ -37,11 +37,8 @@ exports.trpc = exports.protectedProcedure = exports.publicProcedure = exports.ro
 const fetch_1 = require("@trpc/server/adapters/fetch");
 const server_1 = require("@trpc/server");
 const https_1 = require("firebase-functions/v2/https");
-const params_1 = require("firebase-functions/params");
 const zod_1 = require("zod");
 const admin = __importStar(require("firebase-admin"));
-// Define the secret for Forge API Key
-const forgeApiKeySecret = (0, params_1.defineSecret)('BUILT_IN_FORGE_API_KEY');
 // Initialize tRPC for Firebase Functions without transformer (superjson is ESM only)
 // We'll handle serialization manually if needed
 const t = server_1.initTRPC.context().create();
@@ -153,24 +150,12 @@ const appRouter = (0, exports.router)({
             .mutation(async ({ ctx, input }) => {
             var _a;
             try {
-                // Get API key from Firebase Secret or environment variable
-                // Try secret first (recommended), then fallback to env var
-                let apiKey = '';
-                try {
-                    // Try to get from secret (if configured)
-                    const secretValue = forgeApiKeySecret.value();
-                    if (secretValue && secretValue.trim() !== '') {
-                        apiKey = secretValue;
-                    }
-                }
-                catch (error) {
-                    // Secret not available or not set, try environment variable
-                    console.warn('[tRPC] Secret BUILT_IN_FORGE_API_KEY not available, trying environment variables');
-                }
-                // Fallback to environment variables if secret not available
-                if (!apiKey || apiKey.trim() === '') {
-                    apiKey = process.env.BUILT_IN_FORGE_API_KEY || process.env.FORGE_API_KEY || '';
-                }
+                // Get API key from environment variable
+                // For production, set it as a Firebase Secret and access via process.env
+                // For development, you can set it as an environment variable
+                // To set as secret: firebase functions:secrets:set BUILT_IN_FORGE_API_KEY
+                // Then redeploy: firebase deploy --only functions:trpc
+                const apiKey = process.env.BUILT_IN_FORGE_API_KEY || process.env.FORGE_API_KEY || '';
                 if (!apiKey || apiKey.trim() === '') {
                     throw new server_1.TRPCError({
                         code: 'INTERNAL_SERVER_ERROR',

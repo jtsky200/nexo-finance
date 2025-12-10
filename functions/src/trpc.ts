@@ -2,14 +2,10 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { initTRPC, TRPCError } from '@trpc/server';
 
 import { onRequest } from 'firebase-functions/v2/https';
-import { defineSecret } from 'firebase-functions/params';
 
 import { z } from 'zod';
 
 import * as admin from 'firebase-admin';
-
-// Define the secret for Forge API Key
-const forgeApiKeySecret = defineSecret('BUILT_IN_FORGE_API_KEY');
 
 // Initialize tRPC for Firebase Functions without transformer (superjson is ESM only)
 // We'll handle serialization manually if needed
@@ -152,24 +148,12 @@ const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         try {
-          // Get API key from Firebase Secret or environment variable
-          // Try secret first (recommended), then fallback to env var
-          let apiKey = '';
-          try {
-            // Try to get from secret (if configured)
-            const secretValue = forgeApiKeySecret.value();
-            if (secretValue && secretValue.trim() !== '') {
-              apiKey = secretValue;
-            }
-          } catch (error) {
-            // Secret not available or not set, try environment variable
-            console.warn('[tRPC] Secret BUILT_IN_FORGE_API_KEY not available, trying environment variables');
-          }
-          
-          // Fallback to environment variables if secret not available
-          if (!apiKey || apiKey.trim() === '') {
-            apiKey = process.env.BUILT_IN_FORGE_API_KEY || process.env.FORGE_API_KEY || '';
-          }
+          // Get API key from environment variable
+          // For production, set it as a Firebase Secret and access via process.env
+          // For development, you can set it as an environment variable
+          // To set as secret: firebase functions:secrets:set BUILT_IN_FORGE_API_KEY
+          // Then redeploy: firebase deploy --only functions:trpc
+          const apiKey = process.env.BUILT_IN_FORGE_API_KEY || process.env.FORGE_API_KEY || '';
           
           if (!apiKey || apiKey.trim() === '') {
             throw new TRPCError({

@@ -3,19 +3,16 @@ import { initTRPC, TRPCError } from '@trpc/server';
 
 import { onRequest } from 'firebase-functions/v2/https';
 
-import superjson from 'superjson';
-
 import { z } from 'zod';
 
 import * as admin from 'firebase-admin';
 
-// Initialize tRPC for Firebase Functions
+// Initialize tRPC for Firebase Functions without transformer (superjson is ESM only)
+// We'll handle serialization manually if needed
 const t = initTRPC.context<{
   user: any | null;
   req: Request;
-}>().create({
-  transformer: superjson,
-});
+}>().create();
 
 export const router = t.router;
 export const publicProcedure = t.procedure;

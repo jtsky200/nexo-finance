@@ -32,21 +32,16 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.trpc = exports.protectedProcedure = exports.publicProcedure = exports.router = void 0;
 const fetch_1 = require("@trpc/server/adapters/fetch");
 const server_1 = require("@trpc/server");
 const https_1 = require("firebase-functions/v2/https");
-const superjson_1 = __importDefault(require("superjson"));
 const zod_1 = require("zod");
 const admin = __importStar(require("firebase-admin"));
-// Initialize tRPC for Firebase Functions
-const t = server_1.initTRPC.context().create({
-    transformer: superjson_1.default,
-});
+// Initialize tRPC for Firebase Functions without transformer (superjson is ESM only)
+// We'll handle serialization manually if needed
+const t = server_1.initTRPC.context().create();
 exports.router = t.router;
 exports.publicProcedure = t.procedure;
 // Middleware to require authentication

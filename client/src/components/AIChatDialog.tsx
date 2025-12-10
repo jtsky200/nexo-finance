@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { AIChatBox, type Message } from './AIChatBox';
 import {
   Dialog,
@@ -25,7 +25,7 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
   ]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = useCallback(async (content: string) => {
     // Add user message
     const newMessages: Message[] = [...messages, { role: 'user', content }];
     setMessages(newMessages);
@@ -52,14 +52,14 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [messages]);
 
-  const suggestedPrompts = [
+  const suggestedPrompts = useMemo(() => [
     'Wie funktioniert die Rechnungsverwaltung?',
     'Wie erstelle ich eine Erinnerung?',
     'Wie verwalte ich meine Finanzen?',
     'Was kann ich mit der Einkaufsliste machen?',
-  ];
+  ], []);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -77,7 +77,7 @@ export default function Bills() {
     setEditingBill(null);
   };
 
-  const formatDate = (date: Date | any) => {
+  const formatDate = useCallback((date: Date | any) => {
     if (!date) return 'N/A';
     try {
       const d = date?.toDate ? date.toDate() : new Date(date);
@@ -90,13 +90,13 @@ export default function Bills() {
     } catch {
       return 'N/A';
     }
-  };
+  }, []);
 
-  const formatAmount = (amount: number, currency: string = 'CHF') => {
+  const formatAmount = useCallback((amount: number, currency: string = 'CHF') => {
     return `${currency} ${(amount / 100).toFixed(2)}`;
-  };
+  }, []);
 
-  const getDaysUntilDue = (dueDate: Date) => {
+  const getDaysUntilDue = useCallback((dueDate: Date) => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     const due = new Date(dueDate);
@@ -104,9 +104,9 @@ export default function Bills() {
     const diffTime = due.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
-  };
+  }, []);
 
-  const getStatusInfo = (bill: Bill | Reminder) => {
+  const getStatusInfo = useCallback((bill: Bill | Reminder) => {
     const dueDate = 'dueDate' in bill ? bill.dueDate : null;
     const daysUntil = dueDate ? getDaysUntilDue(dueDate instanceof Date ? dueDate : new Date(dueDate)) : 999;
     const status = 'status' in bill ? bill.status : 'open';
@@ -140,7 +140,7 @@ export default function Bills() {
       color: 'bg-blue-100 text-blue-700 border-blue-200',
       icon: <CalendarClock className="w-3 h-3" />,
     };
-  };
+  }, [t]);
 
   // Filter and sort bills
   const filteredBills = useMemo(() => {

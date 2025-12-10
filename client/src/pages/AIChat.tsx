@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { AIChatBox, type Message } from '@/components/AIChatBox';
 import Layout from '@/components/Layout';
 import { MessageSquare } from 'lucide-react';
@@ -14,7 +14,7 @@ export default function AIChat() {
   ]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = useCallback(async (content: string) => {
     // Add user message
     const newMessages: Message[] = [...messages, { role: 'user', content }];
     setMessages(newMessages);
@@ -41,16 +41,16 @@ export default function AIChat() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [messages]);
 
-  const suggestedPrompts = [
+  const suggestedPrompts = useMemo(() => [
     'Wie funktioniert die Rechnungsverwaltung?',
     'Wie erstelle ich eine Erinnerung?',
     'Wie verwalte ich meine Finanzen?',
     'Was kann ich mit der Einkaufsliste machen?',
     'Wie funktioniert das Raten-System?',
     'Wie scanne ich eine Rechnung?',
-  ];
+  ], []);
 
   return (
     <Layout title={t('common.aiAssistant', 'AI Assistent')}>

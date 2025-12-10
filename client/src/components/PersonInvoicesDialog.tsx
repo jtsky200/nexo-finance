@@ -24,7 +24,7 @@ import {
   convertToInstallmentPlan
 } from '@/lib/firebaseHooks';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -454,13 +454,22 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     }
   };
 
-  const totalAmount = invoices.reduce((sum, inv) => sum + inv.amount, 0);
-  const openAmount = invoices
-    .filter(inv => inv.status === 'open' || inv.status === 'postponed')
-    .reduce((sum, inv) => sum + inv.amount, 0);
-  const paidAmount = invoices
-    .filter(inv => inv.status === 'paid')
-    .reduce((sum, inv) => sum + inv.amount, 0);
+  const totalAmount = useMemo(() => 
+    invoices.reduce((sum, inv) => sum + inv.amount, 0), 
+    [invoices]
+  );
+  const openAmount = useMemo(() => 
+    invoices
+      .filter(inv => inv.status === 'open' || inv.status === 'postponed')
+      .reduce((sum, inv) => sum + inv.amount, 0),
+    [invoices]
+  );
+  const paidAmount = useMemo(() => 
+    invoices
+      .filter(inv => inv.status === 'paid')
+      .reduce((sum, inv) => sum + inv.amount, 0),
+    [invoices]
+  );
 
   const handleScannedData = (data: ScannedInvoiceData) => {
     setNewInvoice(prev => ({
@@ -489,7 +498,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     onOpenChange(isOpen);
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = useCallback((status: string) => {
     switch (status) {
       case 'paid':
         return <Badge className="bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-0.5">Bezahlt</Badge>;
@@ -498,7 +507,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       default:
         return <Badge className="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-0.5">Offen</Badge>;
     }
-  };
+  }, []);
 
   return (
     <>

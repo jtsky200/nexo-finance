@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 
 import { useLocation } from 'wouter';
 
@@ -37,7 +37,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showDayDialog, setShowDayDialog] = useState(false);
 
-  const navItems = [
+  const navItems = useMemo(() => [
     { path: '/dashboard', icon: LayoutDashboard, label: t('nav.dashboard') },
     { path: '/calendar', icon: Calendar, label: 'Kalender' },
     { path: '/reminders', icon: Bell, label: t('nav.reminders') },
@@ -49,7 +49,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     { path: '/taxes', icon: FileText, label: t('nav.taxes') },
     { path: '/ai-chat', icon: MessageSquare, label: t('common.aiAssistant', 'AI Assistent') },
     { path: '/settings', icon: Settings, label: t('nav.settings') },
-  ];
+  ], [t]);
 
   // Mini Calendar Logic
   const miniCalDays = useMemo(() => {
@@ -84,12 +84,12 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     return days;
   }, [miniCalMonth]);
 
-  const isToday = (date: Date) => date.toDateString() === new Date().toDateString();
+  const isToday = useCallback((date: Date) => date.toDateString() === new Date().toDateString(), []);
 
-  const handleDayClick = (date: Date) => {
+  const handleDayClick = useCallback((date: Date) => {
     setSelectedDate(date);
     setShowDayDialog(true);
-  };
+  }, []);
 
   const monthNames = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
 

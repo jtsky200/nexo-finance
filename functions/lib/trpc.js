@@ -110,8 +110,16 @@ async function createContext(opts) {
         user,
     };
 }
-// OpenAI Assistant ID - set this to your assistant ID from OpenAI
-const OPENAI_ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || 'asst_Es1kVA8SKX4G4LPtsvDtCFp9';
+// OpenAI Assistant ID - can be set via environment variable or secret
+// Default: asst_Es1kVA8SKX4G4LPtsvDtCFp9 (your current assistant)
+function getOpenAIAssistantId() {
+    // Try environment variable first
+    if (process.env.OPENAI_ASSISTANT_ID) {
+        return process.env.OPENAI_ASSISTANT_ID;
+    }
+    // Fallback to default
+    return 'asst_Es1kVA8SKX4G4LPtsvDtCFp9';
+}
 // Use OpenAI Assistants API
 async function invokeLLM(params, apiKey) {
     var _a, _b;
@@ -169,7 +177,7 @@ async function invokeLLM(params, apiKey) {
                 'OpenAI-Beta': 'assistants=v2',
             },
             body: JSON.stringify({
-                assistant_id: OPENAI_ASSISTANT_ID,
+                assistant_id: getOpenAIAssistantId(),
             }),
         });
         if (!runResponse.ok) {

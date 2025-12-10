@@ -223,24 +223,22 @@ exports.trpc = (0, https_1.onRequest)({
             createContext: () => createContext({ req: fetchReq }),
         });
         // Convert Fetch Response to Express response
+        // Clone response to avoid "body already read" errors
+        const responseClone = response.clone();
         res.status(response.status);
         // Copy all headers from response
         response.headers.forEach((value, key) => {
-            // Skip content-encoding and transfer-encoding headers
-            if (key.toLowerCase() !== 'content-encoding' && key.toLowerCase() !== 'transfer-encoding') {
+            // Skip problematic headers that Express handles automatically
+            const lowerKey = key.toLowerCase();
+            if (lowerKey !== 'content-encoding' &&
+                lowerKey !== 'transfer-encoding' &&
+                lowerKey !== 'content-length') {
                 res.setHeader(key, value);
             }
         });
-        // Get response body
-        const contentType = response.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-            const json = await response.json();
-            res.json(json);
-        }
-        else {
-            const text = await response.text();
-            res.send(text);
-        }
+        // Get response body - tRPC always returns JSON
+        const text = await responseClone.text();
+        res.send(text);
     }
     catch (error) {
         res.status(500).json({

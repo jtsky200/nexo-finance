@@ -1,10 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
 import { AIChatBox, type Message } from '@/components/AIChatBox';
-import Layout from '@/components/Layout';
-import { MessageSquare } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 
 export default function AIChat() {
   const { t } = useTranslation();
@@ -60,43 +58,40 @@ export default function AIChat() {
     });
   }, [messages, chatMutation]);
 
+  // Suggested prompts with icons matching the image design
   const suggestedPrompts = useMemo(() => [
-    'Wie funktioniert die Rechnungsverwaltung?',
-    'Wie erstelle ich eine Erinnerung?',
-    'Wie verwalte ich meine Finanzen?',
-    'Was kann ich mit der Einkaufsliste machen?',
-    'Wie funktioniert das Raten-System?',
-    'Wie scanne ich eine Rechnung?',
+    { text: 'Wie funktioniert die Rechnungsverwaltung?', icon: 'tag' },
+    { text: 'Wie erstelle ich eine Erinnerung?', icon: 'fileText' },
+    { text: 'Wie verwalte ich meine Finanzen?', icon: 'zap' },
+    { text: 'Was kann ich mit der Einkaufsliste machen?', icon: 'zap' },
+    { text: 'Wie funktioniert das Raten-System?', icon: 'tag' },
+    { text: 'Wie scanne ich eine Rechnung?', icon: 'fileText' },
   ], []);
 
   return (
-    <Layout title={t('common.aiAssistant', 'AI Assistent')}>
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-primary/10 rounded-lg">
-            <MessageSquare className="w-6 h-6 text-primary" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold">{t('common.aiAssistant', 'AI Assistent')}</h2>
-            <p className="text-muted-foreground">
-              {t('common.aiAssistantDescription', 'Stelle Fragen und erhalte Hilfe zu allen Funktionen der Nexo-App')}
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-card rounded-lg border shadow-sm">
-          <AIChatBox
-            messages={messages}
-            onSendMessage={handleSendMessage}
-            isLoading={chatMutation.isPending}
-            placeholder={t('common.typeMessage', 'Nachricht eingeben...')}
-            height="calc(100vh - 300px)"
-            emptyStateMessage={t('common.startConversation', 'Beginne eine Unterhaltung mit dem AI Assistenten')}
-            suggestedPrompts={suggestedPrompts}
-          />
-        </div>
+    <div className="min-h-screen bg-white flex flex-col">
+      {/* Header Section - Centered like in the image */}
+      <div className="text-center py-8 px-4">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+          {t('common.aiAssistant', 'AI Assistent')}
+        </h1>
+        <p className="text-sm text-gray-500">
+          {t('common.aiAssistantDescription', 'Stelle Fragen und erhalte Hilfe zu allen Funktionen der Nexo-App')}
+        </p>
       </div>
-    </Layout>
+
+      {/* Chat Box */}
+      <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-4 pb-4">
+        <AIChatBox
+          messages={messages}
+          onSendMessage={handleSendMessage}
+          isLoading={chatMutation.isPending}
+          placeholder={t('common.typeMessage', 'Nachricht eingeben...')}
+          height="calc(100vh - 200px)"
+          emptyStateMessage={t('common.startConversation', 'Beginne eine Unterhaltung mit dem AI Assistenten')}
+          suggestedPrompts={suggestedPrompts}
+        />
+      </div>
+    </div>
   );
 }
-

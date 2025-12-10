@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Paperclip, Image, Globe, Mic } from "lucide-react";
+import { Loader2, Send, Paperclip, Image, Globe, Mic, Tag, FileText, Zap, ArrowUp } from "lucide-react";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Streamdown } from "streamdown";
 
@@ -12,6 +12,11 @@ import { Streamdown } from "streamdown";
 export type Message = {
   role: "system" | "user" | "assistant";
   content: string;
+};
+
+export type SuggestedPrompt = {
+  text: string;
+  icon: 'tag' | 'fileText' | 'zap';
 };
 
 export type AIChatBoxProps = {
@@ -54,19 +59,24 @@ export type AIChatBoxProps = {
 
   /**
    * Suggested prompts to display (always visible at top)
-   * Click to send directly
+   * Can be array of strings or objects with text and icon
    */
-  suggestedPrompts?: string[];
+  suggestedPrompts?: string[] | SuggestedPrompt[];
+};
+
+// Icon mapping
+const iconMap = {
+  tag: Tag,
+  fileText: FileText,
+  zap: Zap,
 };
 
 /**
- * Modern AI chat box component with suggested prompts at top and icon-rich input.
- * Designed like modern AI chat interfaces (ChatGPT/Cadillac EV style).
- *
+ * Modern AI chat box component matching the Cadillac EV design exactly.
  * Features:
- * - Suggested prompts always visible at top
- * - Icon-rich input field (Paperclip, Image, Globe, Mic, Send)
- * - Clean, minimal design
+ * - Suggested prompts with icons at top (Tag, FileText, Zap)
+ * - Icons INSIDE the input field (left: Paperclip, Image; right: Globe, Mic, ArrowUp)
+ * - Clean, minimal white background design
  * - Markdown rendering with Streamdown
  * - Auto-scrolls to latest message
  * - Loading states
@@ -93,6 +103,16 @@ export function AIChatBox({
     messages.filter((msg) => msg.role !== "system"), 
     [messages]
   );
+
+  // Normalize suggested prompts
+  const normalizedPrompts = useMemo(() => {
+    if (!suggestedPrompts) return [];
+    return suggestedPrompts.map(prompt => 
+      typeof prompt === 'string' 
+        ? { text: prompt, icon: 'tag' as const }
+        : prompt
+    );
+  }, [suggestedPrompts]);
 
   // Scroll to bottom helper function with smooth animation
   const scrollToBottom = useCallback(() => {
@@ -149,26 +169,30 @@ export function AIChatBox({
     <div
       ref={containerRef}
       className={cn(
-        "flex flex-col bg-background text-foreground",
+        "flex flex-col bg-white text-gray-900",
         className
       )}
       style={{ height }}
     >
-      {/* Suggested Prompts Section - Always visible at top */}
-      {suggestedPrompts && suggestedPrompts.length > 0 && (
-        <div className="px-6 pt-4 pb-3 border-b bg-background">
-          <div className="flex flex-wrap gap-2">
-            {suggestedPrompts.map((prompt, index) => (
-              <button
-                key={index}
-                onClick={() => handleSuggestedPromptClick(prompt)}
-                disabled={isLoading}
-                className="rounded-lg border border-border bg-card hover:bg-accent px-4 py-2 text-sm font-medium text-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                type="button"
-              >
-                {prompt}
-              </button>
-            ))}
+      {/* Suggested Prompts Section - Always visible at top with icons */}
+      {normalizedPrompts.length > 0 && (
+        <div className="px-6 pt-4 pb-3">
+          <div className="flex flex-wrap gap-2 justify-center">
+            {normalizedPrompts.map((prompt, index) => {
+              const IconComponent = iconMap[prompt.icon];
+              return (
+                <button
+                  key={index}
+                  onClick={() => handleSuggestedPromptClick(prompt.text)}
+                  disabled={isLoading}
+                  className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                  type="button"
+                >
+                  {IconComponent && <IconComponent className="size-4" />}
+                  {prompt.text}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -177,7 +201,7 @@ export function AIChatBox({
       <div ref={scrollAreaRef} className="flex-1 overflow-hidden">
         {displayMessages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center p-6">
-            <p className="text-sm text-muted-foreground mb-6">{emptyStateMessage}</p>
+            <p className="text-sm text-gray-500 mb-6">{emptyStateMessage}</p>
           </div>
         ) : (
           <ScrollArea className="h-full">
@@ -196,15 +220,15 @@ export function AIChatBox({
                     className={cn(
                       "max-w-[80%] rounded-lg px-4 py-3 select-text",
                       message.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-foreground"
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-100 text-gray-900"
                     )}
                     // Prevent any click events that might trigger errors
                     onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()}
                   >
                     {message.role === "assistant" ? (
-                      <div className="prose prose-sm dark:prose-invert max-w-none">
+                      <div className="prose prose-sm max-w-none">
                         <Streamdown>{message.content}</Streamdown>
                       </div>
                     ) : (
@@ -218,8 +242,8 @@ export function AIChatBox({
 
               {isLoading && (
                 <div className="flex items-start gap-4 justify-start">
-                  <div className="rounded-lg bg-muted px-4 py-3">
-                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                  <div className="rounded-lg bg-gray-100 px-4 py-3">
+                    <Loader2 className="size-4 animate-spin text-gray-500" />
                   </div>
                 </div>
               )}
@@ -228,18 +252,18 @@ export function AIChatBox({
         )}
       </div>
 
-      {/* Input Area with Icons */}
+      {/* Input Area with Icons INSIDE the input field */}
       <form
         ref={inputAreaRef}
         onSubmit={handleSubmit}
-        className="border-t bg-background px-4 py-3"
+        className="px-4 py-3 bg-white"
       >
-        <div className="flex items-end gap-2">
-          {/* Left Icons */}
-          <div className="flex items-center gap-1">
+        <div className="relative flex items-center">
+          {/* Left Icons INSIDE input */}
+          <div className="absolute left-3 flex items-center gap-2 z-10">
             <button
               type="button"
-              className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-accent"
+              className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
               aria-label="Datei anhängen"
               disabled={isLoading}
             >
@@ -247,7 +271,7 @@ export function AIChatBox({
             </button>
             <button
               type="button"
-              className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-accent"
+              className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
               aria-label="Bild hinzufügen"
               disabled={isLoading}
             >
@@ -255,23 +279,23 @@ export function AIChatBox({
             </button>
           </div>
 
-          {/* Text Input */}
+          {/* Text Input with padding for icons */}
           <Textarea
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            className="flex-1 max-h-32 resize-none min-h-[44px] rounded-lg border-border bg-background px-4 py-3 text-sm"
+            className="flex-1 max-h-32 resize-none min-h-[52px] rounded-lg border border-gray-300 bg-white px-20 py-3 pr-24 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             rows={1}
             disabled={isLoading}
           />
 
-          {/* Right Icons */}
-          <div className="flex items-center gap-1">
+          {/* Right Icons INSIDE input */}
+          <div className="absolute right-3 flex items-center gap-1.5 z-10">
             <button
               type="button"
-              className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-accent"
+              className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
               aria-label="Sprache"
               disabled={isLoading}
             >
@@ -279,25 +303,24 @@ export function AIChatBox({
             </button>
             <button
               type="button"
-              className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-accent"
+              className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
               aria-label="Spracheingabe"
               disabled={isLoading}
             >
               <Mic className="size-4" />
             </button>
-            <Button
+            <button
               type="submit"
-              size="icon"
               disabled={!input.trim() || isLoading}
-              className="shrink-0 h-[44px] w-[44px] rounded-lg"
+              className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               aria-label={isLoading ? "Wird gesendet..." : "Nachricht senden"}
             >
               {isLoading ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
-                <Send className="size-4" />
+                <ArrowUp className="size-4" />
               )}
-            </Button>
+            </button>
           </div>
         </div>
       </form>

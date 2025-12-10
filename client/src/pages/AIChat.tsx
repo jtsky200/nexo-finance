@@ -71,7 +71,7 @@ export default function AIChat() {
 
   return (
     <Layout title={t('common.aiAssistant', 'AI Assistent')}>
-      <div className="min-h-[calc(100vh-200px)] flex flex-col bg-white">
+      <div className="min-h-[calc(100vh-200px)] flex flex-col bg-white -mx-4 -mx-6 -mx-8">
         {/* Header Section - Centered like in the image */}
         <div className="text-center py-6 px-4">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">

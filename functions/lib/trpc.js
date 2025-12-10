@@ -57,6 +57,7 @@ const requireUser = t.middleware(async (opts) => {
 exports.protectedProcedure = t.procedure.use(requireUser);
 // Create context for Firebase Functions
 async function createContext(opts) {
+    var _a;
     let user = null;
     try {
         // Try to get user from Firebase Auth token
@@ -64,20 +65,41 @@ async function createContext(opts) {
         if (authHeader === null || authHeader === void 0 ? void 0 : authHeader.startsWith('Bearer ')) {
             const token = authHeader.substring(7);
             const decodedToken = await admin.auth().verifyIdToken(token);
+            // Get Firebase Auth user info
+            const firebaseUser = await admin.auth().getUser(decodedToken.uid);
             // Get user from Firestore
-            const userDoc = await admin.firestore()
+            let userDoc = await admin.firestore()
                 .collection('users')
                 .where('openId', '==', decodedToken.uid)
                 .limit(1)
                 .get();
-            if (!userDoc.empty) {
+            if (userDoc.empty) {
+                // User doesn't exist in Firestore, create it
+                const newUserData = {
+                    openId: decodedToken.uid,
+                    name: firebaseUser.displayName || null,
+                    email: firebaseUser.email || null,
+                    loginMethod: ((_a = firebaseUser.providerData[0]) === null || _a === void 0 ? void 0 : _a.providerId) || null,
+                    lastSignedIn: admin.firestore.FieldValue.serverTimestamp(),
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                };
+                const newUserRef = await admin.firestore().collection('users').add(newUserData);
+                user = Object.assign({ id: newUserRef.id }, newUserData);
+            }
+            else {
+                // User exists, update lastSignedIn
                 const userData = userDoc.docs[0].data();
+                await userDoc.docs[0].ref.update({
+                    lastSignedIn: admin.firestore.FieldValue.serverTimestamp(),
+                });
                 user = Object.assign({ id: userDoc.docs[0].id }, userData);
             }
         }
     }
     catch (error) {
         // Authentication is optional for public procedures
+        // Log error for debugging but don't throw
+        console.error('[tRPC] Auth error:', error);
         user = null;
     }
     return {

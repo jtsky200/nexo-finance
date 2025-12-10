@@ -46,15 +46,38 @@ async function createContext(opts: { req: Request }): Promise<{ user: any | null
       const token = authHeader.substring(7);
       const decodedToken = await admin.auth().verifyIdToken(token);
       
+      // Get Firebase Auth user info
+      const firebaseUser = await admin.auth().getUser(decodedToken.uid);
+      
       // Get user from Firestore
-      const userDoc = await admin.firestore()
+      let userDoc = await admin.firestore()
         .collection('users')
         .where('openId', '==', decodedToken.uid)
         .limit(1)
         .get();
       
-      if (!userDoc.empty) {
+      if (userDoc.empty) {
+        // User doesn't exist in Firestore, create it
+        const newUserData = {
+          openId: decodedToken.uid,
+          name: firebaseUser.displayName || null,
+          email: firebaseUser.email || null,
+          loginMethod: firebaseUser.providerData[0]?.providerId || null,
+          lastSignedIn: admin.firestore.FieldValue.serverTimestamp(),
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+        
+        const newUserRef = await admin.firestore().collection('users').add(newUserData);
+        user = {
+          id: newUserRef.id,
+          ...newUserData,
+        };
+      } else {
+        // User exists, update lastSignedIn
         const userData = userDoc.docs[0].data();
+        await userDoc.docs[0].ref.update({
+          lastSignedIn: admin.firestore.FieldValue.serverTimestamp(),
+        });
         user = {
           id: userDoc.docs[0].id,
           ...userData,
@@ -63,6 +86,8 @@ async function createContext(opts: { req: Request }): Promise<{ user: any | null
     }
   } catch (error) {
     // Authentication is optional for public procedures
+    // Log error for debugging but don't throw
+    console.error('[tRPC] Auth error:', error);
     user = null;
   }
 

@@ -1,9 +1,12 @@
 import { COOKIE_NAME } from "@shared/const";
+
+import { z } from "zod";
+
+import * as db from "./db";
+
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { z } from "zod";
-import * as db from "./db";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -201,6 +204,56 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         await db.updateUserPreferences(ctx.user.id, input);
         return { success: true };
+      }),
+  }),
+
+  ai: router({
+    chat: protectedProcedure
+      .input(z.object({
+        messages: z.array(z.object({
+          role: z.enum(['system', 'user', 'assistant']),
+          content: z.string(),
+        })),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { invokeLLM } = await import('./_core/llm');
+        
+        // Convert frontend messages to LLM format
+        const llmMessages = input.messages.map(msg => ({
+          role: msg.role as 'system' | 'user' | 'assistant',
+          content: msg.content,
+        }));
+
+        try {
+          const result = await invokeLLM({
+            messages: llmMessages,
+          });
+
+          // Extract the assistant's response
+          const assistantMessage = result.choices[0]?.message;
+          if (!assistantMessage) {
+            throw new Error('No response from AI');
+          }
+
+          // Handle both string and array content
+          const content = typeof assistantMessage.content === 'string'
+            ? assistantMessage.content
+            : Array.isArray(assistantMessage.content)
+            ? assistantMessage.content
+                .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+                .map(c => c.text)
+                .join('\n')
+            : 'Keine Antwort erhalten';
+
+          return {
+            content,
+            usage: result.usage,
+          };
+        } catch (error) {
+          throw new Error(
+            error instanceof Error ? error.message : 'AI request failed'
+          );
+        }
       }),
   }),
 });

@@ -76,7 +76,6 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
       const data = result.data as { events: CalendarEvent[] };
       setEvents(data.events || []);
     } catch (error) {
-      console.error('Error fetching events:', error);
       setEvents([]);
     } finally {
       setIsLoading(false);

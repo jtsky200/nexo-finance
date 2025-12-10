@@ -72,7 +72,7 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
       const data = result.data as { holidays: SchoolHoliday[] };
       setHolidays(data.holidays || []);
     } catch (error) {
-      console.error('Error fetching holidays:', error);
+      // Silently fail - holidays will be empty
     } finally {
       setIsLoading(false);
     }
@@ -110,7 +110,6 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
       fetchHolidays();
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      console.error('Error creating holiday:', error);
       toast.error('Fehler beim Erstellen');
     }
   };
@@ -123,7 +122,6 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
       fetchHolidays();
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      console.error('Error deleting holiday:', error);
       toast.error('Fehler beim Löschen');
     }
   };

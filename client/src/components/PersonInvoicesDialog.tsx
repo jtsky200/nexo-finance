@@ -150,7 +150,6 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         onDataChanged();
       }
     } catch (error) {
-      console.error('Error refreshing data:', error);
       // Silently fail - data will refresh on next dialog open
     }
   }, [refetchInvoices, refetchAppointments, onDataChanged]);
@@ -188,10 +187,9 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       try {
         await refreshData();
       } catch (refreshError) {
-        console.error('Error refreshing data:', refreshError);
+        // Silently fail - data will refresh on next dialog open
       }
     } catch (error: any) {
-      console.error('Error adding appointment:', error);
       toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
     } finally {
       setIsSubmittingAppointment(false);
@@ -219,10 +217,9 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       try {
         await refreshData();
       } catch (refreshError) {
-        console.error('Error refreshing data:', refreshError);
+        // Silently fail - data will refresh on next dialog open
       }
     } catch (error: any) {
-      console.error('Error updating appointment:', error);
       toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
     } finally {
       setIsSubmittingAppointment(false);
@@ -239,10 +236,9 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       try {
         await refreshData();
       } catch (refreshError) {
-        console.error('Error refreshing data:', refreshError);
+        // Silently fail - data will refresh on next dialog open
       }
     } catch (error: any) {
-      console.error('Error deleting appointment:', error);
       toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
     }
   };
@@ -331,11 +327,9 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       try {
         await refreshData();
       } catch (refreshError) {
-        console.error('Error refreshing data:', refreshError);
         // Don't show error to user, data will refresh on next open
       }
     } catch (error: any) {
-      console.error('Error adding invoice:', error);
       toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
     } finally {
       setIsSubmittingInvoice(false);
@@ -373,10 +367,9 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       try {
         await refreshData();
       } catch (refreshError) {
-        console.error('Error refreshing data:', refreshError);
+        // Silently fail - data will refresh on next dialog open
       }
     } catch (error: any) {
-      console.error('Error converting to installment:', error);
       toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
     } finally {
       setIsSubmittingInstallment(false);
@@ -416,10 +409,9 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       try {
         await refreshData();
       } catch (refreshError) {
-        console.error('Error refreshing data:', refreshError);
+        // Silently fail - data will refresh on next dialog open
       }
     } catch (error: any) {
-      console.error('Error updating invoice:', error);
       toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
     } finally {
       setIsSubmittingInvoice(false);
@@ -433,10 +425,9 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       try {
         await refreshData();
       } catch (refreshError) {
-        console.error('Error refreshing data:', refreshError);
+        // Silently fail - data will refresh on next dialog open
       }
     } catch (error: any) {
-      console.error('Error updating status:', error);
       toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
     }
   };
@@ -1786,7 +1777,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                       try {
                         dueDateObj = inst.dueDate?.toDate ? inst.dueDate.toDate() : (typeof inst.dueDate === 'string' ? new Date(inst.dueDate) : new Date(inst.dueDate));
                       } catch (e) {
-                        console.error('Error parsing dueDate:', e);
+                        // Invalid date - skip
                       }
                     }
                     const isOverdue = dueDateObj && dueDateObj < new Date() && inst.status !== 'paid';
@@ -2046,10 +2037,9 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                                 setSelectedInvoiceForPayment(updatedInvoice);
                               }
                             } catch (refreshError) {
-                              console.error('Error refreshing data:', refreshError);
+                              // Silently fail - data will refresh on next dialog open
                             }
                           } catch (error: any) {
-                            console.error('Error recording payment:', error);
                             toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
                           }
                         }}
@@ -2087,7 +2077,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                       toast.success('Daten aktualisiert');
                     }
                   } catch (error) {
-                    console.error('Error refreshing:', error);
+                    // Silently fail - data will refresh on next dialog open
                   }
                 }}
                 className="h-10"
@@ -2291,10 +2281,9 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                       setSelectedInvoiceForPayment(updatedInvoice);
                     }
                   } catch (refreshError) {
-                    console.error('Error refreshing data:', refreshError);
+                    // Silently fail - data will refresh on next dialog open
                   }
                 } catch (error: any) {
-                  console.error('Error updating installment:', error);
                   toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
                 } finally {
                   setIsSubmittingInstallment(false);

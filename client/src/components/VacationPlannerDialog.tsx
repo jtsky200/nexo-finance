@@ -70,7 +70,7 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
       const data = result.data as { vacations: Vacation[] };
       setVacations(data.vacations || []);
     } catch (error) {
-      console.error('Error fetching vacations:', error);
+      // Silently fail - vacations will be empty
     } finally {
       setIsLoading(false);
     }
@@ -138,7 +138,6 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
       fetchVacations();
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      console.error('Error saving vacation:', error);
       toast.error('Fehler beim Speichern');
     }
   };
@@ -153,7 +152,6 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
       fetchVacations();
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      console.error('Error deleting vacation:', error);
       toast.error('Fehler beim Löschen');
     }
   };

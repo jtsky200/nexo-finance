@@ -3,6 +3,8 @@ import { AIChatBox, type Message } from '@/components/AIChatBox';
 import Layout from '@/components/Layout';
 import { MessageSquare } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { trpc } from '@/lib/trpc';
+import { toast } from 'sonner';
 
 export default function AIChat() {
   const { t } = useTranslation();
@@ -12,36 +14,36 @@ export default function AIChat() {
       content: 'Du bist ein hilfreicher Assistent für die Nexo-Anwendung. Du hilfst Benutzern bei Fragen zu Finanzen, Rechnungen, Terminen und anderen Funktionen der App.',
     },
   ]);
-  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSendMessage = useCallback(async (content: string) => {
-    // Add user message
-    const newMessages: Message[] = [...messages, { role: 'user', content }];
-    setMessages(newMessages);
-    setIsLoading(true);
-
-    try {
-      // TODO: Replace with actual tRPC call or API endpoint
-      // For now, simulate AI response
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+  const chatMutation = trpc.ai.chat.useMutation({
+    onSuccess: (data) => {
       const aiResponse: Message = {
         role: 'assistant',
-        content: `Ich habe deine Nachricht erhalten: "${content}".\n\nDies ist eine Demo-Antwort. In der finalen Version wird hier eine echte AI-Antwort über tRPC oder eine API angezeigt.\n\nDu kannst mich fragen:\n- Wie funktioniert die Rechnungsverwaltung?\n- Wie erstelle ich eine Erinnerung?\n- Wie verwalte ich meine Finanzen?`,
+        content: data.content,
       };
-      
-      setMessages([...newMessages, aiResponse]);
-    } catch (error) {
-      console.error('Chat error:', error);
+      setMessages((prev) => [...prev, aiResponse]);
+    },
+    onError: (error) => {
       const errorResponse: Message = {
         role: 'assistant',
-        content: 'Entschuldigung, es ist ein Fehler aufgetreten. Bitte versuche es später erneut.',
+        content: `Entschuldigung, es ist ein Fehler aufgetreten: ${error.message}. Bitte versuche es später erneut.`,
       };
-      setMessages([...newMessages, errorResponse]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [messages]);
+      setMessages((prev) => [...prev, errorResponse]);
+      toast.error('Fehler beim Senden der Nachricht');
+    },
+  });
+
+  const handleSendMessage = useCallback((content: string) => {
+    // Add user message
+    const userMessage: Message = { role: 'user', content };
+    const newMessages: Message[] = [...messages, userMessage];
+    setMessages(newMessages);
+
+    // Call tRPC mutation
+    chatMutation.mutate({
+      messages: newMessages,
+    });
+  }, [messages, chatMutation]);
 
   const suggestedPrompts = useMemo(() => [
     'Wie funktioniert die Rechnungsverwaltung?',
@@ -71,7 +73,7 @@ export default function AIChat() {
           <AIChatBox
             messages={messages}
             onSendMessage={handleSendMessage}
-            isLoading={isLoading}
+            isLoading={chatMutation.isPending}
             placeholder={t('common.typeMessage', 'Nachricht eingeben...')}
             height="calc(100vh - 300px)"
             emptyStateMessage={t('common.startConversation', 'Beginne eine Unterhaltung mit dem AI Assistenten')}

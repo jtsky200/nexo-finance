@@ -77,7 +77,7 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
       const data = result.data as { schedules: SchoolSchedule[] };
       setSchedules(data.schedules || []);
     } catch (error) {
-      console.error('Error fetching schedules:', error);
+      // Silently fail - schedules will be empty
     } finally {
       setIsLoading(false);
     }
@@ -165,7 +165,6 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
       fetchSchedules();
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      console.error('Error saving schedules:', error);
       toast.error('Fehler beim Speichern');
     }
   };
@@ -177,7 +176,6 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
       fetchSchedules();
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      console.error('Error deleting schedule:', error);
       toast.error('Fehler beim Löschen');
     }
   };
@@ -228,7 +226,6 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
       
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      console.error('Error adding child:', error);
       toast.error('Fehler beim Hinzufügen');
     }
   };

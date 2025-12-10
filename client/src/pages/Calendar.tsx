@@ -174,7 +174,7 @@ export default function Calendar() {
       setSchoolSchedules(schoolData.schedules || []);
       setSchoolHolidays(holidaysData.holidays || []);
     } catch (error) {
-      console.error('Error fetching calendar data:', error);
+      // Error fetching calendar data - silently fail
       toast.error('Fehler beim Laden der Events');
     } finally {
       setIsLoading(false);

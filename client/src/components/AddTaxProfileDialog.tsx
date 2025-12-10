@@ -104,7 +104,7 @@ export default function AddTaxProfileDialog({
         notes: '',
       });
     } catch (error) {
-      console.error('Error submitting tax profile:', error);
+      // Silently fail - error is handled by toast
     } finally {
       setIsSubmitting(false);
     }

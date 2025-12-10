@@ -245,7 +245,6 @@ export function useAllBills() {
         setStats(data.stats);
         setError(null);
       } catch (err) {
-        console.error('Error fetching bills:', err);
         setError(err as Error);
       } finally {
         setIsLoading(false);
@@ -678,7 +677,6 @@ export function usePersonInvoices(personId: string | undefined) {
           
           return mapped;
         } catch (err) {
-          console.error('Error mapping invoice:', inv, err);
           // Return invoice with safe defaults
           return {
             ...inv,

@@ -1,6 +1,3 @@
-import { useState, useRef, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
-import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/lib/firebase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -10,7 +7,15 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+
+import { useState, useRef, useCallback } from 'react';
+
+import { useTranslation } from 'react-i18next';
+
+import { httpsCallable } from 'firebase/functions';
+
 import { toast } from 'sonner';
+
 import { 
   Upload, 
   FileText, 
@@ -229,7 +234,6 @@ export default function DocumentUploader({
       }
       
     } catch (error: any) {
-      console.error('Upload/Analysis error:', error);
       toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
     } finally {
       setIsUploading(false);
@@ -296,7 +300,6 @@ export default function DocumentUploader({
       onUploadComplete?.();
       
     } catch (error: any) {
-      console.error('Process error:', error);
       toast.error('Fehler beim Verarbeiten: ' + error.message);
     }
   };

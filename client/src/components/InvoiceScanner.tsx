@@ -76,7 +76,6 @@ function parseSwissQRCode(qrData: string): ScannedInvoiceData | null {
 
     return data;
   } catch (error) {
-    console.error('QR Code parsing error:', error);
     return null;
   }
 }
@@ -175,7 +174,6 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
             setScannedData({ imageUrl: imageData });
           }
         } catch (err) {
-          console.error('Barcode detection error:', err);
           setScannedData({ imageUrl: imageData });
         }
       } else {
@@ -184,7 +182,6 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
         setScannedData({ imageUrl: imageData });
       }
     } catch (error) {
-      console.error('Image processing error:', error);
       toast.error(t('invoice.processingError', 'Fehler bei der Bildverarbeitung.'));
     } finally {
       setIsProcessing(false);
@@ -213,7 +210,6 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
         };
       }
     } catch (error) {
-      console.error('Camera error:', error);
       toast.error(t('invoice.cameraError', 'Kamera konnte nicht gestartet werden.'));
     }
   };

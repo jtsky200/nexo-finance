@@ -75,7 +75,6 @@ export default function PersonDocumentsTab({
       const result: any = await getPersonDocuments({ personId });
       setDocuments(result.data.documents || []);
     } catch (error) {
-      console.error('Error fetching documents:', error);
       toast.error('Fehler beim Laden der Dokumente');
     } finally {
       setIsLoading(false);
@@ -93,7 +92,6 @@ export default function PersonDocumentsTab({
       toast.success('Dokument gelöscht');
       fetchDocuments();
     } catch (error) {
-      console.error('Error deleting document:', error);
       toast.error('Fehler beim Löschen');
     } finally {
       setDeleteConfirmId(null);

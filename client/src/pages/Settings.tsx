@@ -88,7 +88,7 @@ export default function Settings() {
             setAutoConfirmDocuments(result.data.autoConfirmDocuments || false);
           }
         } catch (error) {
-          console.error('Error loading OCR settings:', error);
+          // Silently fail - settings will use defaults
         } finally {
           setIsLoadingOcrSettings(false);
         }
@@ -161,14 +161,12 @@ export default function Settings() {
             autoConfirmDocuments,
           });
         } catch (firebaseError) {
-          console.error('Error saving to Firebase:', firebaseError);
           // Continue even if Firebase save fails - local storage is saved
         }
       }
       
       toast.success(t('settings.saved', 'Einstellungen gespeichert'));
     } catch (error) {
-      console.error('Error saving settings:', error);
       toast.error(t('settings.errorSaving', 'Fehler beim Speichern'));
     } finally {
       setIsSaving(false);

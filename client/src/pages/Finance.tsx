@@ -189,7 +189,6 @@ export default function Finance() {
       
       toast.success(t('finance.allEntriesDeleted', `${allEntries.length} Einträge gelöscht`));
     } catch (error: any) {
-      console.error('Error clearing entries:', error);
       toast.error(t('finance.clearError', 'Fehler beim Löschen: ') + error.message);
     } finally {
       setIsClearing(false);
@@ -371,7 +370,6 @@ export default function Finance() {
       // Reload page to refresh data
       window.location.reload();
     } catch (error: any) {
-      console.error('Error deleting person:', error);
       toast.error(t('common.error') + ': ' + error.message);
     }
   };
@@ -394,7 +392,6 @@ export default function Finance() {
       // Force immediate refetch
       await refetch();
     } catch (error: any) {
-      console.error('Status update error:', error);
       toast.error(t('common.error') + ': ' + error.message);
     }
   };

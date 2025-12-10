@@ -105,7 +105,7 @@ export default function Documents() {
       const data = result.data as { documents: Document[], total: number };
       setDocuments(data.documents || []);
     } catch (error) {
-      console.error('Error fetching documents:', error);
+      // Error fetching documents - silently fail
       toast.error('Fehler beim Laden der Dokumente');
     } finally {
       setLoading(false);
@@ -198,7 +198,6 @@ export default function Documents() {
       setShowAssignDialog(true);
       
     } catch (error: any) {
-      console.error('Error analyzing document:', error);
       toast.error('Fehler bei der Analyse: ' + (error.message || 'Unbekannter Fehler'));
       // Still show dialog to assign manually
       setShowAssignDialog(true);
@@ -238,7 +237,6 @@ export default function Documents() {
       fetchDocuments();
       
     } catch (error: any) {
-      console.error('Error saving document:', error);
       toast.error('Fehler beim Speichern: ' + (error.message || 'Unbekannter Fehler'));
     } finally {
       setIsSaving(false);
@@ -274,7 +272,6 @@ export default function Documents() {
       fetchDocuments();
       setDeleteDocumentConfirm(null);
     } catch (error) {
-      console.error('Error deleting document:', error);
       toast.error('Fehler beim Löschen');
       setDeleteDocumentConfirm(null);
     }

@@ -55,10 +55,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       const result = await signInWithPopup(auth, provider);
     } catch (err: any) {
-      console.error('Google Sign-In Error:', err);
-      console.error('Error code:', err.code);
-      console.error('Error message:', err.message);
-      
       let errorMessage = 'Ein Fehler ist aufgetreten';
       
       switch (err.code) {

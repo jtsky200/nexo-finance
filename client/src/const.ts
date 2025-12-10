@@ -29,7 +29,6 @@ export const getLoginUrl = (): string | null => {
 
     return url.toString();
   } catch (error) {
-    console.error('Error generating login URL:', error);
     return null;
   }
 };

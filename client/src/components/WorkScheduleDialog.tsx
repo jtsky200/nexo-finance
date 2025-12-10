@@ -61,7 +61,7 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
       const data = result.data as { schedules: WorkSchedule[] };
       setSchedules(data.schedules || []);
     } catch (error) {
-      console.error('Error fetching schedules:', error);
+      // Silently fail - schedules will be empty
     } finally {
       setIsLoading(false);
     }
@@ -148,7 +148,6 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
       fetchSchedules();
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      console.error('Error saving schedules:', error);
       toast.error('Fehler beim Speichern');
     }
   };
@@ -160,7 +159,6 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
       fetchSchedules();
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      console.error('Error deleting schedule:', error);
       toast.error('Fehler beim Löschen');
     }
   };

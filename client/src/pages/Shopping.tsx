@@ -358,7 +358,7 @@ export default function Shopping() {
       const result = await getTemplates({});
       setSavedTemplates((result.data as any).templates || []);
     } catch (error) {
-      console.error('Error loading templates:', error);
+      // Error loading templates - silently fail
     }
   };
 
@@ -814,7 +814,6 @@ export default function Shopping() {
         startEdgeDetection();
       }
     } catch (error: any) {
-      console.error('Camera error:', error);
       if (error.name === 'NotAllowedError') {
         toast.error('Kamera-Berechtigung verweigert. Bitte in Browsereinstellungen erlauben.');
       } else if (error.name === 'NotFoundError') {
@@ -977,7 +976,6 @@ export default function Shopping() {
             toast.error(data.error || 'Keine Artikel erkannt. Versuche bessere Bildqualität.');
           }
         } catch (innerError: any) {
-          console.error('Receipt processing error:', innerError);
           toast.error('Analysefehler: ' + (innerError.message || 'Unbekannter Fehler'));
         }
         
@@ -989,7 +987,6 @@ export default function Shopping() {
       };
       reader.readAsDataURL(file);
     } catch (error: any) {
-      console.error('File read error:', error);
       toast.error('Fehler: ' + error.message);
       setIsScanning(false);
     }

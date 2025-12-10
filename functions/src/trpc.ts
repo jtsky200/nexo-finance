@@ -97,43 +97,183 @@ async function createContext(opts: { req: Request }): Promise<{ user: any | null
   };
 }
 
-// Import invokeLLM function (we'll need to adapt it for Firebase Functions)
+// OpenAI Assistant ID - set this to your assistant ID from OpenAI
+const OPENAI_ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID || 'asst_Es1kVA8SKX4G4LPtsvDtCFp9';
+
+// Use OpenAI Assistants API
 async function invokeLLM(params: {
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
 }, apiKey: string): Promise<any> {
   if (!apiKey || apiKey.trim() === '') {
-    throw new Error('BUILT_IN_FORGE_API_KEY is not configured. Please set it in Firebase Functions environment variables or secrets.');
+    throw new Error('OPENAI_API_KEY is not configured. Please set it in Firebase Functions environment variables or secrets.');
   }
 
-  const payload = {
-    model: 'gemini-2.5-flash',
-    messages: params.messages.map(msg => ({
-      role: msg.role,
-      content: msg.content,
-    })),
-    max_tokens: 32768,
-    thinking: {
-      budget_tokens: 128,
-    },
-  };
+  // Extract user messages (skip system message, it's handled by the assistant)
+  const userMessages = params.messages.filter(msg => msg.role === 'user');
+  if (userMessages.length === 0) {
+    throw new Error('No user messages found');
+  }
 
-  const response = await fetch('https://api.forge.ai/v1/chat/completions', {
+  // Get the last user message
+  const lastUserMessage = userMessages[userMessages.length - 1];
+
+  // Create a thread and send message to OpenAI Assistant
+  // Step 1: Create a thread
+  const threadResponse = await fetch('https://api.openai.com/v1/threads', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${apiKey}`,
+      'OpenAI-Beta': 'assistants=v2',
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({}),
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
+  if (!threadResponse.ok) {
+    const errorText = await threadResponse.text();
     throw new Error(
-      `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`
+      `Failed to create thread: ${threadResponse.status} ${threadResponse.statusText} – ${errorText}`
     );
   }
 
-  return await response.json();
+  const thread = await threadResponse.json();
+  const threadId = thread.id;
+
+  try {
+    // Step 2: Add message to thread
+    const messageResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'OpenAI-Beta': 'assistants=v2',
+      },
+      body: JSON.stringify({
+        role: 'user',
+        content: lastUserMessage.content,
+      }),
+    });
+
+    if (!messageResponse.ok) {
+      const errorText = await messageResponse.text();
+      throw new Error(
+        `Failed to add message: ${messageResponse.status} ${messageResponse.statusText} – ${errorText}`
+      );
+    }
+
+    // Step 3: Run the assistant
+    const runResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'OpenAI-Beta': 'assistants=v2',
+      },
+      body: JSON.stringify({
+        assistant_id: OPENAI_ASSISTANT_ID,
+      }),
+    });
+
+    if (!runResponse.ok) {
+      const errorText = await runResponse.text();
+      throw new Error(
+        `Failed to run assistant: ${runResponse.status} ${runResponse.statusText} – ${errorText}`
+      );
+    }
+
+    const run = await runResponse.json();
+    let runId = run.id;
+    let runStatus = run.status;
+
+    // Step 4: Poll for completion (max 30 seconds)
+    const maxAttempts = 30;
+    let attempts = 0;
+    while (runStatus === 'queued' || runStatus === 'in_progress') {
+      if (attempts >= maxAttempts) {
+        throw new Error('Assistant run timed out');
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+
+      const statusResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs/${runId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'OpenAI-Beta': 'assistants=v2',
+        },
+      });
+
+      if (!statusResponse.ok) {
+        const errorText = await statusResponse.text();
+        throw new Error(
+          `Failed to check run status: ${statusResponse.status} ${statusResponse.statusText} – ${errorText}`
+        );
+      }
+
+      const runStatusData = await statusResponse.json();
+      runStatus = runStatusData.status;
+      attempts++;
+    }
+
+    if (runStatus !== 'completed') {
+      throw new Error(`Assistant run failed with status: ${runStatus}`);
+    }
+
+    // Step 5: Get the messages from the thread
+    const messagesResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'OpenAI-Beta': 'assistants=v2',
+      },
+    });
+
+    if (!messagesResponse.ok) {
+      const errorText = await messagesResponse.text();
+      throw new Error(
+        `Failed to get messages: ${messagesResponse.status} ${messagesResponse.statusText} – ${errorText}`
+      );
+    }
+
+    const messagesData = await messagesResponse.json();
+    
+    // Find the assistant's response (first message with role 'assistant')
+    const assistantMessage = messagesData.data.find((msg: any) => msg.role === 'assistant');
+    
+    if (!assistantMessage) {
+      throw new Error('No assistant response found');
+    }
+
+    // Extract text content from the message
+    const content = assistantMessage.content[0]?.text?.value || '';
+    
+    return {
+      choices: [{
+        message: {
+          role: 'assistant',
+          content: content,
+        },
+      }],
+      usage: {
+        prompt_tokens: 0, // OpenAI doesn't provide this in the response
+        completion_tokens: 0,
+        total_tokens: 0,
+      },
+    };
+  } finally {
+    // Clean up: delete the thread (optional, but good practice)
+    try {
+      await fetch(`https://api.openai.com/v1/threads/${threadId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'OpenAI-Beta': 'assistants=v2',
+        },
+      });
+    } catch (error) {
+      // Ignore cleanup errors
+    }
+  }
 }
 
 // Rule-based response system (no API key needed)
@@ -257,15 +397,15 @@ const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         try {
-          // Get API key from environment variable
-          const apiKey = process.env.BUILT_IN_FORGE_API_KEY || process.env.FORGE_API_KEY || '';
+          // Get OpenAI API key from environment variable
+          const apiKey = process.env.OPENAI_API_KEY || process.env.BUILT_IN_FORGE_API_KEY || '';
           
           // If no API key, use rule-based responses (free, no external API needed)
           if (!apiKey || apiKey.trim() === '') {
             return getRuleBasedResponse(input.messages);
           }
           
-          // Use external LLM API if key is available
+          // Use OpenAI Assistants API if key is available
           const result = await invokeLLM({
             messages: input.messages,
           }, apiKey);

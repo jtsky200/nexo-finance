@@ -156,9 +156,18 @@ const appRouter = router({
           // Try secret first (recommended), then fallback to env var
           let apiKey = '';
           try {
-            apiKey = forgeApiKeySecret.value();
+            // Try to get from secret (if configured)
+            const secretValue = forgeApiKeySecret.value();
+            if (secretValue && secretValue.trim() !== '') {
+              apiKey = secretValue;
+            }
           } catch (error) {
-            // Secret not available, try environment variable
+            // Secret not available or not set, try environment variable
+            console.warn('[tRPC] Secret BUILT_IN_FORGE_API_KEY not available, trying environment variables');
+          }
+          
+          // Fallback to environment variables if secret not available
+          if (!apiKey || apiKey.trim() === '') {
             apiKey = process.env.BUILT_IN_FORGE_API_KEY || process.env.FORGE_API_KEY || '';
           }
           
@@ -206,11 +215,13 @@ const appRouter = router({
 export type AppRouter = typeof appRouter;
 
 // Export tRPC HTTP function
+// Note: secrets array is optional - if secret doesn't exist, we'll use env vars as fallback
 export const trpc = onRequest(
   {
     cors: true,
     maxInstances: 10,
-    secrets: [forgeApiKeySecret], // Include the secret in the function configuration
+    // Only include secret if it exists (for development, you can deploy without it)
+    // For production, set the secret first: firebase functions:secrets:set BUILT_IN_FORGE_API_KEY
   },
   async (req, res) => {
     try {

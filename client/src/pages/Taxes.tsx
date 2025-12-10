@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,10 +25,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, MoreVertical, Edit, Trash2, FileText, Calculator, Users, Wallet } from 'lucide-react';
-import { toast } from 'sonner';
 import { useTaxProfiles, createTaxProfile, updateTaxProfile, deleteTaxProfile, TaxProfile } from '@/lib/firebaseHooks';
 import AddTaxProfileDialog from '@/components/AddTaxProfileDialog';
+
+import { useState } from 'react';
+
+import { useTranslation } from 'react-i18next';
+
+import { Plus, MoreVertical, Edit, Trash2, FileText, Calculator, Users, Wallet } from 'lucide-react';
+
+import { toast } from 'sonner';
 
 const swissCantons: Record<string, string> = {
   'ZH': 'Zürich',

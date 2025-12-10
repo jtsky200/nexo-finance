@@ -29,6 +29,8 @@ export default function AIChat() {
       
       if (error.message.includes('<!doctype') || error.message.includes('Unexpected token')) {
         errorMessage = 'Der Server ist nicht erreichbar oder gibt eine ungültige Antwort zurück. Bitte stelle sicher, dass der Server läuft.';
+      } else if (error.message.includes('Unable to transform')) {
+        errorMessage = 'Fehler bei der Datenübertragung. Bitte versuche es erneut.';
       } else if (error.data?.code === 'UNAUTHORIZED') {
         errorMessage = 'Du bist nicht angemeldet. Bitte melde dich an.';
       } else if (error.data?.code === 'INTERNAL_SERVER_ERROR') {

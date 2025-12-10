@@ -224,11 +224,23 @@ exports.trpc = (0, https_1.onRequest)({
         });
         // Convert Fetch Response to Express response
         res.status(response.status);
+        // Copy all headers from response
         response.headers.forEach((value, key) => {
-            res.setHeader(key, value);
+            // Skip content-encoding and transfer-encoding headers
+            if (key.toLowerCase() !== 'content-encoding' && key.toLowerCase() !== 'transfer-encoding') {
+                res.setHeader(key, value);
+            }
         });
-        const text = await response.text();
-        res.send(text);
+        // Get response body
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+            const json = await response.json();
+            res.json(json);
+        }
+        else {
+            const text = await response.text();
+            res.send(text);
+        }
     }
     catch (error) {
         res.status(500).json({

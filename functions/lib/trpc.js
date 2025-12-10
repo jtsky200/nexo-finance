@@ -120,9 +120,356 @@ function getOpenAIAssistantId() {
     // Fallback to default
     return 'asst_Es1kVA8SKX4G4LPtsvDtCFp9';
 }
+// Define OpenAI Functions/Tools for database access
+function getOpenAITools(userId) {
+    if (!userId)
+        return [];
+    return [
+        {
+            type: 'function',
+            function: {
+                name: 'getPersonDebts',
+                description: 'Ermittelt die Schulden (offene Rechnungen) einer Person. Gibt den Gesamtbetrag und Details aller offenen Rechnungen zurück.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        personName: {
+                            type: 'string',
+                            description: 'Der Name der Person (z.B. "Pata", "Max", "Anna")',
+                        },
+                    },
+                    required: ['personName'],
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'getPersonReminders',
+                description: 'Ermittelt alle Termine, Erinnerungen und Aufgaben einer Person. Kann nach Datum gefiltert werden.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        personName: {
+                            type: 'string',
+                            description: 'Der Name der Person',
+                        },
+                        startDate: {
+                            type: 'string',
+                            description: 'Startdatum im Format YYYY-MM-DD (optional)',
+                        },
+                        endDate: {
+                            type: 'string',
+                            description: 'Enddatum im Format YYYY-MM-DD (optional)',
+                        },
+                    },
+                    required: ['personName'],
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'getPersonCalendarEvents',
+                description: 'Ermittelt Kalender-Events einer Person, einschließlich Ferien, Termine und Zahlungsfristen.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        personName: {
+                            type: 'string',
+                            description: 'Der Name der Person',
+                        },
+                        startDate: {
+                            type: 'string',
+                            description: 'Startdatum im Format YYYY-MM-DD (optional)',
+                        },
+                        endDate: {
+                            type: 'string',
+                            description: 'Enddatum im Format YYYY-MM-DD (optional)',
+                        },
+                    },
+                    required: ['personName'],
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'getFinanceSummary',
+                description: 'Erstellt eine Finanz-Zusammenfassung für einen bestimmten Zeitraum. Zeigt Einnahmen, Ausgaben, Kategorien und Sparpotenzial.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        startDate: {
+                            type: 'string',
+                            description: 'Startdatum im Format YYYY-MM-DD (optional, Standard: Anfang des aktuellen Monats)',
+                        },
+                        endDate: {
+                            type: 'string',
+                            description: 'Enddatum im Format YYYY-MM-DD (optional, Standard: Ende des aktuellen Monats)',
+                        },
+                        month: {
+                            type: 'string',
+                            description: 'Monat im Format YYYY-MM (z.B. "2024-01" für Januar 2024). Überschreibt startDate und endDate.',
+                        },
+                    },
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'getAllPeople',
+                description: 'Listet alle Personen auf, die in der Datenbank gespeichert sind. Nützlich, um verfügbare Namen zu finden.',
+                parameters: {
+                    type: 'object',
+                    properties: {},
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'searchPerson',
+                description: 'Sucht eine Person nach Name (teilweise Übereinstimmung möglich). Gibt Personendetails zurück.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        searchTerm: {
+                            type: 'string',
+                            description: 'Suchbegriff für den Namen (z.B. "Pata", "Max")',
+                        },
+                    },
+                    required: ['searchTerm'],
+                },
+            },
+        },
+    ];
+}
+// Execute function calls from OpenAI Assistant
+async function executeFunction(functionName, args, userId) {
+    if (!userId) {
+        throw new Error('User ID is required');
+    }
+    const db = admin.firestore();
+    switch (functionName) {
+        case 'getPersonDebts': {
+            const { personName } = args;
+            // Find person by name
+            const peopleSnapshot = await db.collection('people')
+                .where('userId', '==', userId)
+                .where('name', '==', personName)
+                .get();
+            if (peopleSnapshot.empty) {
+                return { error: `Person "${personName}" nicht gefunden` };
+            }
+            const personDoc = peopleSnapshot.docs[0];
+            const invoicesSnapshot = await personDoc.ref.collection('invoices')
+                .where('status', '==', 'offen')
+                .get();
+            const invoices = invoicesSnapshot.docs.map(doc => {
+                var _a, _b, _c, _d, _e, _f;
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    description: data.description || '',
+                    amount: data.amount || 0,
+                    date: ((_c = (_b = (_a = data.date) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
+                    dueDate: ((_f = (_e = (_d = data.dueDate) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null,
+                };
+            });
+            const totalDebt = invoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+            return {
+                personName,
+                totalDebt,
+                currency: 'CHF',
+                invoiceCount: invoices.length,
+                invoices,
+            };
+        }
+        case 'getPersonReminders': {
+            const { personName, startDate, endDate } = args;
+            // Find person by name
+            const peopleSnapshot = await db.collection('people')
+                .where('userId', '==', userId)
+                .where('name', '==', personName)
+                .get();
+            if (peopleSnapshot.empty) {
+                return { error: `Person "${personName}" nicht gefunden` };
+            }
+            const personId = peopleSnapshot.docs[0].id;
+            let query = db.collection('reminders')
+                .where('userId', '==', userId)
+                .where('personId', '==', personId);
+            if (startDate) {
+                query = query.where('dueDate', '>=', admin.firestore.Timestamp.fromDate(new Date(startDate)));
+            }
+            if (endDate) {
+                query = query.where('dueDate', '<=', admin.firestore.Timestamp.fromDate(new Date(endDate)));
+            }
+            const snapshot = await query.orderBy('dueDate').get();
+            const reminders = snapshot.docs.map(doc => {
+                var _a, _b, _c;
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    title: data.title || '',
+                    type: data.type || '',
+                    dueDate: ((_c = (_b = (_a = data.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
+                    amount: data.amount || null,
+                    currency: data.currency || 'CHF',
+                    notes: data.notes || '',
+                };
+            });
+            return {
+                personName,
+                reminderCount: reminders.length,
+                reminders,
+            };
+        }
+        case 'getPersonCalendarEvents': {
+            const { personName, startDate, endDate } = args;
+            // Similar to reminders but includes all calendar events
+            const peopleSnapshot = await db.collection('people')
+                .where('userId', '==', userId)
+                .where('name', '==', personName)
+                .get();
+            if (peopleSnapshot.empty) {
+                return { error: `Person "${personName}" nicht gefunden` };
+            }
+            const personDoc = peopleSnapshot.docs[0];
+            const invoicesSnapshot = await personDoc.ref.collection('invoices').get();
+            const events = invoicesSnapshot.docs
+                .map(doc => {
+                var _a, _b, _c, _d, _e, _f;
+                const data = doc.data();
+                const eventDate = ((_b = (_a = data.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) || ((_d = (_c = data.date) === null || _c === void 0 ? void 0 : _c.toDate) === null || _d === void 0 ? void 0 : _d.call(_c)) || ((_f = (_e = data.createdAt) === null || _e === void 0 ? void 0 : _e.toDate) === null || _f === void 0 ? void 0 : _f.call(_e));
+                return {
+                    id: doc.id,
+                    type: 'invoice',
+                    title: data.description || 'Rechnung',
+                    date: (eventDate === null || eventDate === void 0 ? void 0 : eventDate.toISOString()) || null,
+                    amount: data.amount || 0,
+                    status: data.status || 'offen',
+                };
+            })
+                .filter(event => {
+                if (!startDate && !endDate)
+                    return true;
+                if (!event.date)
+                    return false;
+                const eventDate = new Date(event.date);
+                if (startDate && eventDate < new Date(startDate))
+                    return false;
+                if (endDate && eventDate > new Date(endDate))
+                    return false;
+                return true;
+            });
+            return {
+                personName,
+                eventCount: events.length,
+                events,
+            };
+        }
+        case 'getFinanceSummary': {
+            const { startDate, endDate, month } = args;
+            let start;
+            let end;
+            if (month) {
+                const [year, monthNum] = month.split('-').map(Number);
+                start = new Date(year, monthNum - 1, 1);
+                end = new Date(year, monthNum, 0, 23, 59, 59);
+            }
+            else {
+                start = startDate ? new Date(startDate) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+                end = endDate ? new Date(endDate) : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
+            }
+            const snapshot = await db.collection('financeEntries')
+                .where('userId', '==', userId)
+                .where('date', '>=', admin.firestore.Timestamp.fromDate(start))
+                .where('date', '<=', admin.firestore.Timestamp.fromDate(end))
+                .get();
+            const entries = snapshot.docs.map(doc => {
+                var _a, _b, _c;
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    type: data.type || 'expense',
+                    category: data.category || '',
+                    amount: data.amount || 0,
+                    description: data.description || '',
+                    date: ((_c = (_b = (_a = data.date) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
+                };
+            });
+            const income = entries.filter(e => e.type === 'income').reduce((sum, e) => sum + e.amount, 0);
+            const expenses = entries.filter(e => e.type === 'expense').reduce((sum, e) => sum + e.amount, 0);
+            const balance = income - expenses;
+            const categories = entries
+                .filter(e => e.type === 'expense')
+                .reduce((acc, e) => {
+                acc[e.category] = (acc[e.category] || 0) + e.amount;
+                return acc;
+            }, {});
+            return {
+                period: {
+                    start: start.toISOString(),
+                    end: end.toISOString(),
+                },
+                income,
+                expenses,
+                balance,
+                savingsPotential: balance > 0 ? balance : 0,
+                categoryBreakdown: Object.entries(categories).map(([category, amount]) => ({
+                    category,
+                    amount,
+                })),
+                entryCount: entries.length,
+            };
+        }
+        case 'getAllPeople': {
+            const snapshot = await db.collection('people')
+                .where('userId', '==', userId)
+                .get();
+            const people = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    name: data.name || '',
+                    email: data.email || null,
+                    phone: data.phone || null,
+                };
+            });
+            return {
+                people,
+                count: people.length,
+            };
+        }
+        case 'searchPerson': {
+            const { searchTerm } = args;
+            const snapshot = await db.collection('people')
+                .where('userId', '==', userId)
+                .get();
+            const allPeople = snapshot.docs.map(doc => (Object.assign({ id: doc.id }, doc.data())));
+            const matches = allPeople.filter((person) => { var _a; return (_a = person.name) === null || _a === void 0 ? void 0 : _a.toLowerCase().includes(searchTerm.toLowerCase()); });
+            if (matches.length === 0) {
+                return { error: `Keine Person mit "${searchTerm}" gefunden` };
+            }
+            return {
+                matches: matches.map((person) => ({
+                    id: person.id,
+                    name: person.name,
+                    email: person.email || null,
+                    phone: person.phone || null,
+                })),
+            };
+        }
+        default:
+            throw new Error(`Unknown function: ${functionName}`);
+    }
+}
 // Use OpenAI Assistants API
-async function invokeLLM(params, apiKey) {
-    var _a, _b;
+async function invokeLLM(params, apiKey, ctx) {
+    var _a, _b, _c, _d;
     if (!apiKey || apiKey.trim() === '') {
         throw new Error('OPENAI_API_KEY is not configured. Please set it in Firebase Functions environment variables or secrets.');
     }
@@ -168,7 +515,8 @@ async function invokeLLM(params, apiKey) {
             const errorText = await messageResponse.text();
             throw new Error(`Failed to add message: ${messageResponse.status} ${messageResponse.statusText} – ${errorText}`);
         }
-        // Step 3: Run the assistant
+        // Step 3: Run the assistant with tools (functions)
+        const tools = getOpenAITools(((_a = ctx.user) === null || _a === void 0 ? void 0 : _a.id) || '');
         const runResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs`, {
             method: 'POST',
             headers: {
@@ -178,6 +526,7 @@ async function invokeLLM(params, apiKey) {
             },
             body: JSON.stringify({
                 assistant_id: getOpenAIAssistantId(),
+                tools: tools.length > 0 ? tools : undefined,
             }),
         });
         if (!runResponse.ok) {
@@ -208,6 +557,47 @@ async function invokeLLM(params, apiKey) {
             }
             const runStatusData = await statusResponse.json();
             runStatus = runStatusData.status;
+            // Handle function calls (requires_action)
+            if (runStatus === 'requires_action' && ((_b = runStatusData.required_action) === null || _b === void 0 ? void 0 : _b.type) === 'submit_tool_outputs') {
+                const toolCalls = runStatusData.required_action.submit_tool_outputs.tool_calls || [];
+                const toolOutputs = await Promise.all(toolCalls.map(async (toolCall) => {
+                    var _a;
+                    const functionName = toolCall.function.name;
+                    const functionArgs = JSON.parse(toolCall.function.arguments || '{}');
+                    try {
+                        const result = await executeFunction(functionName, functionArgs, ((_a = ctx.user) === null || _a === void 0 ? void 0 : _a.id) || '');
+                        return {
+                            tool_call_id: toolCall.id,
+                            output: JSON.stringify(result),
+                        };
+                    }
+                    catch (error) {
+                        return {
+                            tool_call_id: toolCall.id,
+                            output: JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+                        };
+                    }
+                }));
+                // Submit tool outputs
+                const submitResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs/${runId}/submit_tool_outputs`, {
+                    method: 'POST',
+                    headers: {
+                        'content-type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`,
+                        'OpenAI-Beta': 'assistants=v2',
+                    },
+                    body: JSON.stringify({
+                        tool_outputs: toolOutputs,
+                    }),
+                });
+                if (!submitResponse.ok) {
+                    const errorText = await submitResponse.text();
+                    throw new Error(`Failed to submit tool outputs: ${submitResponse.status} ${submitResponse.statusText} – ${errorText}`);
+                }
+                // Continue polling
+                const submitData = await submitResponse.json();
+                runStatus = submitData.status;
+            }
             attempts++;
         }
         if (runStatus !== 'completed') {
@@ -232,7 +622,7 @@ async function invokeLLM(params, apiKey) {
             throw new Error('No assistant response found');
         }
         // Extract text content from the message
-        const content = ((_b = (_a = assistantMessage.content[0]) === null || _a === void 0 ? void 0 : _a.text) === null || _b === void 0 ? void 0 : _b.value) || '';
+        const content = ((_d = (_c = assistantMessage.content[0]) === null || _c === void 0 ? void 0 : _c.text) === null || _d === void 0 ? void 0 : _d.value) || '';
         return {
             choices: [{
                     message: {
@@ -394,7 +784,7 @@ const appRouter = (0, exports.router)({
                 // Use OpenAI Assistants API if key is available
                 const result = await invokeLLM({
                     messages: input.messages,
-                }, apiKey);
+                }, apiKey, ctx);
                 // Extract the assistant's response
                 const assistantMessage = (_a = result.choices[0]) === null || _a === void 0 ? void 0 : _a.message;
                 if (!assistantMessage) {

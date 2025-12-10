@@ -1,4 +1,5 @@
 import i18n from 'i18next';
+
 import { initReactI18next } from 'react-i18next';
 
 const resources = {
@@ -428,6 +429,14 @@ const resources = {
         confirm: 'Bestätigen',
         yes: 'Ja',
         no: 'Nein',
+        logout: 'Abmelden',
+        switchToLight: 'Zu hellem Design wechseln',
+        switchToDark: 'Zu dunklem Design wechseln',
+        aiAssistant: 'AI Assistent',
+        aiAssistantDescription: 'Stelle Fragen und erhalte Hilfe zu allen Funktionen der Nexo-App',
+        typeMessage: 'Nachricht eingeben...',
+        startConversation: 'Beginne eine Unterhaltung mit dem AI Assistenten',
+        help: 'Hilfe',
       },
     },
   },
@@ -849,6 +858,14 @@ const resources = {
         confirm: 'Confirm',
         yes: 'Yes',
         no: 'No',
+        logout: 'Logout',
+        switchToLight: 'Switch to light theme',
+        switchToDark: 'Switch to dark theme',
+        aiAssistant: 'AI Assistant',
+        aiAssistantDescription: 'Ask questions and get help with all features of the Nexo app',
+        typeMessage: 'Type your message...',
+        startConversation: 'Start a conversation with the AI assistant',
+        help: 'Help',
       },
     },
   },

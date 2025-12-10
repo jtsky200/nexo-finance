@@ -1,6 +1,11 @@
+import { cn } from '@/lib/utils';
+
 import { useState, useMemo } from 'react';
+
 import { useLocation } from 'wouter';
+
 import { useTranslation } from 'react-i18next';
+
 import { 
   LayoutDashboard, 
   Bell, 
@@ -14,9 +19,10 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  ScanLine
+  ScanLine,
+  MessageSquare
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+
 import SidebarCalendarDayDialog from './SidebarCalendarDayDialog';
 
 interface SidebarProps {
@@ -41,6 +47,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     { path: '/documents', icon: ScanLine, label: 'Dokumente' },
     { path: '/shopping', icon: ShoppingCart, label: t('nav.shopping') },
     { path: '/taxes', icon: FileText, label: t('nav.taxes') },
+    { path: '/ai-chat', icon: MessageSquare, label: t('common.aiAssistant', 'AI Assistent') },
     { path: '/settings', icon: Settings, label: t('nav.settings') },
   ];
 

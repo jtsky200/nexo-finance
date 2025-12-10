@@ -3,6 +3,7 @@ import { useLocation } from 'wouter';
 import { useAuth } from '@/contexts/AuthContext';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import AIChatFloatingButton from './AIChatFloatingButton';
 
 interface LayoutProps {
   children: ReactNode;
@@ -58,6 +59,9 @@ export default function Layout({ children, title }: LayoutProps) {
           </div>
         </main>
       </div>
+
+      {/* Floating AI Chat Button */}
+      <AIChatFloatingButton />
     </div>
   );
 }

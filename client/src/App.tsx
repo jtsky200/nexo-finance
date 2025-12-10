@@ -18,6 +18,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Calendar from "./pages/Calendar";
 import Documents from "./pages/Documents";
+import AIChat from "./pages/AIChat";
 
 function Router() {
   return (
@@ -35,6 +36,7 @@ function Router() {
       <Route path="/taxes" component={Taxes} />
       <Route path="/calendar" component={Calendar} />
       <Route path="/settings" component={Settings} />
+      <Route path="/ai-chat" component={AIChat} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
@@ -44,7 +46,7 @@ function Router() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider defaultTheme="light">
+      <ThemeProvider defaultTheme="light" switchable={true}>
         <AuthProvider>
           <TooltipProvider>
             <Toaster />

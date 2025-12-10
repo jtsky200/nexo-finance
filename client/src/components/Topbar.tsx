@@ -1,6 +1,5 @@
-import { Menu, LogOut } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/_core/hooks/useAuth';
+import { useTheme } from '@/contexts/ThemeContext';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -11,7 +10,15 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+
+import { Menu, LogOut, Sun, Moon, Settings, User, HelpCircle, MessageSquare } from 'lucide-react';
+
+import { useTranslation } from 'react-i18next';
+
+import { useLocation } from 'wouter';
+import { useState } from 'react';
 import LanguageSwitcher from './LanguageSwitcher';
+import AIChatDialog from './AIChatDialog';
 
 interface TopbarProps {
   title: string;
@@ -19,13 +26,11 @@ interface TopbarProps {
 }
 
 export default function Topbar({ title, onMenuClick }: TopbarProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { user, logout } = useAuth();
-
-  const toggleLanguage = () => {
-    const newLang = i18n.language === 'de' ? 'en' : 'de';
-    i18n.changeLanguage(newLang);
-  };
+  const { theme, toggleTheme } = useTheme();
+  const [location, setLocation] = useLocation();
+  const [aiChatOpen, setAiChatOpen] = useState(false);
 
   const getUserInitials = () => {
     if (!user?.name) return 'U';
@@ -52,10 +57,25 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
         <h1 className="text-xl font-semibold text-foreground">{title}</h1>
       </div>
 
-      {/* Right side: Language toggle and user menu */}
-      <div className="flex items-center gap-4">
-        {/* Language toggle */}
+      {/* Right side: Language toggle, theme toggle, and user menu */}
+      <div className="flex items-center gap-2">
+        {/* Language switcher dropdown */}
         <LanguageSwitcher />
+
+        {/* Theme toggle */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleTheme}
+          className="h-9 w-9"
+          title={theme === 'dark' ? t('common.switchToLight', 'Zu hellem Design wechseln') : t('common.switchToDark', 'Zu dunklem Design wechseln')}
+        >
+          {theme === 'dark' ? (
+            <Sun className="h-4 w-4" />
+          ) : (
+            <Moon className="h-4 w-4" />
+          )}
+        </Button>
 
         {/* User menu */}
         <DropdownMenu>
@@ -76,13 +96,37 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setLocation('/settings')}>
+              <Settings className="mr-2 h-4 w-4" />
+              <span>{t('nav.settings', 'Einstellungen')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setLocation('/dashboard')}>
+              <User className="mr-2 h-4 w-4" />
+              <span>{t('nav.dashboard', 'Dashboard')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setAiChatOpen(true)}>
+              <MessageSquare className="mr-2 h-4 w-4" />
+              <span>{t('common.aiAssistant', 'AI Assistent')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => {
+              // TODO: Open help/documentation
+              window.open('https://help.nexo.com', '_blank');
+            }}>
+              <HelpCircle className="mr-2 h-4 w-4" />
+              <span>{t('common.help', 'Hilfe')}</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => logout()}>
               <LogOut className="mr-2 h-4 w-4" />
-              <span>{t('common.logout')}</span>
+              <span>{t('common.logout', 'Abmelden')}</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {/* AI Chat Dialog */}
+      <AIChatDialog open={aiChatOpen} onOpenChange={setAiChatOpen} />
     </header>
   );
 }

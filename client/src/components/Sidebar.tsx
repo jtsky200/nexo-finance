@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Link, useLocation } from 'wouter';
+import { useLocation } from 'wouter';
 import { useTranslation } from 'react-i18next';
 import { 
   LayoutDashboard, 
@@ -129,24 +129,23 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
             const isActive = location === item.path;
             
             return (
-              <Link
+              <button
                 key={item.path}
-                href={item.path}
-                onClick={onClose}
+                onClick={() => {
+                  setLocation(item.path);
+                  onClose?.();
+                }}
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors cursor-pointer w-full text-left",
+                  "hover:bg-accent hover:text-accent-foreground",
+                  isActive 
+                    ? "bg-primary text-primary-foreground" 
+                    : "text-muted-foreground"
+                )}
               >
-                <a
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors",
-                    "hover:bg-accent hover:text-accent-foreground",
-                    isActive 
-                      ? "bg-primary text-primary-foreground" 
-                      : "text-muted-foreground"
-                  )}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="font-medium">{item.label}</span>
-                </a>
-              </Link>
+                <Icon className="w-5 h-5" />
+                <span className="font-medium">{item.label}</span>
+              </button>
             );
           })}
         </nav>

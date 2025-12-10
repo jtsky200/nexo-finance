@@ -1,0 +1,241 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.trpc = exports.protectedProcedure = exports.publicProcedure = exports.router = void 0;
+const fetch_1 = require("@trpc/server/adapters/fetch");
+const server_1 = require("@trpc/server");
+const https_1 = require("firebase-functions/v2/https");
+const superjson_1 = __importDefault(require("superjson"));
+const zod_1 = require("zod");
+const admin = __importStar(require("firebase-admin"));
+// Initialize tRPC for Firebase Functions
+const t = server_1.initTRPC.context().create({
+    transformer: superjson_1.default,
+});
+exports.router = t.router;
+exports.publicProcedure = t.procedure;
+// Middleware to require authentication
+const requireUser = t.middleware(async (opts) => {
+    const { ctx, next } = opts;
+    if (!ctx.user) {
+        throw new server_1.TRPCError({ code: 'UNAUTHORIZED', message: 'User must be authenticated' });
+    }
+    return next({
+        ctx: Object.assign(Object.assign({}, ctx), { user: ctx.user }),
+    });
+});
+exports.protectedProcedure = t.procedure.use(requireUser);
+// Create context for Firebase Functions
+async function createContext(opts) {
+    let user = null;
+    try {
+        // Try to get user from Firebase Auth token
+        const authHeader = opts.req.headers.get('authorization');
+        if (authHeader === null || authHeader === void 0 ? void 0 : authHeader.startsWith('Bearer ')) {
+            const token = authHeader.substring(7);
+            const decodedToken = await admin.auth().verifyIdToken(token);
+            // Get user from Firestore
+            const userDoc = await admin.firestore()
+                .collection('users')
+                .where('openId', '==', decodedToken.uid)
+                .limit(1)
+                .get();
+            if (!userDoc.empty) {
+                const userData = userDoc.docs[0].data();
+                user = Object.assign({ id: userDoc.docs[0].id }, userData);
+            }
+        }
+    }
+    catch (error) {
+        // Authentication is optional for public procedures
+        user = null;
+    }
+    return {
+        req: opts.req,
+        user,
+    };
+}
+// Import invokeLLM function (we'll need to adapt it for Firebase Functions)
+async function invokeLLM(params) {
+    // This is a simplified version - you'll need to implement the full LLM integration
+    // For now, we'll use the same logic as in server/_core/llm.ts
+    const ENV = {
+        forgeApiKey: process.env.FORGE_API_KEY || '',
+    };
+    if (!ENV.forgeApiKey) {
+        throw new Error('FORGE_API_KEY is not configured');
+    }
+    const payload = {
+        model: 'gemini-2.5-flash',
+        messages: params.messages.map(msg => ({
+            role: msg.role,
+            content: msg.content,
+        })),
+        max_tokens: 32768,
+        thinking: {
+            budget_tokens: 128,
+        },
+    };
+    const response = await fetch('https://api.forge.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${ENV.forgeApiKey}`,
+        },
+        body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`);
+    }
+    return await response.json();
+}
+// Create tRPC router for Firebase Functions
+const appRouter = (0, exports.router)({
+    ai: (0, exports.router)({
+        chat: exports.protectedProcedure
+            .input(zod_1.z.object({
+            messages: zod_1.z.array(zod_1.z.object({
+                role: zod_1.z.enum(['system', 'user', 'assistant']),
+                content: zod_1.z.string(),
+            })),
+        }))
+            .mutation(async ({ ctx, input }) => {
+            var _a;
+            try {
+                const result = await invokeLLM({
+                    messages: input.messages,
+                });
+                // Extract the assistant's response
+                const assistantMessage = (_a = result.choices[0]) === null || _a === void 0 ? void 0 : _a.message;
+                if (!assistantMessage) {
+                    throw new Error('No response from AI');
+                }
+                // Handle both string and array content
+                const content = typeof assistantMessage.content === 'string'
+                    ? assistantMessage.content
+                    : Array.isArray(assistantMessage.content)
+                        ? assistantMessage.content
+                            .filter((c) => c.type === 'text')
+                            .map((c) => c.text)
+                            .join('\n')
+                        : 'Keine Antwort erhalten';
+                return {
+                    content,
+                    usage: result.usage,
+                };
+            }
+            catch (error) {
+                throw new server_1.TRPCError({
+                    code: 'INTERNAL_SERVER_ERROR',
+                    message: error instanceof Error ? error.message : 'AI request failed',
+                    cause: error,
+                });
+            }
+        }),
+    }),
+});
+// Export tRPC HTTP function
+exports.trpc = (0, https_1.onRequest)({
+    cors: true,
+    maxInstances: 10,
+}, async (req, res) => {
+    try {
+        // Build full URL
+        const protocol = req.protocol || 'https';
+        const host = req.get('host') || '';
+        const path = req.url || '/';
+        const url = `${protocol}://${host}${path}`;
+        // Get request body
+        let body;
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+            if (req.body) {
+                body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+            }
+            else {
+                // Read body from stream if not already parsed
+                body = await new Promise((resolve, reject) => {
+                    let data = '';
+                    req.on('data', (chunk) => {
+                        data += chunk.toString();
+                    });
+                    req.on('end', () => resolve(data));
+                    req.on('error', reject);
+                });
+            }
+        }
+        // Convert headers
+        const headers = new Headers();
+        Object.keys(req.headers).forEach(key => {
+            const value = req.headers[key];
+            if (value) {
+                if (Array.isArray(value)) {
+                    value.forEach(v => headers.append(key, v));
+                }
+                else {
+                    headers.set(key, value);
+                }
+            }
+        });
+        const fetchReq = new Request(url, {
+            method: req.method,
+            headers,
+            body,
+        });
+        const response = await (0, fetch_1.fetchRequestHandler)({
+            endpoint: '/api/trpc',
+            req: fetchReq,
+            router: appRouter,
+            createContext: () => createContext({ req: fetchReq }),
+        });
+        // Convert Fetch Response to Express response
+        res.status(response.status);
+        response.headers.forEach((value, key) => {
+            res.setHeader(key, value);
+        });
+        const text = await response.text();
+        res.send(text);
+    }
+    catch (error) {
+        res.status(500).json({
+            error: 'Internal server error',
+            message: error instanceof Error ? error.message : 'Unknown error',
+        });
+    }
+});
+//# sourceMappingURL=trpc.js.map

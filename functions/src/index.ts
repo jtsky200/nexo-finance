@@ -5044,3 +5044,6 @@ export const getReceipts = onCall(async (request) => {
     return { success: false, error: error.message, receipts: [] };
   }
 });
+
+// Export tRPC function
+export { trpc } from './trpc';

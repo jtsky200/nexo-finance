@@ -8,6 +8,7 @@ import superjson from "superjson";
 import App from "./App";
 import { getLoginUrl } from "./const";
 import "./index.css";
+import { auth } from "./lib/firebase";
 
 const queryClient = new QueryClient();
 
@@ -15,7 +16,7 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
 
-  const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
+  const isUnauthorized = error.message === UNAUTHED_ERR_MSG || error.data?.code === 'UNAUTHORIZED';
 
   if (!isUnauthorized) return;
 
@@ -43,9 +44,27 @@ const trpcClient = trpc.createClient({
     httpBatchLink({
       url: "/api/trpc",
       transformer: superjson,
-      fetch(input, init) {
+      async fetch(input, init) {
+        // Get Firebase Auth token
+        let authToken: string | null = null;
+        try {
+          const user = auth.currentUser;
+          if (user) {
+            authToken = await user.getIdToken();
+          }
+        } catch (error) {
+          // Token fetch failed, continue without token
+        }
+
+        // Add Authorization header if token is available
+        const headers = new Headers(init?.headers);
+        if (authToken) {
+          headers.set('Authorization', `Bearer ${authToken}`);
+        }
+
         return globalThis.fetch(input, {
           ...(init ?? {}),
+          headers,
           credentials: "include",
         });
       },

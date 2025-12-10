@@ -5045,5 +5045,141 @@ export const getReceipts = onCall(async (request) => {
   }
 });
 
+// ========== AI Chat Functions ==========
+
+// Upload File for AI Chat
+export const uploadAIChatFile = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { fileName, fileData, fileType } = request.data;
+
+  if (!fileName || !fileData) {
+    throw new HttpsError('invalid-argument', 'fileName and fileData are required');
+  }
+
+  try {
+    // Upload file to Storage
+    const bucket = storage.bucket();
+    const filePath = `ai-chat/${userId}/${Date.now()}_${fileName}`;
+    const file = bucket.file(filePath);
+    
+    // Decode base64 and upload
+    const buffer = Buffer.from(fileData, 'base64');
+    await file.save(buffer, {
+      metadata: {
+        contentType: fileType || 'application/octet-stream',
+      },
+    });
+
+    // Get download URL
+    const [url] = await file.getSignedUrl({
+      action: 'read',
+      expires: '03-01-2500',
+    });
+
+    return { 
+      fileUrl: url,
+      fileName,
+      filePath,
+    };
+  } catch (error: any) {
+    throw new HttpsError('internal', 'File upload failed: ' + (error.message || 'Unknown error'));
+  }
+});
+
+// Upload Image for AI Chat
+export const uploadAIChatImage = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { fileName, fileData, fileType } = request.data;
+
+  if (!fileName || !fileData) {
+    throw new HttpsError('invalid-argument', 'fileName and fileData are required');
+  }
+
+  // Validate image type
+  if (!fileType?.startsWith('image/')) {
+    throw new HttpsError('invalid-argument', 'File must be an image');
+  }
+
+  try {
+    // Upload image to Storage
+    const bucket = storage.bucket();
+    const filePath = `ai-chat/${userId}/images/${Date.now()}_${fileName}`;
+    const file = bucket.file(filePath);
+    
+    // Decode base64 and upload
+    const buffer = Buffer.from(fileData, 'base64');
+    await file.save(buffer, {
+      metadata: {
+        contentType: fileType,
+      },
+    });
+
+    // Get download URL
+    const [url] = await file.getSignedUrl({
+      action: 'read',
+      expires: '03-01-2500',
+    });
+
+    return { 
+      imageUrl: url,
+      fileName,
+      filePath,
+    };
+  } catch (error: any) {
+    throw new HttpsError('internal', 'Image upload failed: ' + (error.message || 'Unknown error'));
+  }
+});
+
+// Transcribe Audio for AI Chat
+export const transcribeAIChatAudio = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+  const { audioData, mimeType } = request.data;
+
+  if (!audioData) {
+    throw new HttpsError('invalid-argument', 'audioData is required');
+  }
+
+  try {
+    // For now, we'll use a simple approach: upload audio and return placeholder
+    // In production, you would integrate with Google Speech-to-Text API or similar
+    const bucket = storage.bucket();
+    const filePath = `ai-chat/${userId}/audio/${Date.now()}_recording.webm`;
+    const file = bucket.file(filePath);
+    
+    // Decode base64 and upload
+    const buffer = Buffer.from(audioData, 'base64');
+    await file.save(buffer, {
+      metadata: {
+        contentType: mimeType || 'audio/webm',
+      },
+    });
+
+    // TODO: Integrate with Google Speech-to-Text API
+    // For now, return a placeholder message
+    // In production, you would:
+    // 1. Use @google-cloud/speech to transcribe the audio
+    // 2. Return the transcription text
+    
+    return { 
+      transcription: '[Spracheingabe wird derzeit nicht unterstützt. Bitte tippen Sie Ihre Nachricht ein.]',
+      audioUrl: filePath,
+    };
+  } catch (error: any) {
+    throw new HttpsError('internal', 'Audio transcription failed: ' + (error.message || 'Unknown error'));
+  }
+});
+
 // Export tRPC function
 export { trpc } from './trpc';

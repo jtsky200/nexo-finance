@@ -5,6 +5,10 @@ import { cn } from "@/lib/utils";
 import { Loader2, Send, Paperclip, Image, Globe, Mic, Tag, FileText, Zap, ArrowUp } from "lucide-react";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Streamdown } from "streamdown";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "@/lib/firebase";
+import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 /**
  * Message type matching server-side LLM Message interface
@@ -81,6 +85,7 @@ const iconMap = {
  * - Auto-scrolls to latest message
  * - Loading states
  * - Non-clickable message bubbles (prevents accidental logout)
+ * - Functional icons: File upload, Image upload, Voice transcription, Language selection
  */
 export function AIChatBox({
   messages,
@@ -92,11 +97,16 @@ export function AIChatBox({
   emptyStateMessage = "Beginne eine Unterhaltung mit dem AI Assistenten",
   suggestedPrompts,
 }: AIChatBoxProps) {
+  const { t, i18n } = useTranslation();
   const [input, setInput] = useState("");
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputAreaRef = useRef<HTMLFormElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
 
   // Filter out system messages
   const displayMessages = useMemo(() => 
@@ -164,6 +174,137 @@ export function AIChatBox({
     onSendMessage(prompt);
     scrollToBottom();
   }, [isLoading, onSendMessage, scrollToBottom]);
+
+  // File upload handler
+  const handleFileUpload = useCallback(async (file: File) => {
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(',')[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const uploadAIChatFile = httpsCallable(functions, 'uploadAIChatFile');
+      const result = await uploadAIChatFile({
+        fileName: file.name,
+        fileData: base64,
+        fileType: file.type,
+      });
+
+      const data = result.data as { fileUrl: string; fileName: string };
+      onSendMessage(`[Datei: ${data.fileName}](${data.fileUrl})`);
+      toast.success('Datei erfolgreich hochgeladen');
+    } catch (error: any) {
+      toast.error('Fehler beim Hochladen: ' + (error.message || 'Unbekannter Fehler'));
+    }
+  }, [onSendMessage]);
+
+  // Image upload handler
+  const handleImageUpload = useCallback(async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('Bitte wähle ein Bild aus');
+      return;
+    }
+
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result.split(',')[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const uploadAIChatImage = httpsCallable(functions, 'uploadAIChatImage');
+      const result = await uploadAIChatImage({
+        fileName: file.name,
+        fileData: base64,
+        fileType: file.type,
+      });
+
+      const data = result.data as { imageUrl: string; fileName: string };
+      onSendMessage(`![${data.fileName}](${data.imageUrl})`);
+      toast.success('Bild erfolgreich hochgeladen');
+    } catch (error: any) {
+      toast.error('Fehler beim Hochladen: ' + (error.message || 'Unbekannter Fehler'));
+    }
+  }, [onSendMessage]);
+
+  // Voice recording handler
+  const handleVoiceRecording = useCallback(async () => {
+    if (isRecording && mediaRecorder) {
+      // Stop recording
+      mediaRecorder.stop();
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunks.push(e.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            resolve(result.split(',')[1]);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+
+        try {
+          const transcribeAudio = httpsCallable(functions, 'transcribeAIChatAudio');
+          const result = await transcribeAudio({
+            audioData: base64,
+            mimeType: 'audio/webm',
+          });
+
+          const data = result.data as { transcription: string };
+          if (data.transcription) {
+            setInput(data.transcription);
+            textareaRef.current?.focus();
+          }
+          toast.success('Spracheingabe erfolgreich');
+        } catch (error: any) {
+          toast.error('Fehler bei der Transkription: ' + (error.message || 'Unbekannter Fehler'));
+        }
+
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+      toast.info('Aufnahme gestartet...');
+    } catch (error: any) {
+      toast.error('Mikrofon-Zugriff verweigert: ' + (error.message || 'Unbekannter Fehler'));
+    }
+  }, [isRecording, mediaRecorder]);
+
+  // Language selection handler
+  const handleLanguageToggle = useCallback(() => {
+    const currentLang = i18n.language;
+    const newLang = currentLang === 'de' ? 'en' : 'de';
+    i18n.changeLanguage(newLang);
+    localStorage.setItem('language', newLang);
+    toast.success(newLang === 'de' ? 'Sprache auf Deutsch geändert' : 'Language changed to English');
+  }, [i18n]);
 
   return (
     <div
@@ -258,11 +399,36 @@ export function AIChatBox({
         onSubmit={handleSubmit}
         className="px-4 py-3 bg-white"
       >
+        {/* Hidden file inputs */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleFileUpload(file);
+            e.target.value = '';
+          }}
+          accept="*/*"
+        />
+        <input
+          ref={imageInputRef}
+          type="file"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleImageUpload(file);
+            e.target.value = '';
+          }}
+          accept="image/*"
+        />
+
         <div className="relative flex items-center">
           {/* Left Icons INSIDE input */}
           <div className="absolute left-3 flex items-center gap-2 z-10">
             <button
               type="button"
+              onClick={() => fileInputRef.current?.click()}
               className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
               aria-label="Datei anhängen"
               disabled={isLoading}
@@ -271,6 +437,7 @@ export function AIChatBox({
             </button>
             <button
               type="button"
+              onClick={() => imageInputRef.current?.click()}
               className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
               aria-label="Bild hinzufügen"
               disabled={isLoading}
@@ -295,6 +462,7 @@ export function AIChatBox({
           <div className="absolute right-3 flex items-center gap-1.5 z-10">
             <button
               type="button"
+              onClick={handleLanguageToggle}
               className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
               aria-label="Sprache"
               disabled={isLoading}
@@ -303,7 +471,13 @@ export function AIChatBox({
             </button>
             <button
               type="button"
-              className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
+              onClick={handleVoiceRecording}
+              className={cn(
+                "p-1.5 transition-colors",
+                isRecording
+                  ? "text-red-500 hover:text-red-600"
+                  : "text-gray-400 hover:text-gray-600"
+              )}
               aria-label="Spracheingabe"
               disabled={isLoading}
             >

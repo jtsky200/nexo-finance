@@ -45,7 +45,7 @@ var __rest = (this && this.__rest) || function (s, e) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createSchoolSchedule = exports.getChildren = exports.deleteVacation = exports.updateVacation = exports.createVacation = exports.getVacations = exports.deleteWorkSchedule = exports.updateWorkSchedule = exports.createWorkSchedule = exports.getWorkSchedules = exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.getAllBills = exports.convertToInstallmentPlan = exports.updateInstallmentPlan = exports.recordInstallmentPayment = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
-exports.trpc = exports.getReceipts = exports.getStores = exports.getStoreItems = exports.saveReceipt = exports.analyzeSingleLine = exports.analyzeReceipt = exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = void 0;
+exports.trpc = exports.transcribeAIChatAudio = exports.uploadAIChatImage = exports.uploadAIChatFile = exports.getReceipts = exports.getStores = exports.getStoreItems = exports.saveReceipt = exports.analyzeSingleLine = exports.analyzeReceipt = exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
@@ -4372,6 +4372,122 @@ exports.getReceipts = (0, https_1.onCall)(async (request) => {
     catch (error) {
         console.error('Get receipts error:', error);
         return { success: false, error: error.message, receipts: [] };
+    }
+});
+// ========== AI Chat Functions ==========
+// Upload File for AI Chat
+exports.uploadAIChatFile = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { fileName, fileData, fileType } = request.data;
+    if (!fileName || !fileData) {
+        throw new https_1.HttpsError('invalid-argument', 'fileName and fileData are required');
+    }
+    try {
+        // Upload file to Storage
+        const bucket = storage.bucket();
+        const filePath = `ai-chat/${userId}/${Date.now()}_${fileName}`;
+        const file = bucket.file(filePath);
+        // Decode base64 and upload
+        const buffer = Buffer.from(fileData, 'base64');
+        await file.save(buffer, {
+            metadata: {
+                contentType: fileType || 'application/octet-stream',
+            },
+        });
+        // Get download URL
+        const [url] = await file.getSignedUrl({
+            action: 'read',
+            expires: '03-01-2500',
+        });
+        return {
+            fileUrl: url,
+            fileName,
+            filePath,
+        };
+    }
+    catch (error) {
+        throw new https_1.HttpsError('internal', 'File upload failed: ' + (error.message || 'Unknown error'));
+    }
+});
+// Upload Image for AI Chat
+exports.uploadAIChatImage = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { fileName, fileData, fileType } = request.data;
+    if (!fileName || !fileData) {
+        throw new https_1.HttpsError('invalid-argument', 'fileName and fileData are required');
+    }
+    // Validate image type
+    if (!(fileType === null || fileType === void 0 ? void 0 : fileType.startsWith('image/'))) {
+        throw new https_1.HttpsError('invalid-argument', 'File must be an image');
+    }
+    try {
+        // Upload image to Storage
+        const bucket = storage.bucket();
+        const filePath = `ai-chat/${userId}/images/${Date.now()}_${fileName}`;
+        const file = bucket.file(filePath);
+        // Decode base64 and upload
+        const buffer = Buffer.from(fileData, 'base64');
+        await file.save(buffer, {
+            metadata: {
+                contentType: fileType,
+            },
+        });
+        // Get download URL
+        const [url] = await file.getSignedUrl({
+            action: 'read',
+            expires: '03-01-2500',
+        });
+        return {
+            imageUrl: url,
+            fileName,
+            filePath,
+        };
+    }
+    catch (error) {
+        throw new https_1.HttpsError('internal', 'Image upload failed: ' + (error.message || 'Unknown error'));
+    }
+});
+// Transcribe Audio for AI Chat
+exports.transcribeAIChatAudio = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { audioData, mimeType } = request.data;
+    if (!audioData) {
+        throw new https_1.HttpsError('invalid-argument', 'audioData is required');
+    }
+    try {
+        // For now, we'll use a simple approach: upload audio and return placeholder
+        // In production, you would integrate with Google Speech-to-Text API or similar
+        const bucket = storage.bucket();
+        const filePath = `ai-chat/${userId}/audio/${Date.now()}_recording.webm`;
+        const file = bucket.file(filePath);
+        // Decode base64 and upload
+        const buffer = Buffer.from(audioData, 'base64');
+        await file.save(buffer, {
+            metadata: {
+                contentType: mimeType || 'audio/webm',
+            },
+        });
+        // TODO: Integrate with Google Speech-to-Text API
+        // For now, return a placeholder message
+        // In production, you would:
+        // 1. Use @google-cloud/speech to transcribe the audio
+        // 2. Return the transcription text
+        return {
+            transcription: '[Spracheingabe wird derzeit nicht unterstützt. Bitte tippen Sie Ihre Nachricht ein.]',
+            audioUrl: filePath,
+        };
+    }
+    catch (error) {
+        throw new https_1.HttpsError('internal', 'Audio transcription failed: ' + (error.message || 'Unknown error'));
     }
 });
 // Export tRPC function

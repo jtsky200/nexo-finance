@@ -109,8 +109,8 @@ async function createContext(opts) {
 }
 // Import invokeLLM function (we'll need to adapt it for Firebase Functions)
 async function invokeLLM(params, apiKey) {
-    if (!apiKey) {
-        throw new Error('BUILT_IN_FORGE_API_KEY is not configured');
+    if (!apiKey || apiKey.trim() === '') {
+        throw new Error('BUILT_IN_FORGE_API_KEY is not configured. Please set it in Firebase Functions environment variables or secrets.');
     }
     const payload = {
         model: 'gemini-2.5-flash',

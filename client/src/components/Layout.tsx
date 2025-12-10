@@ -11,7 +11,8 @@ interface LayoutProps {
 }
 
 export default function Layout({ children, title }: LayoutProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Sidebar should be open by default on large screens
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [, setLocation] = useLocation();
   const { user, loading } = useAuth();
 

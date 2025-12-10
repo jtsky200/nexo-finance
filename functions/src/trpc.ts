@@ -101,8 +101,8 @@ async function createContext(opts: { req: Request }): Promise<{ user: any | null
 async function invokeLLM(params: {
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
 }, apiKey: string): Promise<any> {
-  if (!apiKey) {
-    throw new Error('BUILT_IN_FORGE_API_KEY is not configured');
+  if (!apiKey || apiKey.trim() === '') {
+    throw new Error('BUILT_IN_FORGE_API_KEY is not configured. Please set it in Firebase Functions environment variables or secrets.');
   }
 
   const payload = {

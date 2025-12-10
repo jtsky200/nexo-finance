@@ -92,13 +92,10 @@ async function createContext(opts) {
 }
 // Import invokeLLM function (we'll need to adapt it for Firebase Functions)
 async function invokeLLM(params) {
-    // This is a simplified version - you'll need to implement the full LLM integration
-    // For now, we'll use the same logic as in server/_core/llm.ts
-    const ENV = {
-        forgeApiKey: process.env.FORGE_API_KEY || '',
-    };
-    if (!ENV.forgeApiKey) {
-        throw new Error('FORGE_API_KEY is not configured');
+    // Use BUILT_IN_FORGE_API_KEY (same as server) or fallback to FORGE_API_KEY
+    const forgeApiKey = process.env.BUILT_IN_FORGE_API_KEY || process.env.FORGE_API_KEY || '';
+    if (!forgeApiKey) {
+        throw new Error('BUILT_IN_FORGE_API_KEY or FORGE_API_KEY is not configured');
     }
     const payload = {
         model: 'gemini-2.5-flash',
@@ -115,7 +112,7 @@ async function invokeLLM(params) {
         method: 'POST',
         headers: {
             'content-type': 'application/json',
-            authorization: `Bearer ${ENV.forgeApiKey}`,
+            authorization: `Bearer ${forgeApiKey}`,
         },
         body: JSON.stringify(payload),
     });

@@ -2,10 +2,14 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { initTRPC, TRPCError } from '@trpc/server';
 
 import { onRequest } from 'firebase-functions/v2/https';
+import { defineSecret } from 'firebase-functions/params';
 
 import { z } from 'zod';
 
 import * as admin from 'firebase-admin';
+
+// Define secret for Forge API Key
+const forgeApiKeySecret = defineSecret('BUILT_IN_FORGE_API_KEY');
 
 // Initialize tRPC for Firebase Functions without transformer (superjson is ESM only)
 // We'll handle serialization manually if needed
@@ -75,12 +79,9 @@ async function createContext(opts: { req: Request }): Promise<{ user: any | null
 // Import invokeLLM function (we'll need to adapt it for Firebase Functions)
 async function invokeLLM(params: {
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
-}): Promise<any> {
-  // Use BUILT_IN_FORGE_API_KEY (same as server) or fallback to FORGE_API_KEY
-  const forgeApiKey = process.env.BUILT_IN_FORGE_API_KEY || process.env.FORGE_API_KEY || '';
-
-  if (!forgeApiKey) {
-    throw new Error('BUILT_IN_FORGE_API_KEY or FORGE_API_KEY is not configured');
+}, apiKey: string): Promise<any> {
+  if (!apiKey) {
+    throw new Error('BUILT_IN_FORGE_API_KEY is not configured');
   }
 
   const payload = {
@@ -99,7 +100,7 @@ async function invokeLLM(params: {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      authorization: `Bearer ${forgeApiKey}`,
+      authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(payload),
   });
@@ -126,9 +127,11 @@ const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         try {
+          // Get API key from secret
+          const apiKey = forgeApiKeySecret.value();
           const result = await invokeLLM({
             messages: input.messages,
-          });
+          }, apiKey);
 
           // Extract the assistant's response
           const assistantMessage = result.choices[0]?.message;
@@ -168,6 +171,7 @@ export const trpc = onRequest(
   {
     cors: true,
     maxInstances: 10,
+    secrets: [forgeApiKeySecret],
   },
   async (req, res) => {
     try {

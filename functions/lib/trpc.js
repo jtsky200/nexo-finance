@@ -37,8 +37,11 @@ exports.trpc = exports.protectedProcedure = exports.publicProcedure = exports.ro
 const fetch_1 = require("@trpc/server/adapters/fetch");
 const server_1 = require("@trpc/server");
 const https_1 = require("firebase-functions/v2/https");
+const params_1 = require("firebase-functions/params");
 const zod_1 = require("zod");
 const admin = __importStar(require("firebase-admin"));
+// Define secret for Forge API Key
+const forgeApiKeySecret = (0, params_1.defineSecret)('BUILT_IN_FORGE_API_KEY');
 // Initialize tRPC for Firebase Functions without transformer (superjson is ESM only)
 // We'll handle serialization manually if needed
 const t = server_1.initTRPC.context().create();
@@ -86,11 +89,9 @@ async function createContext(opts) {
     };
 }
 // Import invokeLLM function (we'll need to adapt it for Firebase Functions)
-async function invokeLLM(params) {
-    // Use BUILT_IN_FORGE_API_KEY (same as server) or fallback to FORGE_API_KEY
-    const forgeApiKey = process.env.BUILT_IN_FORGE_API_KEY || process.env.FORGE_API_KEY || '';
-    if (!forgeApiKey) {
-        throw new Error('BUILT_IN_FORGE_API_KEY or FORGE_API_KEY is not configured');
+async function invokeLLM(params, apiKey) {
+    if (!apiKey) {
+        throw new Error('BUILT_IN_FORGE_API_KEY is not configured');
     }
     const payload = {
         model: 'gemini-2.5-flash',
@@ -107,7 +108,7 @@ async function invokeLLM(params) {
         method: 'POST',
         headers: {
             'content-type': 'application/json',
-            authorization: `Bearer ${forgeApiKey}`,
+            authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify(payload),
     });
@@ -130,9 +131,11 @@ const appRouter = (0, exports.router)({
             .mutation(async ({ ctx, input }) => {
             var _a;
             try {
+                // Get API key from secret
+                const apiKey = forgeApiKeySecret.value();
                 const result = await invokeLLM({
                     messages: input.messages,
-                });
+                }, apiKey);
                 // Extract the assistant's response
                 const assistantMessage = (_a = result.choices[0]) === null || _a === void 0 ? void 0 : _a.message;
                 if (!assistantMessage) {
@@ -166,6 +169,7 @@ const appRouter = (0, exports.router)({
 exports.trpc = (0, https_1.onRequest)({
     cors: true,
     maxInstances: 10,
+    secrets: [forgeApiKeySecret],
 }, async (req, res) => {
     try {
         // Build full URL

@@ -24,9 +24,22 @@ export default function AIChat() {
       setMessages((prev) => [...prev, aiResponse]);
     },
     onError: (error) => {
+      // Better error handling for different error types
+      let errorMessage = 'Ein unbekannter Fehler ist aufgetreten.';
+      
+      if (error.message.includes('<!doctype') || error.message.includes('Unexpected token')) {
+        errorMessage = 'Der Server ist nicht erreichbar oder gibt eine ungültige Antwort zurück. Bitte stelle sicher, dass der Server läuft.';
+      } else if (error.data?.code === 'UNAUTHORIZED') {
+        errorMessage = 'Du bist nicht angemeldet. Bitte melde dich an.';
+      } else if (error.data?.code === 'INTERNAL_SERVER_ERROR') {
+        errorMessage = 'Ein Serverfehler ist aufgetreten. Bitte versuche es später erneut.';
+      } else {
+        errorMessage = error.message || 'Ein Fehler ist aufgetreten.';
+      }
+      
       const errorResponse: Message = {
         role: 'assistant',
-        content: `Entschuldigung, es ist ein Fehler aufgetreten: ${error.message}. Bitte versuche es später erneut.`,
+        content: `Entschuldigung, es ist ein Fehler aufgetreten: ${errorMessage}`,
       };
       setMessages((prev) => [...prev, errorResponse]);
       toast.error('Fehler beim Senden der Nachricht');

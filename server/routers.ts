@@ -250,9 +250,13 @@ export const appRouter = router({
             usage: result.usage,
           };
         } catch (error) {
-          throw new Error(
-            error instanceof Error ? error.message : 'AI request failed'
-          );
+          // Better error handling with TRPCError
+          const { TRPCError } = await import('@trpc/server');
+          throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: error instanceof Error ? error.message : 'AI request failed',
+            cause: error,
+          });
         }
       }),
   }),

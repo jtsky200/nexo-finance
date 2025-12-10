@@ -137,6 +137,108 @@ async function invokeLLM(params, apiKey) {
     }
     return await response.json();
 }
+// Rule-based response system (no API key needed)
+function getRuleBasedResponse(messages) {
+    var _a;
+    const lastMessage = messages[messages.length - 1];
+    const userMessage = ((_a = lastMessage === null || lastMessage === void 0 ? void 0 : lastMessage.content) === null || _a === void 0 ? void 0 : _a.toLowerCase()) || '';
+    // Extract keywords and provide helpful responses
+    if (userMessage.includes('rechnung') || userMessage.includes('rechnungsverwaltung')) {
+        return {
+            content: `**Rechnungsverwaltung in Nexo:**
+
+1. **Rechnung scannen**: Nutze die Dokumente-Funktion, um Rechnungen zu scannen
+2. **Rechnung erstellen**: Gehe zu "Rechnungen" und klicke auf "Neu erstellen"
+3. **Rechnungen verwalten**: Alle Rechnungen findest du in der Rechnungen-Übersicht
+4. **Automatische Erkennung**: Die App erkennt automatisch Beträge, Daten und Händler
+
+Möchtest du mehr über eine spezifische Funktion erfahren?`,
+        };
+    }
+    if (userMessage.includes('erinnerung') || userMessage.includes('termin')) {
+        return {
+            content: `**Erinnerungen erstellen:**
+
+1. Gehe zum **Kalender** oder **Erinnerungen**-Bereich
+2. Klicke auf das **+** Symbol oder "Neue Erinnerung"
+3. Fülle die Details aus:
+   - Titel
+   - Datum und Uhrzeit
+   - Wiederholung (optional)
+   - Notizen
+4. Speichere die Erinnerung
+
+Erinnerungen werden dir automatisch zur gewählten Zeit angezeigt.`,
+        };
+    }
+    if (userMessage.includes('finanz') || userMessage.includes('geld') || userMessage.includes('ausgabe')) {
+        return {
+            content: `**Finanzen verwalten:**
+
+1. **Einnahmen/Ausgaben erfassen**: Gehe zu "Finanzen" und klicke auf "Neu"
+2. **Kategorien**: Ordne deine Transaktionen Kategorien zu
+3. **Übersicht**: Sieh deine Finanzen in der Dashboard-Ansicht
+4. **Statistiken**: Analysiere deine Ausgaben nach Kategorien
+
+Tipp: Nutze die Rechnungsverwaltung, um Ausgaben automatisch zu erfassen.`,
+        };
+    }
+    if (userMessage.includes('einkaufsliste') || userMessage.includes('einkaufen')) {
+        return {
+            content: `**Einkaufsliste nutzen:**
+
+1. Gehe zum **Einkaufsliste**-Bereich
+2. Füge Artikel hinzu mit dem **+** Button
+3. Markiere gekaufte Artikel als erledigt
+4. Lösche Artikel nach dem Einkauf
+
+Die Einkaufsliste hilft dir, nichts zu vergessen und organisiert zu bleiben.`,
+        };
+    }
+    if (userMessage.includes('raten') || userMessage.includes('rate') || userMessage.includes('zahlungsplan')) {
+        return {
+            content: `**Raten-System:**
+
+1. Erstelle eine Rechnung mit Ratenzahlung
+2. Wähle die Anzahl der Raten
+3. Die App teilt den Betrag automatisch auf
+4. Du erhältst Erinnerungen für jede Rate
+
+So kannst du größere Ausgaben über mehrere Monate verteilen.`,
+        };
+    }
+    if (userMessage.includes('scannen') || userMessage.includes('scan')) {
+        return {
+            content: `**Rechnung scannen:**
+
+1. Gehe zu **Dokumente** oder **Rechnungen**
+2. Klicke auf "Rechnung scannen" oder das Kamera-Symbol
+3. Fotografiere die Rechnung
+4. Die App erkennt automatisch:
+   - Betrag
+   - Datum
+   - Händler
+   - Artikel (wenn möglich)
+5. Überprüfe und speichere
+
+Die App nutzt OCR-Technologie für die automatische Erkennung.`,
+        };
+    }
+    // Default helpful response
+    return {
+        content: `Ich helfe dir gerne bei Fragen zu Nexo! 
+
+**Häufige Themen:**
+- 📄 Rechnungsverwaltung
+- 📅 Erinnerungen & Termine
+- 💰 Finanzen verwalten
+- 🛒 Einkaufsliste
+- 📊 Raten-System
+- 📷 Rechnungen scannen
+
+Stelle eine spezifische Frage zu einer dieser Funktionen, und ich gebe dir eine detaillierte Anleitung!`,
+    };
+}
 // Create tRPC router for Firebase Functions
 const appRouter = (0, exports.router)({
     ai: (0, exports.router)({
@@ -151,17 +253,12 @@ const appRouter = (0, exports.router)({
             var _a;
             try {
                 // Get API key from environment variable
-                // For production, set it as a Firebase Secret and access via process.env
-                // For development, you can set it as an environment variable
-                // To set as secret: firebase functions:secrets:set BUILT_IN_FORGE_API_KEY
-                // Then redeploy: firebase deploy --only functions:trpc
                 const apiKey = process.env.BUILT_IN_FORGE_API_KEY || process.env.FORGE_API_KEY || '';
+                // If no API key, use rule-based responses (free, no external API needed)
                 if (!apiKey || apiKey.trim() === '') {
-                    throw new server_1.TRPCError({
-                        code: 'INTERNAL_SERVER_ERROR',
-                        message: 'BUILT_IN_FORGE_API_KEY is not configured. Please set it using: firebase functions:secrets:set BUILT_IN_FORGE_API_KEY. See SETUP_FORGE_API_KEY.md for instructions.',
-                    });
+                    return getRuleBasedResponse(input.messages);
                 }
+                // Use external LLM API if key is available
                 const result = await invokeLLM({
                     messages: input.messages,
                 }, apiKey);

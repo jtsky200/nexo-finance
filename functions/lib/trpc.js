@@ -37,8 +37,11 @@ exports.trpc = exports.protectedProcedure = exports.publicProcedure = exports.ro
 const fetch_1 = require("@trpc/server/adapters/fetch");
 const server_1 = require("@trpc/server");
 const https_1 = require("firebase-functions/v2/https");
+const params_1 = require("firebase-functions/params");
 const zod_1 = require("zod");
 const admin = __importStar(require("firebase-admin"));
+// Define the secret for OpenAI API Key
+const openaiApiKeySecret = (0, params_1.defineSecret)('OPENAI_API_KEY');
 // Initialize tRPC for Firebase Functions without transformer (superjson is ESM only)
 // We'll handle serialization manually if needed
 const t = server_1.initTRPC.context().create();
@@ -367,8 +370,15 @@ const appRouter = (0, exports.router)({
             .mutation(async ({ ctx, input }) => {
             var _a;
             try {
-                // Get OpenAI API key from environment variable
-                const apiKey = process.env.OPENAI_API_KEY || process.env.BUILT_IN_FORGE_API_KEY || '';
+                // Get OpenAI API key from secret or environment variable
+                let apiKey = '';
+                try {
+                    apiKey = openaiApiKeySecret.value();
+                }
+                catch (error) {
+                    // Secret not available, try environment variable
+                    apiKey = process.env.OPENAI_API_KEY || process.env.BUILT_IN_FORGE_API_KEY || '';
+                }
                 // If no API key, use rule-based responses (free, no external API needed)
                 if (!apiKey || apiKey.trim() === '') {
                     return getRuleBasedResponse(input.messages);
@@ -407,12 +417,10 @@ const appRouter = (0, exports.router)({
     }),
 });
 // Export tRPC HTTP function
-// Note: secrets array is optional - if secret doesn't exist, we'll use env vars as fallback
 exports.trpc = (0, https_1.onRequest)({
     cors: true,
     maxInstances: 10,
-    // Only include secret if it exists (for development, you can deploy without it)
-    // For production, set the secret first: firebase functions:secrets:set BUILT_IN_FORGE_API_KEY
+    secrets: [openaiApiKeySecret], // Include the secret in the function configuration
 }, async (req, res) => {
     try {
         // Build full URL

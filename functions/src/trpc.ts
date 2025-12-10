@@ -2,10 +2,14 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { initTRPC, TRPCError } from '@trpc/server';
 
 import { onRequest } from 'firebase-functions/v2/https';
+import { defineSecret } from 'firebase-functions/params';
 
 import { z } from 'zod';
 
 import * as admin from 'firebase-admin';
+
+// Define the secret for OpenAI API Key
+const openaiApiKeySecret = defineSecret('OPENAI_API_KEY');
 
 // Initialize tRPC for Firebase Functions without transformer (superjson is ESM only)
 // We'll handle serialization manually if needed
@@ -397,8 +401,14 @@ const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         try {
-          // Get OpenAI API key from environment variable
-          const apiKey = process.env.OPENAI_API_KEY || process.env.BUILT_IN_FORGE_API_KEY || '';
+          // Get OpenAI API key from secret or environment variable
+          let apiKey = '';
+          try {
+            apiKey = openaiApiKeySecret.value();
+          } catch (error) {
+            // Secret not available, try environment variable
+            apiKey = process.env.OPENAI_API_KEY || process.env.BUILT_IN_FORGE_API_KEY || '';
+          }
           
           // If no API key, use rule-based responses (free, no external API needed)
           if (!apiKey || apiKey.trim() === '') {
@@ -444,13 +454,11 @@ const appRouter = router({
 export type AppRouter = typeof appRouter;
 
 // Export tRPC HTTP function
-// Note: secrets array is optional - if secret doesn't exist, we'll use env vars as fallback
 export const trpc = onRequest(
   {
     cors: true,
     maxInstances: 10,
-    // Only include secret if it exists (for development, you can deploy without it)
-    // For production, set the secret first: firebase functions:secrets:set BUILT_IN_FORGE_API_KEY
+    secrets: [openaiApiKeySecret], // Include the secret in the function configuration
   },
   async (req, res) => {
     try {

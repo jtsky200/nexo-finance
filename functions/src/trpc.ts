@@ -2,10 +2,14 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { initTRPC, TRPCError } from '@trpc/server';
 
 import { onRequest } from 'firebase-functions/v2/https';
+import { defineSecret } from 'firebase-functions/params';
 
 import { z } from 'zod';
 
 import * as admin from 'firebase-admin';
+
+// Define the secret for Forge API Key
+const forgeApiKeySecret = defineSecret('BUILT_IN_FORGE_API_KEY');
 
 // Initialize tRPC for Firebase Functions without transformer (superjson is ESM only)
 // We'll handle serialization manually if needed
@@ -148,13 +152,20 @@ const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         try {
-          // Get API key from environment variable or secret
-          // Try environment variable first (for backward compatibility)
-          const apiKey = process.env.BUILT_IN_FORGE_API_KEY || process.env.FORGE_API_KEY || '';
-          if (!apiKey) {
+          // Get API key from Firebase Secret or environment variable
+          // Try secret first (recommended), then fallback to env var
+          let apiKey = '';
+          try {
+            apiKey = forgeApiKeySecret.value();
+          } catch (error) {
+            // Secret not available, try environment variable
+            apiKey = process.env.BUILT_IN_FORGE_API_KEY || process.env.FORGE_API_KEY || '';
+          }
+          
+          if (!apiKey || apiKey.trim() === '') {
             throw new TRPCError({
               code: 'INTERNAL_SERVER_ERROR',
-              message: 'BUILT_IN_FORGE_API_KEY or FORGE_API_KEY is not configured. Please set it in Firebase Functions environment variables or secrets.',
+              message: 'BUILT_IN_FORGE_API_KEY is not configured. Please set it using: firebase functions:secrets:set BUILT_IN_FORGE_API_KEY. See SETUP_FORGE_API_KEY.md for instructions.',
             });
           }
           const result = await invokeLLM({
@@ -199,6 +210,7 @@ export const trpc = onRequest(
   {
     cors: true,
     maxInstances: 10,
+    secrets: [forgeApiKeySecret], // Include the secret in the function configuration
   },
   async (req, res) => {
     try {

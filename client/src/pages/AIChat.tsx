@@ -60,12 +60,12 @@ export default function AIChat() {
 
   // Suggested prompts with icons matching the image design
   const suggestedPrompts = useMemo(() => [
-    { text: 'Wie funktioniert die Rechnungsverwaltung?', icon: 'tag' },
-    { text: 'Wie erstelle ich eine Erinnerung?', icon: 'fileText' },
-    { text: 'Wie verwalte ich meine Finanzen?', icon: 'zap' },
-    { text: 'Was kann ich mit der Einkaufsliste machen?', icon: 'zap' },
-    { text: 'Wie funktioniert das Raten-System?', icon: 'tag' },
-    { text: 'Wie scanne ich eine Rechnung?', icon: 'fileText' },
+    { text: 'Wie funktioniert die Rechnungsverwaltung?', icon: 'tag' as const },
+    { text: 'Wie erstelle ich eine Erinnerung?', icon: 'fileText' as const },
+    { text: 'Wie verwalte ich meine Finanzen?', icon: 'zap' as const },
+    { text: 'Was kann ich mit der Einkaufsliste machen?', icon: 'zap' as const },
+    { text: 'Wie funktioniert das Raten-System?', icon: 'tag' as const },
+    { text: 'Wie scanne ich eine Rechnung?', icon: 'fileText' as const },
   ], []);
 
   return (

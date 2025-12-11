@@ -527,6 +527,15 @@ export async function debugUserData() {
   };
 }
 
+export async function migrateUserIds() {
+  const migrateFunc = httpsCallable(functions, 'migrateUserIds');
+  const result = await migrateFunc({});
+  return result.data as {
+    success: boolean;
+    totalMigrated: number;
+  };
+}
+
 export function usePersonDebts(personId: string) {
   const [debts, setDebts] = useState<FinanceEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);

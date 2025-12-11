@@ -45,7 +45,7 @@ var __rest = (this && this.__rest) || function (s, e) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createSchoolSchedule = exports.getChildren = exports.deleteVacation = exports.updateVacation = exports.createVacation = exports.getVacations = exports.deleteWorkSchedule = exports.updateWorkSchedule = exports.createWorkSchedule = exports.getWorkSchedules = exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.getAllBills = exports.convertToInstallmentPlan = exports.updateInstallmentPlan = exports.recordInstallmentPayment = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
-exports.trpc = exports.debugUserData = exports.transcribeAIChatAudio = exports.uploadAIChatImage = exports.uploadAIChatFile = exports.getReceipts = exports.getStores = exports.getStoreItems = exports.saveReceipt = exports.analyzeSingleLine = exports.analyzeReceipt = exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = void 0;
+exports.trpc = exports.migrateUserIds = exports.debugUserData = exports.transcribeAIChatAudio = exports.uploadAIChatImage = exports.uploadAIChatFile = exports.getReceipts = exports.getStores = exports.getStoreItems = exports.saveReceipt = exports.analyzeSingleLine = exports.analyzeReceipt = exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
@@ -4552,6 +4552,23 @@ exports.debugUserData = (0, https_1.onCall)(async (request) => {
             ? 'No data found with Firebase Auth UID. Check if data was saved with Firestore User ID instead.'
             : 'Data found with Firebase Auth UID.',
     };
+});
+// ========== Migration Function ==========
+exports.migrateUserIds = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    // Only allow migration for authenticated users
+    // In production, you might want to restrict this to admins only
+    try {
+        const { migrateUserIds: migrateFunction } = await Promise.resolve().then(() => __importStar(require('./migrateUserIds')));
+        const result = await migrateFunction();
+        return result;
+    }
+    catch (error) {
+        console.error('[Migration] Error:', error);
+        throw new https_1.HttpsError('internal', `Migration failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
 });
 // Export tRPC function
 var trpc_1 = require("./trpc");

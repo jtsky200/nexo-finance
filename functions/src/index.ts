@@ -5257,5 +5257,25 @@ export const debugUserData = onCall(async (request) => {
   };
 });
 
+// ========== Migration Function ==========
+
+export const migrateUserIds = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  // Only allow migration for authenticated users
+  // In production, you might want to restrict this to admins only
+  
+  try {
+    const { migrateUserIds: migrateFunction } = await import('./migrateUserIds');
+    const result = await migrateFunction();
+    return result;
+  } catch (error) {
+    console.error('[Migration] Error:', error);
+    throw new HttpsError('internal', `Migration failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+});
+
 // Export tRPC function
 export { trpc } from './trpc';

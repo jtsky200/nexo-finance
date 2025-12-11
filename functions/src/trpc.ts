@@ -600,9 +600,39 @@ async function invokeLLM(params: {
         // Not JSON, use as is
       }
       
+      console.error(`[AI Chat] Run failed: ${runResponse.status} ${runResponse.statusText}`);
+      console.error(`[AI Chat] Error details:`, JSON.stringify(errorData, null, 2));
+      
       // Check if assistant not found
-      if (runResponse.status === 404 && errorData.error?.message?.includes('No assistant found')) {
-        console.error(`Assistant not found: ${getOpenAIAssistantId()}. Falling back to rule-based response.`);
+      if (runResponse.status === 404 && (errorData.error?.message?.includes('No assistant found') || errorData.error?.message?.includes('not found'))) {
+        console.error(`[AI Chat] ❌ Assistant not found: ${assistantId}`);
+        console.error(`[AI Chat] This usually means:`);
+        console.error(`[AI Chat] 1. The Assistant ID doesn't exist`);
+        console.error(`[AI Chat] 2. The API Key belongs to a different OpenAI account`);
+        console.error(`[AI Chat] 3. The Assistant was deleted`);
+        console.error(`[AI Chat] Falling back to rule-based response.`);
+        
+        // Try to verify assistant exists by fetching it
+        try {
+          const verifyResponse = await fetch(`https://api.openai.com/v1/assistants/${assistantId}`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'OpenAI-Beta': 'assistants=v2',
+            },
+          });
+          if (verifyResponse.ok) {
+            const assistantData = await verifyResponse.json();
+            console.log(`[AI Chat] ✅ Assistant exists! Name: ${assistantData.name}, Model: ${assistantData.model}`);
+            console.log(`[AI Chat] ⚠️ But run failed - this might be a permissions issue`);
+          } else {
+            const verifyError = await verifyResponse.text();
+            console.error(`[AI Chat] ❌ Assistant verification failed: ${verifyError}`);
+          }
+        } catch (verifyError) {
+          console.error(`[AI Chat] Failed to verify assistant:`, verifyError);
+        }
+        
         // Fallback to rule-based response instead of throwing error
         return {
           choices: [{

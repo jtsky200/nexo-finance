@@ -469,7 +469,7 @@ async function executeFunction(functionName, args, userId) {
 }
 // Use OpenAI Assistants API
 async function invokeLLM(params, apiKey, ctx) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
     if (!apiKey || apiKey.trim() === '') {
         throw new Error('OPENAI_API_KEY is not configured. Please set it in Firebase Functions environment variables or secrets.');
     }
@@ -555,12 +555,41 @@ async function invokeLLM(params, apiKey, ctx) {
             try {
                 errorData = JSON.parse(errorText);
             }
-            catch (_m) {
+            catch (_p) {
                 // Not JSON, use as is
             }
+            console.error(`[AI Chat] Run failed: ${runResponse.status} ${runResponse.statusText}`);
+            console.error(`[AI Chat] Error details:`, JSON.stringify(errorData, null, 2));
             // Check if assistant not found
-            if (runResponse.status === 404 && ((_g = (_f = errorData.error) === null || _f === void 0 ? void 0 : _f.message) === null || _g === void 0 ? void 0 : _g.includes('No assistant found'))) {
-                console.error(`Assistant not found: ${getOpenAIAssistantId()}. Falling back to rule-based response.`);
+            if (runResponse.status === 404 && (((_g = (_f = errorData.error) === null || _f === void 0 ? void 0 : _f.message) === null || _g === void 0 ? void 0 : _g.includes('No assistant found')) || ((_j = (_h = errorData.error) === null || _h === void 0 ? void 0 : _h.message) === null || _j === void 0 ? void 0 : _j.includes('not found')))) {
+                console.error(`[AI Chat] ❌ Assistant not found: ${assistantId}`);
+                console.error(`[AI Chat] This usually means:`);
+                console.error(`[AI Chat] 1. The Assistant ID doesn't exist`);
+                console.error(`[AI Chat] 2. The API Key belongs to a different OpenAI account`);
+                console.error(`[AI Chat] 3. The Assistant was deleted`);
+                console.error(`[AI Chat] Falling back to rule-based response.`);
+                // Try to verify assistant exists by fetching it
+                try {
+                    const verifyResponse = await fetch(`https://api.openai.com/v1/assistants/${assistantId}`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${apiKey}`,
+                            'OpenAI-Beta': 'assistants=v2',
+                        },
+                    });
+                    if (verifyResponse.ok) {
+                        const assistantData = await verifyResponse.json();
+                        console.log(`[AI Chat] ✅ Assistant exists! Name: ${assistantData.name}, Model: ${assistantData.model}`);
+                        console.log(`[AI Chat] ⚠️ But run failed - this might be a permissions issue`);
+                    }
+                    else {
+                        const verifyError = await verifyResponse.text();
+                        console.error(`[AI Chat] ❌ Assistant verification failed: ${verifyError}`);
+                    }
+                }
+                catch (verifyError) {
+                    console.error(`[AI Chat] Failed to verify assistant:`, verifyError);
+                }
                 // Fallback to rule-based response instead of throwing error
                 return {
                     choices: [{
@@ -599,7 +628,7 @@ async function invokeLLM(params, apiKey, ctx) {
             const runStatusData = await statusResponse.json();
             runStatus = runStatusData.status;
             // Handle function calls (requires_action)
-            if (runStatus === 'requires_action' && ((_h = runStatusData.required_action) === null || _h === void 0 ? void 0 : _h.type) === 'submit_tool_outputs') {
+            if (runStatus === 'requires_action' && ((_k = runStatusData.required_action) === null || _k === void 0 ? void 0 : _k.type) === 'submit_tool_outputs') {
                 const toolCalls = runStatusData.required_action.submit_tool_outputs.tool_calls || [];
                 console.log(`[AI Chat] ✅ Function calls detected! Processing ${toolCalls.length} tool calls`);
                 const toolOutputs = await Promise.all(toolCalls.map(async (toolCall) => {
@@ -693,11 +722,11 @@ async function invokeLLM(params, apiKey, ctx) {
             // Find text content items
             const textContent = assistantMessage.content.find((item) => item.type === 'text');
             if (textContent) {
-                content = ((_j = textContent.text) === null || _j === void 0 ? void 0 : _j.value) || '';
+                content = ((_l = textContent.text) === null || _l === void 0 ? void 0 : _l.value) || '';
             }
         }
-        else if (((_k = assistantMessage.content) === null || _k === void 0 ? void 0 : _k.type) === 'text') {
-            content = ((_l = assistantMessage.content.text) === null || _l === void 0 ? void 0 : _l.value) || '';
+        else if (((_m = assistantMessage.content) === null || _m === void 0 ? void 0 : _m.type) === 'text') {
+            content = ((_o = assistantMessage.content.text) === null || _o === void 0 ? void 0 : _o.value) || '';
         }
         if (!content) {
             console.warn('No text content found in assistant message, content structure:', JSON.stringify(assistantMessage.content));

@@ -120,107 +120,29 @@ function getOpenAIAssistantId() {
     // Fallback to default
     return 'asst_Es1kVA8SKX4G4LPtsvDtCFp9';
 }
-// Define OpenAI Functions/Tools for database access
+// Define OpenAI Functions/Tools for database access - ALLE FUNKTIONEN
 function getOpenAITools(userId) {
     if (!userId)
         return [];
     return [
+        // ========== SYSTEM & ZEIT ==========
         {
             type: 'function',
             function: {
-                name: 'getPersonDebts',
-                description: 'Ermittelt die Schulden (offene Rechnungen) einer Person. Gibt den Gesamtbetrag und Details aller offenen Rechnungen zurück.',
+                name: 'getCurrentDateTime',
+                description: 'Gibt das aktuelle Datum und die Uhrzeit zurück. WICHTIG: Verwende diese Funktion IMMER bevor du Termine oder Erinnerungen erstellst, um sicherzustellen, dass das Datum in der Zukunft liegt.',
                 parameters: {
                     type: 'object',
-                    properties: {
-                        personName: {
-                            type: 'string',
-                            description: 'Der Name der Person (z.B. "Pata", "Max", "Anna")',
-                        },
-                    },
-                    required: ['personName'],
+                    properties: {},
                 },
             },
         },
-        {
-            type: 'function',
-            function: {
-                name: 'getPersonReminders',
-                description: 'Ermittelt alle Termine, Erinnerungen und Aufgaben einer Person. Kann nach Datum gefiltert werden.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        personName: {
-                            type: 'string',
-                            description: 'Der Name der Person',
-                        },
-                        startDate: {
-                            type: 'string',
-                            description: 'Startdatum im Format YYYY-MM-DD (optional)',
-                        },
-                        endDate: {
-                            type: 'string',
-                            description: 'Enddatum im Format YYYY-MM-DD (optional)',
-                        },
-                    },
-                    required: ['personName'],
-                },
-            },
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'getPersonCalendarEvents',
-                description: 'Ermittelt Kalender-Events einer Person, einschließlich Ferien, Termine und Zahlungsfristen.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        personName: {
-                            type: 'string',
-                            description: 'Der Name der Person',
-                        },
-                        startDate: {
-                            type: 'string',
-                            description: 'Startdatum im Format YYYY-MM-DD (optional)',
-                        },
-                        endDate: {
-                            type: 'string',
-                            description: 'Enddatum im Format YYYY-MM-DD (optional)',
-                        },
-                    },
-                    required: ['personName'],
-                },
-            },
-        },
-        {
-            type: 'function',
-            function: {
-                name: 'getFinanceSummary',
-                description: 'Erstellt eine Finanz-Zusammenfassung für einen bestimmten Zeitraum. Zeigt Einnahmen, Ausgaben, Kategorien und Sparpotenzial.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        startDate: {
-                            type: 'string',
-                            description: 'Startdatum im Format YYYY-MM-DD (optional, Standard: Anfang des aktuellen Monats)',
-                        },
-                        endDate: {
-                            type: 'string',
-                            description: 'Enddatum im Format YYYY-MM-DD (optional, Standard: Ende des aktuellen Monats)',
-                        },
-                        month: {
-                            type: 'string',
-                            description: 'Monat im Format YYYY-MM (z.B. "2024-01" für Januar 2024). Überschreibt startDate und endDate.',
-                        },
-                    },
-                },
-            },
-        },
+        // ========== PERSONEN ==========
         {
             type: 'function',
             function: {
                 name: 'getAllPeople',
-                description: 'Listet alle Personen auf, die in der Datenbank gespeichert sind. Nützlich, um verfügbare Namen zu finden.',
+                description: 'Listet alle Personen auf, die in der Datenbank gespeichert sind. Nützlich, um verfügbare Namen und IDs zu finden.',
                 parameters: {
                     type: 'object',
                     properties: {},
@@ -244,188 +166,511 @@ function getOpenAITools(userId) {
                 },
             },
         },
+        {
+            type: 'function',
+            function: {
+                name: 'createPerson',
+                description: 'Erstellt eine neue Person in der Datenbank.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        name: { type: 'string', description: 'Name der Person (erforderlich)' },
+                        email: { type: 'string', description: 'E-Mail-Adresse (optional)' },
+                        phone: { type: 'string', description: 'Telefonnummer (optional)' },
+                        notes: { type: 'string', description: 'Notizen zur Person (optional)' },
+                    },
+                    required: ['name'],
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'getPersonDebts',
+                description: 'Ermittelt die Schulden (offene Rechnungen) einer Person. Gibt den Gesamtbetrag und Details aller offenen Rechnungen zurück.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        personName: { type: 'string', description: 'Der Name der Person' },
+                    },
+                    required: ['personName'],
+                },
+            },
+        },
+        // ========== ERINNERUNGEN & TERMINE ==========
+        {
+            type: 'function',
+            function: {
+                name: 'getAllReminders',
+                description: 'Ruft alle Erinnerungen und Termine ab. Kann nach Datum, Status und Person gefiltert werden.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        startDate: { type: 'string', description: 'Startdatum im Format YYYY-MM-DD (optional)' },
+                        endDate: { type: 'string', description: 'Enddatum im Format YYYY-MM-DD (optional)' },
+                        status: { type: 'string', enum: ['pending', 'completed', 'cancelled'], description: 'Status-Filter (optional)' },
+                        personId: { type: 'string', description: 'Person-ID für Filter (optional)' },
+                    },
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'createReminder',
+                description: 'Erstellt eine neue Erinnerung oder einen Termin. WICHTIG: Das dueDate MUSS in der Zukunft liegen! Rufe zuerst getCurrentDateTime auf, um das aktuelle Datum zu erhalten.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        title: { type: 'string', description: 'Titel der Erinnerung (erforderlich)' },
+                        dueDate: { type: 'string', description: 'Fälligkeitsdatum im Format YYYY-MM-DD oder YYYY-MM-DDTHH:mm:ss. MUSS in der Zukunft liegen!' },
+                        type: { type: 'string', enum: ['reminder', 'appointment', 'task', 'payment', 'birthday'], description: 'Art der Erinnerung' },
+                        personId: { type: 'string', description: 'ID der zugeordneten Person (optional)' },
+                        personName: { type: 'string', description: 'Name der Person (wird verwendet, um personId zu finden, wenn nicht angegeben)' },
+                        amount: { type: 'number', description: 'Betrag (für Zahlungen, optional)' },
+                        currency: { type: 'string', description: 'Währung (Standard: CHF)' },
+                        notes: { type: 'string', description: 'Notizen (optional)' },
+                        recurring: { type: 'boolean', description: 'Wiederkehrend? (optional)' },
+                        recurringFrequency: { type: 'string', enum: ['daily', 'weekly', 'monthly', 'yearly'], description: 'Wiederholungsintervall' },
+                    },
+                    required: ['title', 'dueDate'],
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'updateReminder',
+                description: 'Aktualisiert eine bestehende Erinnerung.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        reminderId: { type: 'string', description: 'ID der Erinnerung (erforderlich)' },
+                        title: { type: 'string', description: 'Neuer Titel (optional)' },
+                        dueDate: { type: 'string', description: 'Neues Datum im Format YYYY-MM-DD (optional)' },
+                        status: { type: 'string', enum: ['pending', 'completed', 'cancelled'], description: 'Neuer Status (optional)' },
+                        notes: { type: 'string', description: 'Neue Notizen (optional)' },
+                    },
+                    required: ['reminderId'],
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'deleteReminder',
+                description: 'Löscht eine Erinnerung.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        reminderId: { type: 'string', description: 'ID der zu löschenden Erinnerung' },
+                    },
+                    required: ['reminderId'],
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'getPersonReminders',
+                description: 'Ermittelt alle Termine und Erinnerungen einer bestimmten Person.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        personName: { type: 'string', description: 'Der Name der Person' },
+                        startDate: { type: 'string', description: 'Startdatum im Format YYYY-MM-DD (optional)' },
+                        endDate: { type: 'string', description: 'Enddatum im Format YYYY-MM-DD (optional)' },
+                    },
+                    required: ['personName'],
+                },
+            },
+        },
+        // ========== RECHNUNGEN ==========
+        {
+            type: 'function',
+            function: {
+                name: 'getAllInvoices',
+                description: 'Ruft alle Rechnungen ab. Kann nach Person, Status und Datum gefiltert werden.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        personId: { type: 'string', description: 'Person-ID für Filter (optional)' },
+                        personName: { type: 'string', description: 'Person-Name für Filter (optional)' },
+                        status: { type: 'string', enum: ['offen', 'bezahlt', 'überfällig', 'storniert'], description: 'Status-Filter (optional)' },
+                        startDate: { type: 'string', description: 'Startdatum (optional)' },
+                        endDate: { type: 'string', description: 'Enddatum (optional)' },
+                    },
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'createInvoice',
+                description: 'Erstellt eine neue Rechnung für eine Person.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        personId: { type: 'string', description: 'ID der Person' },
+                        personName: { type: 'string', description: 'Name der Person (wird verwendet, um personId zu finden)' },
+                        description: { type: 'string', description: 'Beschreibung der Rechnung (erforderlich)' },
+                        amount: { type: 'number', description: 'Betrag (erforderlich)' },
+                        currency: { type: 'string', description: 'Währung (Standard: CHF)' },
+                        dueDate: { type: 'string', description: 'Fälligkeitsdatum im Format YYYY-MM-DD' },
+                        status: { type: 'string', enum: ['offen', 'bezahlt', 'überfällig', 'storniert'], description: 'Status (Standard: offen)' },
+                        notes: { type: 'string', description: 'Notizen (optional)' },
+                    },
+                    required: ['description', 'amount'],
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'updateInvoiceStatus',
+                description: 'Aktualisiert den Status einer Rechnung (z.B. auf "bezahlt" setzen).',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        personId: { type: 'string', description: 'ID der Person' },
+                        invoiceId: { type: 'string', description: 'ID der Rechnung' },
+                        status: { type: 'string', enum: ['offen', 'bezahlt', 'überfällig', 'storniert'], description: 'Neuer Status' },
+                    },
+                    required: ['invoiceId', 'status'],
+                },
+            },
+        },
+        // ========== FINANZEN ==========
+        {
+            type: 'function',
+            function: {
+                name: 'getFinanceSummary',
+                description: 'Erstellt eine Finanz-Zusammenfassung für einen Zeitraum. Zeigt Einnahmen, Ausgaben, Kategorien und Sparpotenzial.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        startDate: { type: 'string', description: 'Startdatum im Format YYYY-MM-DD (optional)' },
+                        endDate: { type: 'string', description: 'Enddatum im Format YYYY-MM-DD (optional)' },
+                        month: { type: 'string', description: 'Monat im Format YYYY-MM (z.B. "2024-01")' },
+                    },
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'getAllFinanceEntries',
+                description: 'Ruft alle Finanzeinträge (Einnahmen & Ausgaben) ab.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        type: { type: 'string', enum: ['income', 'expense'], description: 'Typ-Filter (optional)' },
+                        category: { type: 'string', description: 'Kategorie-Filter (optional)' },
+                        startDate: { type: 'string', description: 'Startdatum (optional)' },
+                        endDate: { type: 'string', description: 'Enddatum (optional)' },
+                    },
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'createFinanceEntry',
+                description: 'Erstellt einen neuen Finanzeintrag (Einnahme oder Ausgabe).',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        type: { type: 'string', enum: ['income', 'expense'], description: 'Typ: Einnahme oder Ausgabe (erforderlich)' },
+                        amount: { type: 'number', description: 'Betrag (erforderlich)' },
+                        category: { type: 'string', description: 'Kategorie (z.B. Gehalt, Miete, Essen, Transport)' },
+                        description: { type: 'string', description: 'Beschreibung (erforderlich)' },
+                        date: { type: 'string', description: 'Datum im Format YYYY-MM-DD (Standard: heute)' },
+                        currency: { type: 'string', description: 'Währung (Standard: CHF)' },
+                        recurring: { type: 'boolean', description: 'Wiederkehrend?' },
+                        recurringFrequency: { type: 'string', enum: ['daily', 'weekly', 'monthly', 'yearly'], description: 'Wiederholungsintervall' },
+                    },
+                    required: ['type', 'amount', 'description'],
+                },
+            },
+        },
+        // ========== BUDGETS ==========
+        {
+            type: 'function',
+            function: {
+                name: 'getAllBudgets',
+                description: 'Ruft alle Budgets ab mit aktuellem Verbrauch.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        month: { type: 'string', description: 'Monat im Format YYYY-MM (optional)' },
+                    },
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'createBudget',
+                description: 'Erstellt ein neues Budget für eine Kategorie.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        category: { type: 'string', description: 'Kategorie (erforderlich)' },
+                        amount: { type: 'number', description: 'Budget-Betrag (erforderlich)' },
+                        month: { type: 'string', description: 'Monat im Format YYYY-MM (optional, Standard: aktueller Monat)' },
+                        currency: { type: 'string', description: 'Währung (Standard: CHF)' },
+                    },
+                    required: ['category', 'amount'],
+                },
+            },
+        },
+        // ========== EINKAUFSLISTE ==========
+        {
+            type: 'function',
+            function: {
+                name: 'getShoppingList',
+                description: 'Ruft die aktuelle Einkaufsliste ab.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        showCompleted: { type: 'boolean', description: 'Auch erledigte Artikel anzeigen? (Standard: false)' },
+                    },
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'createShoppingItem',
+                description: 'Fügt einen Artikel zur Einkaufsliste hinzu.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        name: { type: 'string', description: 'Name des Artikels (erforderlich)' },
+                        quantity: { type: 'number', description: 'Menge (optional)' },
+                        unit: { type: 'string', description: 'Einheit (z.B. kg, Stück, Liter)' },
+                        category: { type: 'string', description: 'Kategorie (z.B. Obst, Gemüse, Milchprodukte)' },
+                        notes: { type: 'string', description: 'Notizen (optional)' },
+                        store: { type: 'string', description: 'Geschäft (optional)' },
+                    },
+                    required: ['name'],
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'markShoppingItemAsBought',
+                description: 'Markiert einen Einkaufsartikel als gekauft.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        itemId: { type: 'string', description: 'ID des Artikels' },
+                        price: { type: 'number', description: 'Preis (optional)' },
+                    },
+                    required: ['itemId'],
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'deleteShoppingItem',
+                description: 'Entfernt einen Artikel von der Einkaufsliste.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        itemId: { type: 'string', description: 'ID des Artikels' },
+                    },
+                    required: ['itemId'],
+                },
+            },
+        },
+        // ========== KALENDER ==========
+        {
+            type: 'function',
+            function: {
+                name: 'getCalendarEvents',
+                description: 'Ruft alle Kalender-Events ab (Termine, Ferien, Arbeitspläne, Schulpläne).',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        startDate: { type: 'string', description: 'Startdatum im Format YYYY-MM-DD' },
+                        endDate: { type: 'string', description: 'Enddatum im Format YYYY-MM-DD' },
+                        type: { type: 'string', enum: ['all', 'reminders', 'vacations', 'work', 'school'], description: 'Typ-Filter' },
+                    },
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'getPersonCalendarEvents',
+                description: 'Ermittelt Kalender-Events einer bestimmten Person.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        personName: { type: 'string', description: 'Der Name der Person' },
+                        startDate: { type: 'string', description: 'Startdatum (optional)' },
+                        endDate: { type: 'string', description: 'Enddatum (optional)' },
+                    },
+                    required: ['personName'],
+                },
+            },
+        },
+        // ========== URLAUB & FERIEN ==========
+        {
+            type: 'function',
+            function: {
+                name: 'getVacations',
+                description: 'Ruft alle Urlaube und Ferien ab.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        year: { type: 'number', description: 'Jahr (optional)' },
+                        personId: { type: 'string', description: 'Person-ID (optional)' },
+                    },
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'createVacation',
+                description: 'Erstellt einen neuen Urlaub.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        title: { type: 'string', description: 'Titel (erforderlich)' },
+                        startDate: { type: 'string', description: 'Startdatum im Format YYYY-MM-DD (erforderlich)' },
+                        endDate: { type: 'string', description: 'Enddatum im Format YYYY-MM-DD (erforderlich)' },
+                        personId: { type: 'string', description: 'Person-ID (optional)' },
+                        type: { type: 'string', enum: ['vacation', 'holiday', 'sick', 'other'], description: 'Typ' },
+                        notes: { type: 'string', description: 'Notizen (optional)' },
+                    },
+                    required: ['title', 'startDate', 'endDate'],
+                },
+            },
+        },
+        // ========== ARBEIT ==========
+        {
+            type: 'function',
+            function: {
+                name: 'getWorkSchedules',
+                description: 'Ruft Arbeitspläne ab.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        startDate: { type: 'string', description: 'Startdatum (optional)' },
+                        endDate: { type: 'string', description: 'Enddatum (optional)' },
+                    },
+                },
+            },
+        },
+        // ========== SCHULE ==========
+        {
+            type: 'function',
+            function: {
+                name: 'getSchoolSchedules',
+                description: 'Ruft Schulpläne ab.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        childId: { type: 'string', description: 'Kind-ID (optional)' },
+                    },
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'getSchoolHolidays',
+                description: 'Ruft Schulferien ab.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        year: { type: 'number', description: 'Jahr (optional)' },
+                    },
+                },
+            },
+        },
+        // ========== DOKUMENTE ==========
+        {
+            type: 'function',
+            function: {
+                name: 'getAllDocuments',
+                description: 'Ruft alle gespeicherten Dokumente ab.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        personId: { type: 'string', description: 'Person-ID für Filter (optional)' },
+                        type: { type: 'string', description: 'Dokumenttyp-Filter (optional)' },
+                    },
+                },
+            },
+        },
+        // ========== STATISTIKEN & ANALYSEN ==========
+        {
+            type: 'function',
+            function: {
+                name: 'getCompleteUserSummary',
+                description: 'Erstellt eine vollständige Zusammenfassung aller Daten des Benutzers: Personen, Rechnungen, Finanzen, Termine, Budgets, etc. Nützlich für komplexe Fragen.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        includeDetails: { type: 'boolean', description: 'Detaillierte Daten einschließen? (Standard: false für Übersicht)' },
+                    },
+                },
+            },
+        },
     ];
 }
-// Execute function calls from OpenAI Assistant
+// Helper function to find person by name
+async function findPersonByName(db, userId, personName) {
+    const snapshot = await db.collection('people')
+        .where('userId', '==', userId)
+        .get();
+    const personDoc = snapshot.docs.find(doc => {
+        var _a, _b;
+        const data = doc.data();
+        return ((_a = data.name) === null || _a === void 0 ? void 0 : _a.toLowerCase()) === personName.toLowerCase() ||
+            ((_b = data.name) === null || _b === void 0 ? void 0 : _b.toLowerCase().includes(personName.toLowerCase()));
+    });
+    if (!personDoc)
+        return null;
+    const data = personDoc.data();
+    return {
+        id: personDoc.id,
+        name: data.name || '',
+        email: data.email,
+        phone: data.phone,
+        notes: data.notes,
+    };
+}
+// Execute function calls from OpenAI Assistant - ALLE FUNKTIONEN
 async function executeFunction(functionName, args, userId) {
+    var _a, _b, _c, _d, _e, _f;
     if (!userId) {
         throw new Error('User ID is required');
     }
     const db = admin.firestore();
+    const now = new Date();
+    // Schweizer Zeitzone
+    const swissTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Zurich' }));
     switch (functionName) {
-        case 'getPersonDebts': {
-            const { personName } = args;
-            // Find person by name
-            const peopleSnapshot = await db.collection('people')
-                .where('userId', '==', userId)
-                .where('name', '==', personName)
-                .get();
-            if (peopleSnapshot.empty) {
-                return { error: `Person "${personName}" nicht gefunden` };
-            }
-            const personDoc = peopleSnapshot.docs[0];
-            const invoicesSnapshot = await personDoc.ref.collection('invoices')
-                .where('status', '==', 'offen')
-                .get();
-            const invoices = invoicesSnapshot.docs.map(doc => {
-                var _a, _b, _c, _d, _e, _f;
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    description: data.description || '',
-                    amount: data.amount || 0,
-                    date: ((_c = (_b = (_a = data.date) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
-                    dueDate: ((_f = (_e = (_d = data.dueDate) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null,
-                };
-            });
-            const totalDebt = invoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+        // ========== SYSTEM & ZEIT ==========
+        case 'getCurrentDateTime': {
             return {
-                personName,
-                totalDebt,
-                currency: 'CHF',
-                invoiceCount: invoices.length,
-                invoices,
+                currentDate: swissTime.toISOString().split('T')[0],
+                currentTime: swissTime.toTimeString().split(' ')[0],
+                currentDateTime: swissTime.toISOString(),
+                timezone: 'Europe/Zurich',
+                dayOfWeek: swissTime.toLocaleDateString('de-CH', { weekday: 'long' }),
+                formattedDate: swissTime.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                hint: 'WICHTIG: Verwende dieses Datum als Referenz. Termine müssen NACH diesem Datum liegen!',
             };
         }
-        case 'getPersonReminders': {
-            const { personName, startDate, endDate } = args;
-            // Find person by name
-            const peopleSnapshot = await db.collection('people')
-                .where('userId', '==', userId)
-                .where('name', '==', personName)
-                .get();
-            if (peopleSnapshot.empty) {
-                return { error: `Person "${personName}" nicht gefunden` };
-            }
-            const personId = peopleSnapshot.docs[0].id;
-            let query = db.collection('reminders')
-                .where('userId', '==', userId)
-                .where('personId', '==', personId);
-            if (startDate) {
-                query = query.where('dueDate', '>=', admin.firestore.Timestamp.fromDate(new Date(startDate)));
-            }
-            if (endDate) {
-                query = query.where('dueDate', '<=', admin.firestore.Timestamp.fromDate(new Date(endDate)));
-            }
-            const snapshot = await query.orderBy('dueDate').get();
-            const reminders = snapshot.docs.map(doc => {
-                var _a, _b, _c;
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    title: data.title || '',
-                    type: data.type || '',
-                    dueDate: ((_c = (_b = (_a = data.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
-                    amount: data.amount || null,
-                    currency: data.currency || 'CHF',
-                    notes: data.notes || '',
-                };
-            });
-            return {
-                personName,
-                reminderCount: reminders.length,
-                reminders,
-            };
-        }
-        case 'getPersonCalendarEvents': {
-            const { personName, startDate, endDate } = args;
-            // Similar to reminders but includes all calendar events
-            const peopleSnapshot = await db.collection('people')
-                .where('userId', '==', userId)
-                .where('name', '==', personName)
-                .get();
-            if (peopleSnapshot.empty) {
-                return { error: `Person "${personName}" nicht gefunden` };
-            }
-            const personDoc = peopleSnapshot.docs[0];
-            const invoicesSnapshot = await personDoc.ref.collection('invoices').get();
-            const events = invoicesSnapshot.docs
-                .map(doc => {
-                var _a, _b, _c, _d, _e, _f;
-                const data = doc.data();
-                const eventDate = ((_b = (_a = data.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) || ((_d = (_c = data.date) === null || _c === void 0 ? void 0 : _c.toDate) === null || _d === void 0 ? void 0 : _d.call(_c)) || ((_f = (_e = data.createdAt) === null || _e === void 0 ? void 0 : _e.toDate) === null || _f === void 0 ? void 0 : _f.call(_e));
-                return {
-                    id: doc.id,
-                    type: 'invoice',
-                    title: data.description || 'Rechnung',
-                    date: (eventDate === null || eventDate === void 0 ? void 0 : eventDate.toISOString()) || null,
-                    amount: data.amount || 0,
-                    status: data.status || 'offen',
-                };
-            })
-                .filter(event => {
-                if (!startDate && !endDate)
-                    return true;
-                if (!event.date)
-                    return false;
-                const eventDate = new Date(event.date);
-                if (startDate && eventDate < new Date(startDate))
-                    return false;
-                if (endDate && eventDate > new Date(endDate))
-                    return false;
-                return true;
-            });
-            return {
-                personName,
-                eventCount: events.length,
-                events,
-            };
-        }
-        case 'getFinanceSummary': {
-            const { startDate, endDate, month } = args;
-            let start;
-            let end;
-            if (month) {
-                const [year, monthNum] = month.split('-').map(Number);
-                start = new Date(year, monthNum - 1, 1);
-                end = new Date(year, monthNum, 0, 23, 59, 59);
-            }
-            else {
-                start = startDate ? new Date(startDate) : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-                end = endDate ? new Date(endDate) : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59);
-            }
-            const snapshot = await db.collection('financeEntries')
-                .where('userId', '==', userId)
-                .where('date', '>=', admin.firestore.Timestamp.fromDate(start))
-                .where('date', '<=', admin.firestore.Timestamp.fromDate(end))
-                .get();
-            const entries = snapshot.docs.map(doc => {
-                var _a, _b, _c;
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    type: data.type || 'expense',
-                    category: data.category || '',
-                    amount: data.amount || 0,
-                    description: data.description || '',
-                    date: ((_c = (_b = (_a = data.date) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
-                };
-            });
-            const income = entries.filter(e => e.type === 'income').reduce((sum, e) => sum + e.amount, 0);
-            const expenses = entries.filter(e => e.type === 'expense').reduce((sum, e) => sum + e.amount, 0);
-            const balance = income - expenses;
-            const categories = entries
-                .filter(e => e.type === 'expense')
-                .reduce((acc, e) => {
-                acc[e.category] = (acc[e.category] || 0) + e.amount;
-                return acc;
-            }, {});
-            return {
-                period: {
-                    start: start.toISOString(),
-                    end: end.toISOString(),
-                },
-                income,
-                expenses,
-                balance,
-                savingsPotential: balance > 0 ? balance : 0,
-                categoryBreakdown: Object.entries(categories).map(([category, amount]) => ({
-                    category,
-                    amount,
-                })),
-                entryCount: entries.length,
-            };
-        }
+        // ========== PERSONEN ==========
         case 'getAllPeople': {
             const snapshot = await db.collection('people')
                 .where('userId', '==', userId)
@@ -439,29 +684,813 @@ async function executeFunction(functionName, args, userId) {
                     phone: data.phone || null,
                 };
             });
-            return {
-                people,
-                count: people.length,
-            };
+            return { people, count: people.length };
         }
         case 'searchPerson': {
             const { searchTerm } = args;
-            const snapshot = await db.collection('people')
-                .where('userId', '==', userId)
-                .get();
-            const allPeople = snapshot.docs.map(doc => (Object.assign({ id: doc.id }, doc.data())));
-            const matches = allPeople.filter((person) => { var _a; return (_a = person.name) === null || _a === void 0 ? void 0 : _a.toLowerCase().includes(searchTerm.toLowerCase()); });
-            if (matches.length === 0) {
+            const person = await findPersonByName(db, userId, searchTerm);
+            if (!person) {
                 return { error: `Keine Person mit "${searchTerm}" gefunden` };
             }
+            return { person };
+        }
+        case 'createPerson': {
+            const { name, email, phone, notes } = args;
+            const personRef = await db.collection('people').add({
+                userId,
+                name,
+                email: email || null,
+                phone: phone || null,
+                notes: notes || null,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
             return {
-                matches: matches.map((person) => ({
-                    id: person.id,
-                    name: person.name,
-                    email: person.email || null,
-                    phone: person.phone || null,
-                })),
+                success: true,
+                personId: personRef.id,
+                message: `Person "${name}" wurde erstellt.`,
             };
+        }
+        case 'getPersonDebts': {
+            const { personName } = args;
+            const person = await findPersonByName(db, userId, personName);
+            if (!person) {
+                return { error: `Person "${personName}" nicht gefunden` };
+            }
+            const invoicesSnapshot = await db.collection('people').doc(person.id).collection('invoices')
+                .where('status', '==', 'offen')
+                .get();
+            const invoices = invoicesSnapshot.docs.map(doc => {
+                var _a, _b, _c;
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    description: data.description || '',
+                    amount: data.amount || 0,
+                    dueDate: ((_c = (_b = (_a = data.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
+                };
+            });
+            const totalDebt = invoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+            return {
+                personName: person.name,
+                totalDebt,
+                currency: 'CHF',
+                invoiceCount: invoices.length,
+                invoices,
+            };
+        }
+        // ========== ERINNERUNGEN & TERMINE ==========
+        case 'getAllReminders': {
+            const { startDate, endDate, status, personId } = args;
+            let query = db.collection('reminders')
+                .where('userId', '==', userId);
+            if (personId)
+                query = query.where('personId', '==', personId);
+            if (status)
+                query = query.where('status', '==', status);
+            const snapshot = await query.get();
+            let reminders = snapshot.docs.map(doc => {
+                var _a, _b, _c;
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    title: data.title || '',
+                    type: data.type || 'reminder',
+                    dueDate: ((_c = (_b = (_a = data.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
+                    status: data.status || 'pending',
+                    personId: data.personId || null,
+                    amount: data.amount || null,
+                    notes: data.notes || '',
+                };
+            });
+            // Date filtering
+            if (startDate) {
+                const start = new Date(startDate);
+                reminders = reminders.filter(r => r.dueDate && new Date(r.dueDate) >= start);
+            }
+            if (endDate) {
+                const end = new Date(endDate);
+                reminders = reminders.filter(r => r.dueDate && new Date(r.dueDate) <= end);
+            }
+            // Sort by dueDate
+            reminders.sort((a, b) => {
+                if (!a.dueDate)
+                    return 1;
+                if (!b.dueDate)
+                    return -1;
+                return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+            });
+            return { reminders, count: reminders.length };
+        }
+        case 'createReminder': {
+            const { title, dueDate, type, personId, personName, amount, currency, notes, recurring, recurringFrequency } = args;
+            // Parse and validate date
+            const parsedDate = new Date(dueDate);
+            if (isNaN(parsedDate.getTime())) {
+                return { error: `Ungültiges Datum: ${dueDate}. Format: YYYY-MM-DD oder YYYY-MM-DDTHH:mm:ss` };
+            }
+            // WICHTIG: Prüfe, ob das Datum in der Zukunft liegt
+            if (parsedDate < swissTime) {
+                const tomorrow = new Date(swissTime);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                return {
+                    error: `Das Datum ${dueDate} liegt in der Vergangenheit! Aktuelles Datum ist ${swissTime.toISOString().split('T')[0]}. Bitte wähle ein Datum in der Zukunft.`,
+                    suggestion: `Nächster möglicher Tag: ${tomorrow.toISOString().split('T')[0]}`,
+                    currentDate: swissTime.toISOString().split('T')[0],
+                };
+            }
+            // Find personId if personName is provided
+            let finalPersonId = personId;
+            if (!finalPersonId && personName) {
+                const person = await findPersonByName(db, userId, personName);
+                if (person)
+                    finalPersonId = person.id;
+            }
+            const reminderData = {
+                userId,
+                title,
+                dueDate: admin.firestore.Timestamp.fromDate(parsedDate),
+                type: type || 'reminder',
+                status: 'pending',
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            };
+            if (finalPersonId)
+                reminderData.personId = finalPersonId;
+            if (amount)
+                reminderData.amount = amount;
+            if (currency)
+                reminderData.currency = currency;
+            if (notes)
+                reminderData.notes = notes;
+            if (recurring) {
+                reminderData.recurring = true;
+                reminderData.recurringFrequency = recurringFrequency || 'monthly';
+            }
+            const reminderRef = await db.collection('reminders').add(reminderData);
+            return {
+                success: true,
+                reminderId: reminderRef.id,
+                message: `Erinnerung "${title}" für ${parsedDate.toLocaleDateString('de-CH')} wurde erstellt.`,
+                dueDate: parsedDate.toISOString(),
+            };
+        }
+        case 'updateReminder': {
+            const { reminderId, title, dueDate, status, notes } = args;
+            const updateData = {
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            };
+            if (title)
+                updateData.title = title;
+            if (status)
+                updateData.status = status;
+            if (notes !== undefined)
+                updateData.notes = notes;
+            if (dueDate) {
+                const parsedDate = new Date(dueDate);
+                if (parsedDate < swissTime) {
+                    return { error: `Das Datum ${dueDate} liegt in der Vergangenheit!` };
+                }
+                updateData.dueDate = admin.firestore.Timestamp.fromDate(parsedDate);
+            }
+            await db.collection('reminders').doc(reminderId).update(updateData);
+            return { success: true, message: 'Erinnerung wurde aktualisiert.' };
+        }
+        case 'deleteReminder': {
+            const { reminderId } = args;
+            await db.collection('reminders').doc(reminderId).delete();
+            return { success: true, message: 'Erinnerung wurde gelöscht.' };
+        }
+        case 'getPersonReminders': {
+            const { personName, startDate, endDate } = args;
+            const person = await findPersonByName(db, userId, personName);
+            if (!person) {
+                return { error: `Person "${personName}" nicht gefunden` };
+            }
+            let query = db.collection('reminders')
+                .where('userId', '==', userId)
+                .where('personId', '==', person.id);
+            const snapshot = await query.get();
+            let reminders = snapshot.docs.map(doc => {
+                var _a, _b, _c;
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    title: data.title || '',
+                    type: data.type || 'reminder',
+                    dueDate: ((_c = (_b = (_a = data.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
+                    status: data.status || 'pending',
+                    amount: data.amount || null,
+                    notes: data.notes || '',
+                };
+            });
+            if (startDate)
+                reminders = reminders.filter(r => r.dueDate && new Date(r.dueDate) >= new Date(startDate));
+            if (endDate)
+                reminders = reminders.filter(r => r.dueDate && new Date(r.dueDate) <= new Date(endDate));
+            return { personName: person.name, reminders, count: reminders.length };
+        }
+        // ========== RECHNUNGEN ==========
+        case 'getAllInvoices': {
+            const { personId, personName, status, startDate, endDate } = args;
+            let targetPersonId = personId;
+            if (!targetPersonId && personName) {
+                const person = await findPersonByName(db, userId, personName);
+                if (person)
+                    targetPersonId = person.id;
+            }
+            // Get all people to fetch their invoices
+            const peopleSnapshot = await db.collection('people')
+                .where('userId', '==', userId)
+                .get();
+            const allInvoices = [];
+            for (const personDoc of peopleSnapshot.docs) {
+                if (targetPersonId && personDoc.id !== targetPersonId)
+                    continue;
+                let invoiceQuery = personDoc.ref.collection('invoices');
+                if (status)
+                    invoiceQuery = invoiceQuery.where('status', '==', status);
+                const invoicesSnapshot = await invoiceQuery.get();
+                for (const invDoc of invoicesSnapshot.docs) {
+                    const data = invDoc.data();
+                    const invoice = {
+                        id: invDoc.id,
+                        personId: personDoc.id,
+                        personName: personDoc.data().name,
+                        description: data.description || '',
+                        amount: data.amount || 0,
+                        currency: data.currency || 'CHF',
+                        status: data.status || 'offen',
+                        dueDate: ((_c = (_b = (_a = data.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
+                        date: ((_f = (_e = (_d = data.date) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null,
+                    };
+                    // Date filter
+                    if (startDate && invoice.dueDate && new Date(invoice.dueDate) < new Date(startDate))
+                        continue;
+                    if (endDate && invoice.dueDate && new Date(invoice.dueDate) > new Date(endDate))
+                        continue;
+                    allInvoices.push(invoice);
+                }
+            }
+            const totalAmount = allInvoices.reduce((sum, inv) => sum + inv.amount, 0);
+            const openAmount = allInvoices.filter(inv => inv.status === 'offen').reduce((sum, inv) => sum + inv.amount, 0);
+            return {
+                invoices: allInvoices,
+                count: allInvoices.length,
+                totalAmount,
+                openAmount,
+                currency: 'CHF',
+            };
+        }
+        case 'createInvoice': {
+            const { personId, personName, description, amount, currency, dueDate, status, notes } = args;
+            let targetPersonId = personId;
+            if (!targetPersonId && personName) {
+                const person = await findPersonByName(db, userId, personName);
+                if (person) {
+                    targetPersonId = person.id;
+                }
+                else {
+                    // Create person if not exists
+                    const newPersonRef = await db.collection('people').add({
+                        userId,
+                        name: personName,
+                        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    });
+                    targetPersonId = newPersonRef.id;
+                }
+            }
+            if (!targetPersonId) {
+                return { error: 'Person-ID oder Name erforderlich' };
+            }
+            const invoiceData = {
+                description,
+                amount,
+                currency: currency || 'CHF',
+                status: status || 'offen',
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            };
+            if (dueDate)
+                invoiceData.dueDate = admin.firestore.Timestamp.fromDate(new Date(dueDate));
+            if (notes)
+                invoiceData.notes = notes;
+            const invoiceRef = await db.collection('people').doc(targetPersonId).collection('invoices').add(invoiceData);
+            return {
+                success: true,
+                invoiceId: invoiceRef.id,
+                personId: targetPersonId,
+                message: `Rechnung "${description}" über ${amount} ${currency || 'CHF'} wurde erstellt.`,
+            };
+        }
+        case 'updateInvoiceStatus': {
+            const { personId, invoiceId, status } = args;
+            // Find invoice if personId not provided
+            let targetPersonId = personId;
+            if (!targetPersonId) {
+                const peopleSnapshot = await db.collection('people')
+                    .where('userId', '==', userId)
+                    .get();
+                for (const personDoc of peopleSnapshot.docs) {
+                    const invoiceDoc = await personDoc.ref.collection('invoices').doc(invoiceId).get();
+                    if (invoiceDoc.exists) {
+                        targetPersonId = personDoc.id;
+                        break;
+                    }
+                }
+            }
+            if (!targetPersonId) {
+                return { error: 'Rechnung nicht gefunden' };
+            }
+            await db.collection('people').doc(targetPersonId).collection('invoices').doc(invoiceId).update({
+                status,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return { success: true, message: `Rechnung wurde auf "${status}" gesetzt.` };
+        }
+        // ========== FINANZEN ==========
+        case 'getFinanceSummary': {
+            const { startDate, endDate, month } = args;
+            let start;
+            let end;
+            if (month) {
+                const [year, monthNum] = month.split('-').map(Number);
+                start = new Date(year, monthNum - 1, 1);
+                end = new Date(year, monthNum, 0, 23, 59, 59);
+            }
+            else {
+                start = startDate ? new Date(startDate) : new Date(swissTime.getFullYear(), swissTime.getMonth(), 1);
+                end = endDate ? new Date(endDate) : new Date(swissTime.getFullYear(), swissTime.getMonth() + 1, 0, 23, 59, 59);
+            }
+            const snapshot = await db.collection('financeEntries')
+                .where('userId', '==', userId)
+                .get();
+            const entries = snapshot.docs
+                .map(doc => {
+                var _a, _b;
+                const data = doc.data();
+                const entryDate = ((_b = (_a = data.date) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) || new Date();
+                return {
+                    id: doc.id,
+                    type: data.type || 'expense',
+                    category: data.category || 'Sonstiges',
+                    amount: data.amount || 0,
+                    description: data.description || '',
+                    date: entryDate,
+                };
+            })
+                .filter(e => e.date >= start && e.date <= end);
+            const income = entries.filter(e => e.type === 'income').reduce((sum, e) => sum + e.amount, 0);
+            const expenses = entries.filter(e => e.type === 'expense').reduce((sum, e) => sum + e.amount, 0);
+            const balance = income - expenses;
+            const categories = entries
+                .filter(e => e.type === 'expense')
+                .reduce((acc, e) => {
+                acc[e.category] = (acc[e.category] || 0) + e.amount;
+                return acc;
+            }, {});
+            return {
+                period: { start: start.toISOString(), end: end.toISOString() },
+                income,
+                expenses,
+                balance,
+                savingsRate: income > 0 ? Math.round((balance / income) * 100) : 0,
+                categoryBreakdown: Object.entries(categories)
+                    .map(([category, amount]) => ({ category, amount }))
+                    .sort((a, b) => b.amount - a.amount),
+                entryCount: entries.length,
+                currency: 'CHF',
+            };
+        }
+        case 'getAllFinanceEntries': {
+            const { type, category, startDate, endDate } = args;
+            let query = db.collection('financeEntries')
+                .where('userId', '==', userId);
+            if (type)
+                query = query.where('type', '==', type);
+            if (category)
+                query = query.where('category', '==', category);
+            const snapshot = await query.get();
+            let entries = snapshot.docs.map(doc => {
+                var _a, _b, _c;
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    type: data.type || 'expense',
+                    category: data.category || 'Sonstiges',
+                    amount: data.amount || 0,
+                    description: data.description || '',
+                    date: ((_c = (_b = (_a = data.date) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
+                    currency: data.currency || 'CHF',
+                };
+            });
+            if (startDate)
+                entries = entries.filter(e => e.date && new Date(e.date) >= new Date(startDate));
+            if (endDate)
+                entries = entries.filter(e => e.date && new Date(e.date) <= new Date(endDate));
+            entries.sort((a, b) => {
+                if (!a.date)
+                    return 1;
+                if (!b.date)
+                    return -1;
+                return new Date(b.date).getTime() - new Date(a.date).getTime();
+            });
+            return { entries, count: entries.length };
+        }
+        case 'createFinanceEntry': {
+            const { type, amount, category, description, date, currency, recurring, recurringFrequency } = args;
+            const entryDate = date ? new Date(date) : swissTime;
+            const entryData = {
+                userId,
+                type,
+                amount,
+                category: category || 'Sonstiges',
+                description,
+                date: admin.firestore.Timestamp.fromDate(entryDate),
+                currency: currency || 'CHF',
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            };
+            if (recurring) {
+                entryData.recurring = true;
+                entryData.recurringFrequency = recurringFrequency || 'monthly';
+            }
+            const entryRef = await db.collection('financeEntries').add(entryData);
+            return {
+                success: true,
+                entryId: entryRef.id,
+                message: `${type === 'income' ? 'Einnahme' : 'Ausgabe'} "${description}" über ${amount} ${currency || 'CHF'} wurde erstellt.`,
+            };
+        }
+        // ========== BUDGETS ==========
+        case 'getAllBudgets': {
+            const { month } = args;
+            const targetMonth = month || `${swissTime.getFullYear()}-${String(swissTime.getMonth() + 1).padStart(2, '0')}`;
+            const snapshot = await db.collection('budgets')
+                .where('userId', '==', userId)
+                .get();
+            const budgets = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    category: data.category || '',
+                    amount: data.amount || 0,
+                    spent: data.spent || 0,
+                    remaining: (data.amount || 0) - (data.spent || 0),
+                    month: data.month || targetMonth,
+                    currency: data.currency || 'CHF',
+                };
+            });
+            return { budgets, count: budgets.length, month: targetMonth };
+        }
+        case 'createBudget': {
+            const { category, amount, month, currency } = args;
+            const targetMonth = month || `${swissTime.getFullYear()}-${String(swissTime.getMonth() + 1).padStart(2, '0')}`;
+            const budgetRef = await db.collection('budgets').add({
+                userId,
+                category,
+                amount,
+                spent: 0,
+                month: targetMonth,
+                currency: currency || 'CHF',
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return {
+                success: true,
+                budgetId: budgetRef.id,
+                message: `Budget für "${category}" über ${amount} ${currency || 'CHF'} wurde erstellt.`,
+            };
+        }
+        // ========== EINKAUFSLISTE ==========
+        case 'getShoppingList': {
+            const { showCompleted } = args;
+            let query = db.collection('shoppingItems')
+                .where('userId', '==', userId);
+            if (!showCompleted) {
+                query = query.where('bought', '==', false);
+            }
+            const snapshot = await query.get();
+            const items = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    name: data.name || '',
+                    quantity: data.quantity || 1,
+                    unit: data.unit || '',
+                    category: data.category || '',
+                    notes: data.notes || '',
+                    store: data.store || '',
+                    bought: data.bought || false,
+                    price: data.price || null,
+                };
+            });
+            return { items, count: items.length };
+        }
+        case 'createShoppingItem': {
+            const { name, quantity, unit, category, notes, store } = args;
+            const itemRef = await db.collection('shoppingItems').add({
+                userId,
+                name,
+                quantity: quantity || 1,
+                unit: unit || '',
+                category: category || '',
+                notes: notes || '',
+                store: store || '',
+                bought: false,
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return {
+                success: true,
+                itemId: itemRef.id,
+                message: `"${name}" wurde zur Einkaufsliste hinzugefügt.`,
+            };
+        }
+        case 'markShoppingItemAsBought': {
+            const { itemId, price } = args;
+            const updateData = {
+                bought: true,
+                boughtAt: admin.firestore.FieldValue.serverTimestamp(),
+            };
+            if (price)
+                updateData.price = price;
+            await db.collection('shoppingItems').doc(itemId).update(updateData);
+            return { success: true, message: 'Artikel wurde als gekauft markiert.' };
+        }
+        case 'deleteShoppingItem': {
+            const { itemId } = args;
+            await db.collection('shoppingItems').doc(itemId).delete();
+            return { success: true, message: 'Artikel wurde von der Einkaufsliste entfernt.' };
+        }
+        // ========== KALENDER ==========
+        case 'getCalendarEvents': {
+            const { startDate, endDate, type } = args;
+            const start = startDate ? new Date(startDate) : new Date(swissTime.getFullYear(), swissTime.getMonth(), 1);
+            const end = endDate ? new Date(endDate) : new Date(swissTime.getFullYear(), swissTime.getMonth() + 1, 0);
+            const events = [];
+            // Get reminders
+            if (!type || type === 'all' || type === 'reminders') {
+                const remindersSnapshot = await db.collection('reminders')
+                    .where('userId', '==', userId)
+                    .get();
+                remindersSnapshot.docs.forEach(doc => {
+                    var _a, _b;
+                    const data = doc.data();
+                    const dueDate = (_b = (_a = data.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a);
+                    if (dueDate && dueDate >= start && dueDate <= end) {
+                        events.push({
+                            id: doc.id,
+                            type: 'reminder',
+                            title: data.title,
+                            date: dueDate.toISOString(),
+                            status: data.status,
+                        });
+                    }
+                });
+            }
+            // Get vacations
+            if (!type || type === 'all' || type === 'vacations') {
+                const vacationsSnapshot = await db.collection('vacations')
+                    .where('userId', '==', userId)
+                    .get();
+                vacationsSnapshot.docs.forEach(doc => {
+                    var _a, _b, _c, _d;
+                    const data = doc.data();
+                    const vacStart = (_b = (_a = data.startDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a);
+                    const vacEnd = (_d = (_c = data.endDate) === null || _c === void 0 ? void 0 : _c.toDate) === null || _d === void 0 ? void 0 : _d.call(_c);
+                    if (vacStart && vacEnd && !(vacEnd < start || vacStart > end)) {
+                        events.push({
+                            id: doc.id,
+                            type: 'vacation',
+                            title: data.title,
+                            startDate: vacStart.toISOString(),
+                            endDate: vacEnd.toISOString(),
+                        });
+                    }
+                });
+            }
+            events.sort((a, b) => {
+                const dateA = new Date(a.date || a.startDate);
+                const dateB = new Date(b.date || b.startDate);
+                return dateA.getTime() - dateB.getTime();
+            });
+            return { events, count: events.length, period: { start: start.toISOString(), end: end.toISOString() } };
+        }
+        case 'getPersonCalendarEvents': {
+            const { personName, startDate, endDate } = args;
+            const person = await findPersonByName(db, userId, personName);
+            if (!person) {
+                return { error: `Person "${personName}" nicht gefunden` };
+            }
+            const invoicesSnapshot = await db.collection('people').doc(person.id).collection('invoices').get();
+            const events = invoicesSnapshot.docs
+                .map(doc => {
+                var _a, _b, _c, _d;
+                const data = doc.data();
+                const eventDate = ((_b = (_a = data.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) || ((_d = (_c = data.date) === null || _c === void 0 ? void 0 : _c.toDate) === null || _d === void 0 ? void 0 : _d.call(_c));
+                return {
+                    id: doc.id,
+                    type: 'invoice',
+                    title: data.description || 'Rechnung',
+                    date: (eventDate === null || eventDate === void 0 ? void 0 : eventDate.toISOString()) || null,
+                    amount: data.amount || 0,
+                    status: data.status || 'offen',
+                };
+            })
+                .filter(event => {
+                if (!event.date)
+                    return false;
+                const eventDate = new Date(event.date);
+                if (startDate && eventDate < new Date(startDate))
+                    return false;
+                if (endDate && eventDate > new Date(endDate))
+                    return false;
+                return true;
+            });
+            return { personName: person.name, events, count: events.length };
+        }
+        // ========== URLAUB & FERIEN ==========
+        case 'getVacations': {
+            const { year, personId } = args;
+            let query = db.collection('vacations')
+                .where('userId', '==', userId);
+            if (personId)
+                query = query.where('personId', '==', personId);
+            const snapshot = await query.get();
+            let vacations = snapshot.docs.map(doc => {
+                var _a, _b, _c, _d, _e, _f;
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    title: data.title || '',
+                    startDate: ((_c = (_b = (_a = data.startDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
+                    endDate: ((_f = (_e = (_d = data.endDate) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null,
+                    type: data.type || 'vacation',
+                    personId: data.personId || null,
+                    notes: data.notes || '',
+                };
+            });
+            if (year) {
+                vacations = vacations.filter(v => {
+                    if (!v.startDate)
+                        return false;
+                    return new Date(v.startDate).getFullYear() === year;
+                });
+            }
+            return { vacations, count: vacations.length };
+        }
+        case 'createVacation': {
+            const { title, startDate, endDate, personId, type, notes } = args;
+            const vacationRef = await db.collection('vacations').add({
+                userId,
+                title,
+                startDate: admin.firestore.Timestamp.fromDate(new Date(startDate)),
+                endDate: admin.firestore.Timestamp.fromDate(new Date(endDate)),
+                type: type || 'vacation',
+                personId: personId || null,
+                notes: notes || '',
+                createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+            return {
+                success: true,
+                vacationId: vacationRef.id,
+                message: `Urlaub "${title}" vom ${startDate} bis ${endDate} wurde erstellt.`,
+            };
+        }
+        // ========== ARBEIT ==========
+        case 'getWorkSchedules': {
+            const { startDate, endDate } = args;
+            const snapshot = await db.collection('workSchedules')
+                .where('userId', '==', userId)
+                .get();
+            let schedules = snapshot.docs.map(doc => {
+                var _a, _b, _c;
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    date: ((_c = (_b = (_a = data.date) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
+                    startTime: data.startTime || null,
+                    endTime: data.endTime || null,
+                    location: data.location || '',
+                    notes: data.notes || '',
+                };
+            });
+            if (startDate)
+                schedules = schedules.filter(s => s.date && new Date(s.date) >= new Date(startDate));
+            if (endDate)
+                schedules = schedules.filter(s => s.date && new Date(s.date) <= new Date(endDate));
+            return { schedules, count: schedules.length };
+        }
+        // ========== SCHULE ==========
+        case 'getSchoolSchedules': {
+            const { childId } = args;
+            let query = db.collection('schoolSchedules')
+                .where('userId', '==', userId);
+            if (childId)
+                query = query.where('childId', '==', childId);
+            const snapshot = await query.get();
+            const schedules = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    childId: data.childId || null,
+                    dayOfWeek: data.dayOfWeek || '',
+                    subject: data.subject || '',
+                    startTime: data.startTime || null,
+                    endTime: data.endTime || null,
+                    teacher: data.teacher || '',
+                    room: data.room || '',
+                };
+            });
+            return { schedules, count: schedules.length };
+        }
+        case 'getSchoolHolidays': {
+            const { year } = args;
+            const targetYear = year || swissTime.getFullYear();
+            const snapshot = await db.collection('schoolHolidays')
+                .where('userId', '==', userId)
+                .get();
+            let holidays = snapshot.docs.map(doc => {
+                var _a, _b, _c, _d, _e, _f;
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    name: data.name || '',
+                    startDate: ((_c = (_b = (_a = data.startDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
+                    endDate: ((_f = (_e = (_d = data.endDate) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null,
+                };
+            });
+            holidays = holidays.filter(h => {
+                if (!h.startDate)
+                    return false;
+                return new Date(h.startDate).getFullYear() === targetYear;
+            });
+            return { holidays, count: holidays.length, year: targetYear };
+        }
+        // ========== DOKUMENTE ==========
+        case 'getAllDocuments': {
+            const { personId, type } = args;
+            let query = db.collection('documents')
+                .where('userId', '==', userId);
+            if (personId)
+                query = query.where('personId', '==', personId);
+            if (type)
+                query = query.where('type', '==', type);
+            const snapshot = await query.get();
+            const documents = snapshot.docs.map(doc => {
+                var _a, _b, _c;
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    name: data.name || '',
+                    type: data.type || '',
+                    personId: data.personId || null,
+                    uploadDate: ((_c = (_b = (_a = data.uploadDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
+                    size: data.size || 0,
+                };
+            });
+            return { documents, count: documents.length };
+        }
+        // ========== STATISTIKEN ==========
+        case 'getCompleteUserSummary': {
+            const { includeDetails } = args;
+            // Get counts
+            const peopleSnapshot = await db.collection('people').where('userId', '==', userId).get();
+            const remindersSnapshot = await db.collection('reminders').where('userId', '==', userId).get();
+            const financeSnapshot = await db.collection('financeEntries').where('userId', '==', userId).get();
+            const budgetsSnapshot = await db.collection('budgets').where('userId', '==', userId).get();
+            const shoppingSnapshot = await db.collection('shoppingItems').where('userId', '==', userId).where('bought', '==', false).get();
+            // Calculate totals
+            const pendingReminders = remindersSnapshot.docs.filter(doc => doc.data().status === 'pending').length;
+            const income = financeSnapshot.docs.filter(doc => doc.data().type === 'income').reduce((sum, doc) => sum + (doc.data().amount || 0), 0);
+            const expenses = financeSnapshot.docs.filter(doc => doc.data().type === 'expense').reduce((sum, doc) => sum + (doc.data().amount || 0), 0);
+            // Get total debts
+            let totalDebts = 0;
+            for (const personDoc of peopleSnapshot.docs) {
+                const invoicesSnapshot = await personDoc.ref.collection('invoices').where('status', '==', 'offen').get();
+                totalDebts += invoicesSnapshot.docs.reduce((sum, doc) => sum + (doc.data().amount || 0), 0);
+            }
+            const summary = {
+                currentDate: swissTime.toISOString().split('T')[0],
+                counts: {
+                    people: peopleSnapshot.size,
+                    reminders: remindersSnapshot.size,
+                    pendingReminders,
+                    financeEntries: financeSnapshot.size,
+                    budgets: budgetsSnapshot.size,
+                    shoppingItems: shoppingSnapshot.size,
+                },
+                finances: {
+                    totalIncome: income,
+                    totalExpenses: expenses,
+                    balance: income - expenses,
+                    totalDebts,
+                    currency: 'CHF',
+                },
+            };
+            if (includeDetails) {
+                summary.people = peopleSnapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name }));
+                summary.upcomingReminders = remindersSnapshot.docs
+                    .filter(doc => doc.data().status === 'pending')
+                    .slice(0, 5)
+                    .map(doc => { var _a, _b, _c; return ({ id: doc.id, title: doc.data().title, dueDate: (_c = (_b = (_a = doc.data().dueDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString() }); });
+            }
+            return summary;
         }
         default:
             throw new Error(`Unknown function: ${functionName}`);

@@ -9,7 +9,7 @@ import {
   Banknote, Clock, AlertTriangle, CheckCircle2, ClipboardList,
   CalendarClock, CheckSquare
 } from 'lucide-react';
-import { useReminders, useFinanceEntries, getTaxProfileByYear, useAllBills, Bill, debugUserData, migrateUserIds } from '@/lib/firebaseHooks';
+import { useReminders, useFinanceEntries, getTaxProfileByYear, useAllBills, Bill } from '@/lib/firebaseHooks';
 import AddReminderDialog from '@/components/AddReminderDialog';
 import AddFinanceEntryDialog from '@/components/AddFinanceEntryDialog';
 import { useLocation } from 'wouter';
@@ -22,65 +22,6 @@ export default function Dashboard() {
   const [financeDialogOpen, setFinanceDialogOpen] = useState(false);
   const [taxProfile, setTaxProfile] = useState<any>(null);
   const [dismissedWarnings, setDismissedWarnings] = useState<Set<string>>(new Set());
-  const [debugInfo, setDebugInfo] = useState<any>(null);
-
-  // Debug function to check data and auto-migrate if needed
-  useEffect(() => {
-    const checkAndMigrate = async () => {
-      try {
-        const info = await debugUserData();
-        setDebugInfo(info);
-        console.log('Debug Info:', info);
-        
-        // Check if data exists with Firestore User ID but not with Firebase Auth UID
-        const hasDataWithFirestoreId = 
-          info.dataCounts.usingFirestoreUserId.reminders > 0 ||
-          info.dataCounts.usingFirestoreUserId.financeEntries > 0 ||
-          info.dataCounts.usingFirestoreUserId.people > 0;
-        
-        const hasDataWithAuthUid = 
-          info.dataCounts.usingFirebaseAuthUid.reminders > 0 ||
-          info.dataCounts.usingFirebaseAuthUid.financeEntries > 0 ||
-          info.dataCounts.usingFirebaseAuthUid.people > 0;
-        
-        // If data exists with Firestore User ID but not with Auth UID, migrate automatically
-        if (hasDataWithFirestoreId && !hasDataWithAuthUid) {
-          console.log('[Dashboard] Data found with Firestore User ID, starting migration...');
-          toast.info('Daten werden wiederhergestellt...', {
-            duration: 5000,
-          });
-          
-          try {
-            const migrationResult = await migrateUserIds();
-            console.log('[Dashboard] Migration result:', migrationResult);
-            
-            toast.success(`Migration erfolgreich! ${migrationResult.totalMigrated} Dokumente migriert.`, {
-              duration: 5000,
-            });
-            
-            // Reload page after migration to show restored data
-            setTimeout(() => {
-              window.location.reload();
-            }, 2000);
-          } catch (migrationError) {
-            console.error('[Dashboard] Migration failed:', migrationError);
-            toast.error('Migration fehlgeschlagen. Bitte versuche es erneut oder kontaktiere den Support.', {
-              duration: 10000,
-            });
-          }
-        } else if (!hasDataWithAuthUid && !hasDataWithFirestoreId) {
-          // No data found at all
-          toast.warning('Keine Daten gefunden. Bitte erstelle neue Einträge.', {
-            duration: 5000,
-          });
-        }
-      } catch (error) {
-        console.error('Debug check failed:', error);
-      }
-    };
-    
-    checkAndMigrate();
-  }, []);
 
   // Fetch all open reminders for appointments
   const now = useMemo(() => new Date(), []);
@@ -227,10 +168,10 @@ export default function Dashboard() {
     return `${currency} ${amount.toFixed(2)}`;
   };
 
-  const getDaysUntilDue = (dueDate: Date | string) => {
+  const getDaysUntilDue = (dueDate: Date) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const due = dueDate instanceof Date ? dueDate : new Date(dueDate);
+    const due = new Date(dueDate);
     due.setHours(0, 0, 0, 0);
     const diffTime = due.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));

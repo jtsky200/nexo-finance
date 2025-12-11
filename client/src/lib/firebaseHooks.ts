@@ -499,40 +499,38 @@ export async function deletePerson(personId: string) {
   await deletePersonFunc({ personId });
 }
 
-// ========== Debug Functions ==========
+// ========== Backup Functions ==========
 
-export async function debugUserData() {
-  const debugFunc = httpsCallable(functions, 'debugUserData');
-  const result = await debugFunc({});
+export async function createManualBackup() {
+  const backupFunc = httpsCallable(functions, 'createManualBackup');
+  const result = await backupFunc({});
   return result.data as {
-    userInfo: {
-      firebaseAuthUid: string;
-      firestoreUserExists: boolean;
-      firestoreUserId: string | null;
-      firestoreUserData: any;
-    };
-    dataCounts: {
-      usingFirebaseAuthUid: {
-        reminders: number;
-        financeEntries: number;
-        people: number;
-      };
-      usingFirestoreUserId: {
-        reminders: number;
-        financeEntries: number;
-        people: number;
-      };
-    };
-    recommendation: string;
+    backupId: string;
+    backupUrl: string;
+    documentCount: number;
   };
 }
 
-export async function migrateUserIds() {
-  const migrateFunc = httpsCallable(functions, 'migrateUserIds');
-  const result = await migrateFunc({});
+export async function listAllBackups(limit: number = 10) {
+  const listFunc = httpsCallable(functions, 'listAllBackups');
+  const result = await listFunc({ limit });
   return result.data as {
-    success: boolean;
-    totalMigrated: number;
+    backups: Array<{
+      id: string;
+      backupId: string;
+      timestamp: string;
+      documentCount: number;
+      createdAt: string | null;
+    }>;
+  };
+}
+
+export async function restoreFromBackup(backupId: string, userId?: string) {
+  const restoreFunc = httpsCallable(functions, 'restoreFromBackup');
+  const result = await restoreFunc({ backupId, userId });
+  return result.data as {
+    restored: number;
+    errors: number;
   };
 }
 

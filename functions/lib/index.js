@@ -45,12 +45,14 @@ var __rest = (this && this.__rest) || function (s, e) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createSchoolSchedule = exports.getChildren = exports.deleteVacation = exports.updateVacation = exports.createVacation = exports.getVacations = exports.deleteWorkSchedule = exports.updateWorkSchedule = exports.createWorkSchedule = exports.getWorkSchedules = exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.getAllBills = exports.convertToInstallmentPlan = exports.updateInstallmentPlan = exports.recordInstallmentPayment = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
-exports.trpc = exports.migrateUserIds = exports.debugUserData = exports.transcribeAIChatAudio = exports.uploadAIChatImage = exports.uploadAIChatFile = exports.getReceipts = exports.getStores = exports.getStoreItems = exports.saveReceipt = exports.analyzeSingleLine = exports.analyzeReceipt = exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = void 0;
+exports.trpc = exports.scheduledDailyBackup = exports.restoreFromBackup = exports.listAllBackups = exports.createManualBackup = exports.transcribeAIChatAudio = exports.uploadAIChatImage = exports.uploadAIChatFile = exports.getReceipts = exports.getStores = exports.getStoreItems = exports.saveReceipt = exports.analyzeSingleLine = exports.analyzeReceipt = exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
+const storage_1 = require("firebase-admin/storage");
 admin.initializeApp();
 const db = admin.firestore();
+const storage = (0, storage_1.getStorage)();
 // ========== Validation Helpers ==========
 function validateString(value, fieldName, maxLength = 1000, required = false) {
     if (required && (!value || typeof value !== 'string' || value.trim().length === 0)) {
@@ -392,7 +394,7 @@ exports.createTaxProfile = (0, https_1.onCall)(async (request) => {
         taxYear,
         country: 'CH',
         canton: canton || null,
-        status: 'unvollständig',
+        status: 'unvollst├ñndig',
         maritalStatus: maritalStatus || null,
         numberOfChildren: numberOfChildren || 0,
         grossIncome: grossIncome || null,
@@ -513,7 +515,7 @@ exports.createPerson = (0, https_1.onCall)(async (request) => {
         : null;
     const validatedNotes = validateString(notes, 'notes', 5000, false);
     // type: "household" (Haushaltsmitglied) | "external" (Externe Person)
-    // relationship (nur für external): "creditor" (Ich schulde) | "debtor" (Schuldet mir) | "both"
+    // relationship (nur f├╝r external): "creditor" (Ich schulde) | "debtor" (Schuldet mir) | "both"
     const personData = {
         userId,
         name: validatedName,
@@ -1248,9 +1250,9 @@ exports.getAllBills = (0, https_1.onCall)(async (request) => {
             // Determine direction: 
             // - If invoice has direction, use it
             // - Otherwise, infer from person's relationship:
-            //   - creditor (I owe them) → outgoing
-            //   - debtor (they owe me) → incoming
-            //   - household/both → check invoice context or default to outgoing (I pay household bills)
+            //   - creditor (I owe them) ÔåÆ outgoing
+            //   - debtor (they owe me) ÔåÆ incoming
+            //   - household/both ÔåÆ check invoice context or default to outgoing (I pay household bills)
             let inferredDirection = invoiceData.direction;
             if (!inferredDirection) {
                 if (personData.relationship === 'creditor') {
@@ -2775,7 +2777,7 @@ function analyzeText(text, result) {
         /RECHNUNG/i,
         /INVOICE/i,
         /ZAHLBAR BIS/i,
-        /FÄLLIG/i,
+        /F├äLLIG/i,
         /BETRAG/i,
         /TOTAL/i,
         /MWST/i,
@@ -3085,16 +3087,16 @@ function parseShoppingItems(text) {
     var _a;
     const items = [];
     // Common units
-    const unitPatterns = /(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|stk|stück|pack|pkg|dose|dosen|flasche|fl|beutel|tüte|scheiben|riegel|becher|glas|tube)?\s*/i;
+    const unitPatterns = /(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml|stk|st├╝ck|pack|pkg|dose|dosen|flasche|fl|beutel|t├╝te|scheiben|riegel|becher|glas|tube)?\s*/i;
     // Category keywords
     const categoryKeywords = {
-        'Obst & Gemüse': ['apfel', 'äpfel', 'banane', 'orange', 'tomate', 'salat', 'gurke', 'kartoffel', 'zwiebel', 'karotte', 'paprika', 'brokkoli', 'spinat', 'zucchini', 'aubergine', 'pilz', 'champignon'],
-        'Milchprodukte': ['milch', 'käse', 'joghurt', 'butter', 'sahne', 'quark', 'schmand', 'frischkäse', 'mozzarella'],
-        'Fleisch & Fisch': ['fleisch', 'huhn', 'hähnchen', 'rind', 'schwein', 'lachs', 'fisch', 'wurst', 'schinken', 'salami', 'hack'],
-        'Brot & Backwaren': ['brot', 'brötchen', 'toast', 'croissant', 'kuchen', 'gebäck', 'mehl'],
-        'Getränke': ['wasser', 'saft', 'cola', 'bier', 'wein', 'kaffee', 'tee', 'limonade', 'energy'],
-        'Süsswaren': ['schokolade', 'keks', 'gummibärchen', 'bonbon', 'eis', 'chips', 'snack'],
-        'Haushalt': ['waschmittel', 'spülmittel', 'toilettenpapier', 'taschentücher', 'müllbeutel', 'reiniger'],
+        'Obst & Gem├╝se': ['apfel', '├ñpfel', 'banane', 'orange', 'tomate', 'salat', 'gurke', 'kartoffel', 'zwiebel', 'karotte', 'paprika', 'brokkoli', 'spinat', 'zucchini', 'aubergine', 'pilz', 'champignon'],
+        'Milchprodukte': ['milch', 'k├ñse', 'joghurt', 'butter', 'sahne', 'quark', 'schmand', 'frischk├ñse', 'mozzarella'],
+        'Fleisch & Fisch': ['fleisch', 'huhn', 'h├ñhnchen', 'rind', 'schwein', 'lachs', 'fisch', 'wurst', 'schinken', 'salami', 'hack'],
+        'Brot & Backwaren': ['brot', 'br├Âtchen', 'toast', 'croissant', 'kuchen', 'geb├ñck', 'mehl'],
+        'Getr├ñnke': ['wasser', 'saft', 'cola', 'bier', 'wein', 'kaffee', 'tee', 'limonade', 'energy'],
+        'S├╝sswaren': ['schokolade', 'keks', 'gummib├ñrchen', 'bonbon', 'eis', 'chips', 'snack'],
+        'Haushalt': ['waschmittel', 'sp├╝lmittel', 'toilettenpapier', 'taschent├╝cher', 'm├╝llbeutel', 'reiniger'],
         'Hygiene': ['shampoo', 'duschgel', 'seife', 'zahnpasta', 'deo', 'creme'],
     };
     // Split text into lines and process
@@ -3104,7 +3106,7 @@ function parseShoppingItems(text) {
         if (!line || line.length < 2)
             continue;
         // Skip common non-item lines
-        if (/^(einkaufsliste|shopping|liste|datum|total|summe|€|chf|\d+[.,]\d{2}$)/i.test(line))
+        if (/^(einkaufsliste|shopping|liste|datum|total|summe|Ôé¼|chf|\d+[.,]\d{2}$)/i.test(line))
             continue;
         // Extract quantity and unit
         let quantity;
@@ -3116,15 +3118,15 @@ function parseShoppingItems(text) {
             unit = (_a = match[2]) === null || _a === void 0 ? void 0 : _a.toLowerCase();
             itemName = line.replace(match[0], '').trim();
         }
-        // Also check for patterns like "2x Milch" or "3 Äpfel"
-        const countMatch = itemName.match(/^(\d+)\s*[xX×]?\s+(.+)/);
+        // Also check for patterns like "2x Milch" or "3 ├äpfel"
+        const countMatch = itemName.match(/^(\d+)\s*[xX├ù]?\s+(.+)/);
         if (countMatch && !quantity) {
             quantity = parseInt(countMatch[1]);
             itemName = countMatch[2].trim();
         }
         // Clean up item name
         itemName = itemName
-            .replace(/^[-•*○◦▪▸►→·]\s*/, '') // Remove bullet points
+            .replace(/^[-ÔÇó*ÔùïÔùªÔû¬Ôû©Ôû║ÔåÆ┬À]\s*/, '') // Remove bullet points
             .replace(/^\d+[.)]\s*/, '') // Remove numbering
             .replace(/\s+/g, ' ')
             .trim();
@@ -3309,14 +3311,14 @@ exports.analyzeReceipt = (0, https_1.onCall)(async (request) => {
                 if ((_c = e.message) === null || _c === void 0 ? void 0 : _c.includes('billing')) {
                     return {
                         success: false,
-                        error: 'Google Cloud Billing nicht aktiviert. Vision API benötigt ein Abrechnungskonto.',
+                        error: 'Google Cloud Billing nicht aktiviert. Vision API ben├Âtigt ein Abrechnungskonto.',
                         details: e.message
                     };
                 }
                 return {
                     success: false,
                     error: 'OCR fehlgeschlagen: ' + e.message,
-                    details: 'Bitte Google Cloud Vision API aktivieren oder Bild mit besserer Qualität hochladen.'
+                    details: 'Bitte Google Cloud Vision API aktivieren oder Bild mit besserer Qualit├ñt hochladen.'
                 };
             }
         }
@@ -3407,16 +3409,16 @@ function parseSingleItem(text) {
         // Header/Footer metadata
         /^(CHF|Total|Summe|Zwischensumme|Rundung|MwSt|MWST|Netto|Brutto|Kartenzahlung|Barzahlung|TWINT|Debit|Kredit)/i,
         /^(ALDI|MIGROS|COOP|LIDL|DENNER|SPAR|VOLG|MANOR|SNIPES|H&M|ZARA|BP|SHELL|AVIA|VENDEX)/i,
-        /^(VIELEN|Danke|Thank|Bitte|Herzlich|Willkommen|Geschäft|Store|Bon|Zeit|Datum|Kasse)/i,
+        /^(VIELEN|Danke|Thank|Bitte|Herzlich|Willkommen|Gesch├ñft|Store|Bon|Zeit|Datum|Kasse)/i,
         /^(Artikel|ANZAHL|Pos\.|Position|Rabatt|Urspr\.\s*Preis|Urspr\.Preis)/i,
-        /^(Member|EFT|Buchung|Trm-Id|Trx|Auth|Rückgeld|Gegeben|Erhalten)/i,
+        /^(Member|EFT|Buchung|Trm-Id|Trx|Auth|R├╝ckgeld|Gegeben|Erhalten)/i,
         /^(CHE-|MWST-Nr|UID|www\.|Tel|Telefon|Email)/i,
         // Barcodes and IDs
         /^\d{10,}$/, // Long numbers (barcodes)
         /^[A-Z]{2,3}-?\d{3,}/i, // Tax IDs
         /^CHF$/i,
         // Separators
-        /^[x×]\s*$/i, // Standalone x
+        /^[x├ù]\s*$/i, // Standalone x
         /^[-=*#]+$/, // Separators
         /^\s*\d+\s*Artikel\s*$/i,
         // Tax summary lines
@@ -3424,11 +3426,11 @@ function parseSingleItem(text) {
         // Price-only lines without context (likely totals)
         /^(\d+[.,]\d{2})\s*$/,
         // Store addresses and locations
-        /^\d{4}\s+[A-Za-zäöüÄÖÜ\-\s]+$/i, // Postal code + city
-        /^[A-Za-zäöüÄÖÜ]+(?:strasse|str\.|weg|platz|gasse)\s*\d*/i, // Street names
+        /^\d{4}\s+[A-Za-z├ñ├Â├╝├ä├û├£\-\s]+$/i, // Postal code + city
+        /^[A-Za-z├ñ├Â├╝├ä├û├£]+(?:strasse|str\.|weg|platz|gasse)\s*\d*/i, // Street names
         // Generic codes that look like article numbers but aren't
         /^(\d{6,})\s*$/, // Just numbers (likely barcode or ID)
-        /^(\d{4,6})\s*[x×]\s*$/, // Article number with x but no name/price
+        /^(\d{4,6})\s*[x├ù]\s*$/, // Article number with x but no name/price
     ];
     // First, try to find complete items on single lines
     for (let i = 0; i < lines.length; i++) {
@@ -3455,7 +3457,7 @@ function parseSingleItem(text) {
             };
         }
         // Quantity format: "2 x 12055 Name  3.98 A"
-        const qtyMatch = line.match(/^(\d+)\s*[x×]\s*(\d{4,6})?\s*(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/i);
+        const qtyMatch = line.match(/^(\d+)\s*[x├ù]\s*(\d{4,6})?\s*(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/i);
         if (qtyMatch) {
             return {
                 articleNumber: qtyMatch[2] || undefined,
@@ -3465,7 +3467,7 @@ function parseSingleItem(text) {
             };
         }
         // Simple format: "Name  3.98" or "Name  3.98 A"
-        const simpleMatch = line.match(/^([A-Za-zäöüÄÖÜ].{2,}?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
+        const simpleMatch = line.match(/^([A-Za-z├ñ├Â├╝├ä├û├£].{2,}?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
         if (simpleMatch && !simpleMatch[1].match(/^(CHF|Total|Summe)/i)) {
             return {
                 name: simpleMatch[1].trim(),
@@ -3489,7 +3491,7 @@ function parseSingleItem(text) {
         }
         // MULTI-LINE: Name on one line, price on next (no article number)
         // Format: "Naturejog. 500g" followed by "0.85 A"
-        if (line.match(/^[A-Za-zäöüÄÖÜ]/) && !line.match(/\d+[.,]\d{2}/) && nextLine) {
+        if (line.match(/^[A-Za-z├ñ├Â├╝├ä├û├£]/) && !line.match(/\d+[.,]\d{2}/) && nextLine) {
             const priceMatch = nextLine.match(/^(\d+[.,]\d{2})\s*([AB])?$/);
             if (priceMatch && line.length > 3) {
                 return {
@@ -3503,7 +3505,7 @@ function parseSingleItem(text) {
         if (i > 0) {
             const priceMatch = line.match(/^(\d+[.,]\d{2})\s*([AB])?$/);
             const prevLine = lines[i - 1];
-            if (priceMatch && prevLine && prevLine.match(/^[A-Za-zäöüÄÖÜ]/) && !prevLine.match(/\d+[.,]\d{2}/)) {
+            if (priceMatch && prevLine && prevLine.match(/^[A-Za-z├ñ├Â├╝├ä├û├£]/) && !prevLine.match(/\d+[.,]\d{2}/)) {
                 const articleMatch = prevLine.match(/^(\d{4,6})?\s*(.+)$/);
                 if (articleMatch) {
                     return {
@@ -3557,7 +3559,7 @@ function parseSwissReceipt(text) {
         'MEDIA MARKT': { name: 'Media Markt', category: 'Elektronik' },
         'INTERDISCOUNT': { name: 'Interdiscount', category: 'Elektronik' },
         'FUST': { name: 'Fust', category: 'Elektronik' },
-        'IKEA': { name: 'IKEA', category: 'Möbel' },
+        'IKEA': { name: 'IKEA', category: 'M├Âbel' },
         'APOTHEKE': { name: 'Apotheke', category: 'Gesundheit' },
         'DROGERIE': { name: 'Drogerie', category: 'Gesundheit' },
     };
@@ -3568,15 +3570,15 @@ function parseSwissReceipt(text) {
         storeNames: /^(ALDI|MIGROS|COOP|LIDL|DENNER|SPAR|VOLG|MANOR|MIGROLINO|AVEC|H&M|SNIPES|ZARA|C&A|BP|SHELL|AVIA|VENDEX|VAPE|MEDIA\s*MARKT|INTERDISCOUNT|FUST|IKEA)/i,
         storeFull: /(ALDI\s*SUISSE|MIGROS\s*\w*|COOP\s*\w*|LIDL\s*SCHWEIZ|H&M\s*Hennes|Hennes\s*&\s*Mauritz|Valora\s*Schweiz|Sneakers\s*und\s*Street)/i,
         // Address patterns
-        postalCity: /(\d{4})\s+([A-Za-zäöüÄÖÜ\-\s]+?)(?:\s+[A-Z]{2})?$/,
-        street: /([A-Za-zäöüÄÖÜ]+(?:strasse|str\.|weg|platz|gasse)\s*\d*)/i,
+        postalCity: /(\d{4})\s+([A-Za-z├ñ├Â├╝├ä├û├£\-\s]+?)(?:\s+[A-Z]{2})?$/,
+        street: /([A-Za-z├ñ├Â├╝├ä├û├£]+(?:strasse|str\.|weg|platz|gasse)\s*\d*)/i,
         // Item patterns - Swiss receipt format
         // Format: [qty x] [articleNo] name price [taxCat]
-        itemLine: /^(\d+)\s*[x×]?\s+(\d{3,})\s+(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/,
-        itemLineAlt: /^(\d+)\s*[x×]\s+(\d+[.,]\d{2})\s*$/,
+        itemLine: /^(\d+)\s*[x├ù]?\s+(\d{3,})\s+(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/,
+        itemLineAlt: /^(\d+)\s*[x├ù]\s+(\d+[.,]\d{2})\s*$/,
         itemSimple: /^(\d{3,})?\s*(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/,
         // Quantity at start
-        qtyPrefix: /^(\d+)\s*[x×]\s+/,
+        qtyPrefix: /^(\d+)\s*[x├ù]\s+/,
         // Price at end
         priceEnd: /(\d+[.,]\d{2})\s*([AB])?$/,
         // Total patterns - expanded for all receipt types
@@ -3658,7 +3660,7 @@ function parseSwissReceipt(text) {
                 continue;
             }
             // Also check if this line looks like an item (exit header early)
-            if (line.match(/^\d{4,6}\s+[A-Za-z]/) || (line.match(/^[A-Za-zäöüÄÖÜ]/) && nextLine.match(/^\d+[.,]\d{2}/))) {
+            if (line.match(/^\d{4,6}\s+[A-Za-z]/) || (line.match(/^[A-Za-z├ñ├Â├╝├ä├û├£]/) && nextLine.match(/^\d+[.,]\d{2}/))) {
                 headerSection = false;
                 itemsSection = true;
                 // Don't continue - process this line as item
@@ -3736,8 +3738,8 @@ function parseSwissReceipt(text) {
             let productNameFromPrev = '';
             // H&M format: Name on one line, then ArticleNo Size Color Price on next
             // Check if current line has article number pattern and previous line was just text
-            const hmDataLine = line.match(/^(\d{7})\s+(\d+(?:\/\d+)?|ONESIZE|[SML]|[A-Z]\d?)\s+([A-Za-zäöüÄÖÜ]+)\s+(\d+[.,]\d{2})$/i);
-            if (hmDataLine && prevLine && prevLine.match(/^[A-Za-zäöüÄÖÜ\s]+$/) && !prevLine.match(/^(CHF|Total|Rabatt)/i)) {
+            const hmDataLine = line.match(/^(\d{7})\s+(\d+(?:\/\d+)?|ONESIZE|[SML]|[A-Z]\d?)\s+([A-Za-z├ñ├Â├╝├ä├û├£]+)\s+(\d+[.,]\d{2})$/i);
+            if (hmDataLine && prevLine && prevLine.match(/^[A-Za-z├ñ├Â├╝├ä├û├£\s]+$/) && !prevLine.match(/^(CHF|Total|Rabatt)/i)) {
                 productNameFromPrev = prevLine.trim();
                 const item = {
                     quantity: 1,
@@ -3858,13 +3860,13 @@ function parseSwissReceipt(text) {
     result.items = result.items.filter((item, index) => {
         const name = item.name.trim();
         // Remove items that are just quantity indicators
-        if (/^\d+\s*[x×]$/i.test(name))
+        if (/^\d+\s*[x├ù]$/i.test(name))
             return false;
         // Remove items with very short names (likely OCR errors)
         if (name.length < 3)
             return false;
         // Remove items that look like metadata
-        if (/^(CHF|Total|Summe|Subtotal|MwSt|MWST|Netto|Brutto|Zwischensumme|Rundung|Kartenzahlung|Bar|Rückgeld|Gegeben|Erhalten)/i.test(name))
+        if (/^(CHF|Total|Summe|Subtotal|MwSt|MWST|Netto|Brutto|Zwischensumme|Rundung|Kartenzahlung|Bar|R├╝ckgeld|Gegeben|Erhalten)/i.test(name))
             return false;
         // Remove items that are just numbers (barcodes/IDs)
         if (/^\d{6,}$/.test(name))
@@ -3872,9 +3874,9 @@ function parseSwissReceipt(text) {
         // Remove items that are store names or addresses
         if (/^(ALDI|MIGROS|COOP|LIDL|DENNER|SPAR|VOLG|MANOR|SNIPES|H&M|ZARA|BP|SHELL|AVIA|VENDEX)/i.test(name))
             return false;
-        if (/^\d{4}\s+[A-Za-zäöüÄÖÜ\-\s]+$/i.test(name))
+        if (/^\d{4}\s+[A-Za-z├ñ├Â├╝├ä├û├£\-\s]+$/i.test(name))
             return false; // Postal code + city
-        if (/^[A-Za-zäöüÄÖÜ]+(?:strasse|str\.|weg|platz|gasse)\s*\d*/i.test(name))
+        if (/^[A-Za-z├ñ├Â├╝├ä├û├£]+(?:strasse|str\.|weg|platz|gasse)\s*\d*/i.test(name))
             return false; // Street names
         // Remove items with invalid prices
         if (!item.unitPrice || item.unitPrice <= 0 || item.unitPrice > 100000)
@@ -3899,7 +3901,7 @@ function parseSwissReceipt(text) {
     }
     result.items = uniqueItems;
     console.log(`[parseSwissReceipt] After filtering: ${result.items.length} items`);
-    // Use subtotal as total for ALDI (ALDI PREIS ≈ Zwischensumme)
+    // Use subtotal as total for ALDI (ALDI PREIS Ôëê Zwischensumme)
     if (result.totals.subtotal && (!result.totals.total || result.totals.total === 0)) {
         result.totals.total = result.totals.subtotal;
         console.log(`[parseSwissReceipt] Using subtotal as total: ${result.totals.total}`);
@@ -3943,7 +3945,7 @@ function parseSwissReceipt(text) {
         else if (itemNames.match(/jersey|hemd|hose|schuhe|shirt|jacke|kleid/)) {
             result.category = 'Kleidung';
         }
-        else if (itemNames.match(/bio|milch|brot|joghurt|käse|fleisch|gemüse|obst/)) {
+        else if (itemNames.match(/bio|milch|brot|joghurt|k├ñse|fleisch|gem├╝se|obst/)) {
             result.category = 'Lebensmittel';
         }
     }
@@ -3959,9 +3961,9 @@ function parseReceiptItem(line, nextLine) {
         /^(MwSt|MWST|Steuer|Netto|Brutto|St\s*%)/i,
         /^(A|B|Ges\.?)\s+\d/i, // Tax summary lines
         // Greetings and messages
-        /^(Vielen\s*Dank|Danke|Thank|Bitte|Herzlich|Willkommen|Geschäft|Store|Bon|Zeit|Datum|Kasse)/i,
+        /^(Vielen\s*Dank|Danke|Thank|Bitte|Herzlich|Willkommen|Gesch├ñft|Store|Bon|Zeit|Datum|Kasse)/i,
         // Payment methods
-        /^(Kartenzahlung|Barzahlung|TWINT|Debit|Kredit|Mastercard|Visa|Erhalten|Gegeben|Rückgeld)/i,
+        /^(Kartenzahlung|Barzahlung|TWINT|Debit|Kredit|Mastercard|Visa|Erhalten|Gegeben|R├╝ckgeld)/i,
         // Discounts and pricing info
         /^(Urspr\.\s*Preis|Urspr\.Preis|Rabatt|Reduziert)/i,
         // Metadata
@@ -3974,12 +3976,12 @@ function parseReceiptItem(line, nextLine) {
         /^[A-Z]{2,3}-?\d{3,}/i, // Tax IDs
         /^CHF$/i,
         // Separators
-        /^[x×]\s*$/i, // Standalone x
+        /^[x├ù]\s*$/i, // Standalone x
         /^[-=*#]+$/, // Separators
         /^\s*\d+\s*Artikel\s*$/i,
         // Address patterns
-        /^\d{4}\s+[A-Za-zäöüÄÖÜ\-\s]+$/i, // Postal code + city
-        /^[A-Za-zäöüÄÖÜ]+(?:strasse|str\.|weg|platz|gasse)\s*\d*/i, // Street names
+        /^\d{4}\s+[A-Za-z├ñ├Â├╝├ä├û├£\-\s]+$/i, // Postal code + city
+        /^[A-Za-z├ñ├Â├╝├ä├û├£]+(?:strasse|str\.|weg|platz|gasse)\s*\d*/i, // Street names
         // Just numbers (likely IDs)
         /^\d{6,}$/,
     ];
@@ -4026,7 +4028,7 @@ function parseReceiptItem(line, nextLine) {
     // === H&M FORMAT ===
     // Example: "1245302 122/128 Rot 12.95" with "Basic Jersey" on previous line
     // Or combined: "Basic Jersey 1245302 122/128 Rot 12.95"
-    const hmMatch = combinedLine.match(/^(.+?)\s+(\d{7})\s+(\d+(?:\/\d+)?|ONESIZE|[SML]|[A-Z]\d?)\s+([A-Za-zäöüÄÖÜ]+)\s+(\d+[.,]\d{2})$/i);
+    const hmMatch = combinedLine.match(/^(.+?)\s+(\d{7})\s+(\d+(?:\/\d+)?|ONESIZE|[SML]|[A-Z]\d?)\s+([A-Za-z├ñ├Â├╝├ä├û├£]+)\s+(\d+[.,]\d{2})$/i);
     if (hmMatch) {
         return {
             quantity: 1,
@@ -4037,7 +4039,7 @@ function parseReceiptItem(line, nextLine) {
         };
     }
     // H&M alternate: Just article number, size, color, price
-    const hmAltMatch = combinedLine.match(/^(\d{7})\s+(\d+(?:\/\d+)?|ONESIZE|[SML])\s+([A-Za-zäöüÄÖÜ]+)\s+(\d+[.,]\d{2})$/i);
+    const hmAltMatch = combinedLine.match(/^(\d{7})\s+(\d+(?:\/\d+)?|ONESIZE|[SML])\s+([A-Za-z├ñ├Â├╝├ä├û├£]+)\s+(\d+[.,]\d{2})$/i);
     if (hmAltMatch) {
         return {
             quantity: 1,
@@ -4049,7 +4051,7 @@ function parseReceiptItem(line, nextLine) {
     }
     // === VENDEX/VAPE FORMAT ===
     // Example: "Elfbar - Elfliq Peac 7.30 A"
-    const vendexMatch = combinedLine.match(/^([A-Za-zäöüÄÖÜ][A-Za-zäöüÄÖÜ0-9\s\-\.\/]+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
+    const vendexMatch = combinedLine.match(/^([A-Za-z├ñ├Â├╝├ä├û├£][A-Za-z├ñ├Â├╝├ä├û├£0-9\s\-\.\/]+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
     if (vendexMatch && vendexMatch[1].length > 3 && !vendexMatch[1].match(/^(Total|Summe|Netto)/i)) {
         return {
             quantity: 1,
@@ -4074,7 +4076,7 @@ function parseReceiptItem(line, nextLine) {
     }
     // === GENERIC FORMAT ===
     // Name + price (fallback)
-    const genericMatch = combinedLine.match(/^([A-Za-zäöüÄÖÜ][A-Za-zäöüÄÖÜ0-9\s\/.\-\(\)]+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
+    const genericMatch = combinedLine.match(/^([A-Za-z├ñ├Â├╝├ä├û├£][A-Za-z├ñ├Â├╝├ä├û├£0-9\s\/.\-\(\)]+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
     if (genericMatch && genericMatch[1].length > 2 && !genericMatch[1].match(/^(CHF|Total|MwSt)/i)) {
         return {
             quantity: 1,
@@ -4086,7 +4088,7 @@ function parseReceiptItem(line, nextLine) {
     }
     // Pattern 1: Full format - qty articleNo name price taxCat
     // Example: "2 x 825076 Bio Oran./Apfel 1l 3.98 A"
-    const fullMatch = line.match(/^(\d+)\s*[x×]\s+(\d{3,})\s+(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
+    const fullMatch = line.match(/^(\d+)\s*[x├ù]\s+(\d{3,})\s+(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
     if (fullMatch) {
         item = {
             quantity: parseInt(fullMatch[1]),
@@ -4115,7 +4117,7 @@ function parseReceiptItem(line, nextLine) {
     // Pattern 3: Quantity line followed by price line
     // Example: "2 x    1.99"
     // Followed by item name
-    const qtyPriceMatch = line.match(/^(\d+)\s*[x×]\s+(\d+[.,]\d{2})\s*$/);
+    const qtyPriceMatch = line.match(/^(\d+)\s*[x├ù]\s+(\d+[.,]\d{2})\s*$/);
     if (qtyPriceMatch && nextLine) {
         const nameMatch = nextLine.match(/^(\d{3,})?\s*(.+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
         if (nameMatch) {
@@ -4132,7 +4134,7 @@ function parseReceiptItem(line, nextLine) {
     }
     // Pattern 4: Just name and price
     // Example: "Gelatine 1.19 A"
-    const basicMatch = line.match(/^([A-Za-zäöüÄÖÜ][A-Za-zäöüÄÖÜ0-9\s\.\-\/]+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
+    const basicMatch = line.match(/^([A-Za-z├ñ├Â├╝├ä├û├£][A-Za-z├ñ├Â├╝├ä├û├£0-9\s\.\-\/]+?)\s+(\d+[.,]\d{2})\s*([AB])?$/);
     if (basicMatch && basicMatch[1].length >= 3) {
         // Make sure it's not a metadata line
         const name = basicMatch[1].trim();
@@ -4262,14 +4264,14 @@ exports.saveReceipt = (0, https_1.onCall)(async (request) => {
 function categorizeItem(name) {
     const lowerName = name.toLowerCase();
     const categories = {
-        'Getränke': ['bier', 'wein', 'saft', 'wasser', 'cola', 'fanta', 'sprite', 'energy', 'shot', 'drink', 'limo'],
-        'Obst & Gemüse': ['apfel', 'orange', 'banane', 'tomate', 'salat', 'gurke', 'karotte', 'zwiebel', 'bio oran', 'gemüse', 'obst', 'früchte'],
-        'Milchprodukte': ['milch', 'joghurt', 'käse', 'butter', 'sahne', 'quark', 'rahm', 'naturejog', 'jogurt'],
+        'Getr├ñnke': ['bier', 'wein', 'saft', 'wasser', 'cola', 'fanta', 'sprite', 'energy', 'shot', 'drink', 'limo'],
+        'Obst & Gem├╝se': ['apfel', 'orange', 'banane', 'tomate', 'salat', 'gurke', 'karotte', 'zwiebel', 'bio oran', 'gem├╝se', 'obst', 'fr├╝chte'],
+        'Milchprodukte': ['milch', 'joghurt', 'k├ñse', 'butter', 'sahne', 'quark', 'rahm', 'naturejog', 'jogurt'],
         'Fleisch & Fisch': ['fleisch', 'steak', 'wurst', 'schinken', 'lachs', 'fisch', 'poulet', 'huhn', 'rind', 'schwein', 'hackfleisch', 'ragout'],
-        'Backwaren': ['brot', 'brötchen', 'toast', 'croissant', 'gipfel', 'gebäck', 'kuchen', 'keks', 'butterkeks'],
-        'Süsswaren': ['schoko', 'schokolade', 'bonbon', 'gummi', 'chips', 'snack', 'zucker', 'eis', 'gelatine'],
-        'Tiefkühl': ['tiefkühl', 'frozen', 'pizza', 'pommes'],
-        'Haushalt': ['waschmittel', 'spülmittel', 'reiniger', 'papier', 'müll', 'tüte', 'beutel'],
+        'Backwaren': ['brot', 'br├Âtchen', 'toast', 'croissant', 'gipfel', 'geb├ñck', 'kuchen', 'keks', 'butterkeks'],
+        'S├╝sswaren': ['schoko', 'schokolade', 'bonbon', 'gummi', 'chips', 'snack', 'zucker', 'eis', 'gelatine'],
+        'Tiefk├╝hl': ['tiefk├╝hl', 'frozen', 'pizza', 'pommes'],
+        'Haushalt': ['waschmittel', 'sp├╝lmittel', 'reiniger', 'papier', 'm├╝ll', 't├╝te', 'beutel'],
         'Hygiene': ['shampoo', 'duschgel', 'seife', 'zahnpasta', 'deo', 'creme'],
     };
     for (const [category, keywords] of Object.entries(categories)) {
@@ -4482,7 +4484,7 @@ exports.transcribeAIChatAudio = (0, https_1.onCall)(async (request) => {
         // 1. Use @google-cloud/speech to transcribe the audio
         // 2. Return the transcription text
         return {
-            transcription: '[Spracheingabe wird derzeit nicht unterstützt. Bitte tippen Sie Ihre Nachricht ein.]',
+            transcription: '[Spracheingabe wird derzeit nicht unterst├╝tzt. Bitte tippen Sie Ihre Nachricht ein.]',
             audioUrl: filePath,
         };
     }
@@ -4490,84 +4492,81 @@ exports.transcribeAIChatAudio = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('internal', 'Audio transcription failed: ' + (error.message || 'Unknown error'));
     }
 });
-// ========== Debug Functions ==========
-// Debug function to check user data and data existence
-exports.debugUserData = (0, https_1.onCall)(async (request) => {
+// ========== Backup Functions ==========
+const backup_1 = require("./backup");
+// Manuelles Backup erstellen
+exports.createManualBackup = (0, https_1.onCall)(async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
-    const firebaseAuthUid = request.auth.uid;
-    // Get user from Firestore users collection
-    const userDoc = await db.collection('users')
-        .where('openId', '==', firebaseAuthUid)
-        .limit(1)
-        .get();
-    const userInfo = {
-        firebaseAuthUid,
-        firestoreUserExists: !userDoc.empty,
-        firestoreUserId: userDoc.empty ? null : userDoc.docs[0].id,
-        firestoreUserData: userDoc.empty ? null : userDoc.docs[0].data(),
-    };
-    // Check data counts using Firebase Auth UID
-    const remindersCount = (await db.collection('reminders')
-        .where('userId', '==', firebaseAuthUid)
-        .get()).size;
-    const financeEntriesCount = (await db.collection('financeEntries')
-        .where('userId', '==', firebaseAuthUid)
-        .get()).size;
-    const peopleCount = (await db.collection('people')
-        .where('userId', '==', firebaseAuthUid)
-        .get()).size;
-    // Also check if there's data with the Firestore user ID
-    let remindersWithFirestoreUserId = 0;
-    let financeEntriesWithFirestoreUserId = 0;
-    let peopleWithFirestoreUserId = 0;
-    if (!userDoc.empty) {
-        const firestoreUserId = userDoc.docs[0].id;
-        remindersWithFirestoreUserId = (await db.collection('reminders')
-            .where('userId', '==', firestoreUserId)
-            .get()).size;
-        financeEntriesWithFirestoreUserId = (await db.collection('financeEntries')
-            .where('userId', '==', firestoreUserId)
-            .get()).size;
-        peopleWithFirestoreUserId = (await db.collection('people')
-            .where('userId', '==', firestoreUserId)
-            .get()).size;
-    }
-    return {
-        userInfo,
-        dataCounts: {
-            usingFirebaseAuthUid: {
-                reminders: remindersCount,
-                financeEntries: financeEntriesCount,
-                people: peopleCount,
-            },
-            usingFirestoreUserId: {
-                reminders: remindersWithFirestoreUserId,
-                financeEntries: financeEntriesWithFirestoreUserId,
-                people: peopleWithFirestoreUserId,
-            },
-        },
-        recommendation: remindersCount === 0 && financeEntriesCount === 0 && peopleCount === 0
-            ? 'No data found with Firebase Auth UID. Check if data was saved with Firestore User ID instead.'
-            : 'Data found with Firebase Auth UID.',
-    };
-});
-// ========== Migration Function ==========
-exports.migrateUserIds = (0, https_1.onCall)(async (request) => {
-    if (!request.auth) {
-        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
-    }
-    // Only allow migration for authenticated users
-    // In production, you might want to restrict this to admins only
     try {
-        const { migrateUserIds: migrateFunction } = await Promise.resolve().then(() => __importStar(require('./migrateUserIds')));
-        const result = await migrateFunction();
+        const result = await (0, backup_1.createBackup)();
         return result;
     }
     catch (error) {
-        console.error('[Migration] Error:', error);
-        throw new https_1.HttpsError('internal', `Migration failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.error('[Backup] Error creating backup:', error);
+        throw new https_1.HttpsError('internal', `Backup failed: ${error.message || 'Unknown error'}`);
+    }
+});
+// Backups auflisten
+exports.listAllBackups = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const { limit = 10 } = request.data || {};
+    const backups = await (0, backup_1.listBackups)(limit);
+    return { backups };
+});
+// Backup wiederherstellen
+exports.restoreFromBackup = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const { backupId, userId } = request.data || {};
+    if (!backupId) {
+        throw new https_1.HttpsError('invalid-argument', 'backupId is required');
+    }
+    try {
+        const result = await (0, backup_1.restoreBackup)(backupId, userId || request.auth.uid);
+        return result;
+    }
+    catch (error) {
+        console.error('[Backup] Error restoring backup:', error);
+        throw new https_1.HttpsError('internal', `Restore failed: ${error.message || 'Unknown error'}`);
+    }
+});
+// Automatisches tägliches Backup (Scheduled Function)
+exports.scheduledDailyBackup = (0, scheduler_1.onSchedule)({
+    schedule: 'every day 02:00', // Jeden Tag um 2 Uhr morgens
+    timeZone: 'Europe/Zurich',
+}, async (event) => {
+    console.log('[Backup] Starting scheduled daily backup...');
+    try {
+        const result = await (0, backup_1.createBackup)();
+        console.log(`[Backup] Scheduled backup completed: ${result.backupId} (${result.documentCount} documents)`);
+        // Lösche alte Backups (behalte nur die letzten 30)
+        const backups = await (0, backup_1.listBackups)(100);
+        if (backups.length > 30) {
+            const oldBackups = backups.slice(30);
+            const bucket = storage.bucket();
+            for (const backup of oldBackups) {
+                try {
+                    // Lösche aus Storage
+                    const file = bucket.file(backup.storagePath);
+                    await file.delete();
+                    // Lösche Metadaten
+                    await db.collection('backups').doc(backup.id).delete();
+                    console.log(`[Backup] Deleted old backup: ${backup.id}`);
+                }
+                catch (error) {
+                    console.error(`[Backup] Error deleting old backup ${backup.id}:`, error);
+                }
+            }
+        }
+    }
+    catch (error) {
+        console.error('[Backup] Scheduled backup failed:', error);
+        // Wirf keinen Fehler, damit der Job nicht als fehlgeschlagen markiert wird
     }
 });
 // Export tRPC function

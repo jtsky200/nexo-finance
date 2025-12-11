@@ -499,8 +499,9 @@ async function invokeLLM(params: {
     throw new Error('OPENAI_API_KEY is not configured. Please set it in Firebase Functions environment variables or secrets.');
   }
   
-  console.log(`Using API key: ${apiKey.substring(0, 10)}... (length: ${apiKey.length})`);
-  console.log(`Using Assistant ID: ${getOpenAIAssistantId()}`);
+  console.log(`[AI Chat] Using API key: ${apiKey.substring(0, 10)}... (length: ${apiKey.length})`);
+  console.log(`[AI Chat] Using Assistant ID: ${getOpenAIAssistantId()}`);
+  console.log(`[AI Chat] User context: ${ctx.user?.id ? `Authenticated as ${ctx.user.id}` : 'NOT AUTHENTICATED'}`);
 
   // Extract user messages (skip system message, it's handled by the assistant)
   const userMessages = params.messages.filter(msg => msg.role === 'user');
@@ -556,18 +557,28 @@ async function invokeLLM(params: {
     }
 
     // Step 3: Run the assistant with tools (functions)
-    // Tools can be passed here to override assistant's tools, or configured in the assistant
+    // IMPORTANT: Tools MUST be passed here for function calling to work
+    // Even if tools are configured in the assistant, passing them here ensures they're available
     const tools = getOpenAITools(ctx.user?.id || '');
     const assistantId = getOpenAIAssistantId();
-    console.log(`Running assistant: ${assistantId} with ${tools.length} tools`);
+    
+    console.log(`[AI Chat] Running assistant: ${assistantId}`);
+    console.log(`[AI Chat] User ID: ${ctx.user?.id || 'NOT AUTHENTICATED'}`);
+    console.log(`[AI Chat] Tools available: ${tools.length}`);
+    if (tools.length > 0) {
+      console.log(`[AI Chat] Tool names: ${tools.map((t: any) => t.function?.name).join(', ')}`);
+    }
     
     const runBody: any = {
       assistant_id: assistantId,
     };
     
-    // Only add tools if we have them and user is authenticated
-    if (tools.length > 0 && ctx.user?.id) {
+    // ALWAYS add tools if user is authenticated - this is critical for function calling
+    if (ctx.user?.id && tools.length > 0) {
       runBody.tools = tools;
+      console.log(`[AI Chat] Adding ${tools.length} tools to run`);
+    } else {
+      console.warn(`[AI Chat] WARNING: No tools added! User authenticated: ${!!ctx.user?.id}, Tools count: ${tools.length}`);
     }
     
     const runResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs`, {
@@ -644,7 +655,7 @@ async function invokeLLM(params: {
       // Handle function calls (requires_action)
       if (runStatus === 'requires_action' && runStatusData.required_action?.type === 'submit_tool_outputs') {
         const toolCalls = runStatusData.required_action.submit_tool_outputs.tool_calls || [];
-        console.log(`Processing ${toolCalls.length} tool calls`);
+        console.log(`[AI Chat] ✅ Function calls detected! Processing ${toolCalls.length} tool calls`);
         
         const toolOutputs = await Promise.all(toolCalls.map(async (toolCall: any) => {
           const functionName = toolCall.function.name;
@@ -698,7 +709,7 @@ async function invokeLLM(params: {
         const submitData = await submitResponse.json();
         runStatus = submitData.status;
         runId = submitData.id; // Update runId in case it changed
-        console.log(`Tool outputs submitted, new status: ${runStatus}`);
+        console.log(`[AI Chat] Tool outputs submitted, continuing with status: ${runStatus}`);
       }
       
       attempts++;
@@ -726,11 +737,15 @@ async function invokeLLM(params: {
 
     const messagesData = await messagesResponse.json();
     
+    console.log(`[AI Chat] Retrieved ${messagesData.data.length} messages from thread`);
+    
     // Find the assistant's response (latest message with role 'assistant' and text content)
     // Messages are ordered by creation time, so we need to find the latest one
     const assistantMessages = messagesData.data
       .filter((msg: any) => msg.role === 'assistant')
       .sort((a: any, b: any) => b.created_at - a.created_at); // Sort by creation time, newest first
+    
+    console.log(`[AI Chat] Found ${assistantMessages.length} assistant messages`);
     
     if (assistantMessages.length === 0) {
       throw new Error('No assistant response found');
@@ -738,6 +753,7 @@ async function invokeLLM(params: {
 
     // Get the latest assistant message
     const assistantMessage = assistantMessages[0];
+    console.log(`[AI Chat] Using latest assistant message (created_at: ${assistantMessage.created_at})`);
     
     // Extract text content from the message
     // Handle both single text content and array of content items

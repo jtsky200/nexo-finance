@@ -469,12 +469,13 @@ async function executeFunction(functionName, args, userId) {
 }
 // Use OpenAI Assistants API
 async function invokeLLM(params, apiKey, ctx) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l;
     if (!apiKey || apiKey.trim() === '') {
         throw new Error('OPENAI_API_KEY is not configured. Please set it in Firebase Functions environment variables or secrets.');
     }
-    console.log(`Using API key: ${apiKey.substring(0, 10)}... (length: ${apiKey.length})`);
-    console.log(`Using Assistant ID: ${getOpenAIAssistantId()}`);
+    console.log(`[AI Chat] Using API key: ${apiKey.substring(0, 10)}... (length: ${apiKey.length})`);
+    console.log(`[AI Chat] Using Assistant ID: ${getOpenAIAssistantId()}`);
+    console.log(`[AI Chat] User context: ${((_a = ctx.user) === null || _a === void 0 ? void 0 : _a.id) ? `Authenticated as ${ctx.user.id}` : 'NOT AUTHENTICATED'}`);
     // Extract user messages (skip system message, it's handled by the assistant)
     const userMessages = params.messages.filter(msg => msg.role === 'user');
     if (userMessages.length === 0) {
@@ -518,16 +519,26 @@ async function invokeLLM(params, apiKey, ctx) {
             throw new Error(`Failed to add message: ${messageResponse.status} ${messageResponse.statusText} – ${errorText}`);
         }
         // Step 3: Run the assistant with tools (functions)
-        // Tools can be passed here to override assistant's tools, or configured in the assistant
-        const tools = getOpenAITools(((_a = ctx.user) === null || _a === void 0 ? void 0 : _a.id) || '');
+        // IMPORTANT: Tools MUST be passed here for function calling to work
+        // Even if tools are configured in the assistant, passing them here ensures they're available
+        const tools = getOpenAITools(((_b = ctx.user) === null || _b === void 0 ? void 0 : _b.id) || '');
         const assistantId = getOpenAIAssistantId();
-        console.log(`Running assistant: ${assistantId} with ${tools.length} tools`);
+        console.log(`[AI Chat] Running assistant: ${assistantId}`);
+        console.log(`[AI Chat] User ID: ${((_c = ctx.user) === null || _c === void 0 ? void 0 : _c.id) || 'NOT AUTHENTICATED'}`);
+        console.log(`[AI Chat] Tools available: ${tools.length}`);
+        if (tools.length > 0) {
+            console.log(`[AI Chat] Tool names: ${tools.map((t) => { var _a; return (_a = t.function) === null || _a === void 0 ? void 0 : _a.name; }).join(', ')}`);
+        }
         const runBody = {
             assistant_id: assistantId,
         };
-        // Only add tools if we have them and user is authenticated
-        if (tools.length > 0 && ((_b = ctx.user) === null || _b === void 0 ? void 0 : _b.id)) {
+        // ALWAYS add tools if user is authenticated - this is critical for function calling
+        if (((_d = ctx.user) === null || _d === void 0 ? void 0 : _d.id) && tools.length > 0) {
             runBody.tools = tools;
+            console.log(`[AI Chat] Adding ${tools.length} tools to run`);
+        }
+        else {
+            console.warn(`[AI Chat] WARNING: No tools added! User authenticated: ${!!((_e = ctx.user) === null || _e === void 0 ? void 0 : _e.id)}, Tools count: ${tools.length}`);
         }
         const runResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs`, {
             method: 'POST',
@@ -544,11 +555,11 @@ async function invokeLLM(params, apiKey, ctx) {
             try {
                 errorData = JSON.parse(errorText);
             }
-            catch (_j) {
+            catch (_m) {
                 // Not JSON, use as is
             }
             // Check if assistant not found
-            if (runResponse.status === 404 && ((_d = (_c = errorData.error) === null || _c === void 0 ? void 0 : _c.message) === null || _d === void 0 ? void 0 : _d.includes('No assistant found'))) {
+            if (runResponse.status === 404 && ((_g = (_f = errorData.error) === null || _f === void 0 ? void 0 : _f.message) === null || _g === void 0 ? void 0 : _g.includes('No assistant found'))) {
                 console.error(`Assistant not found: ${getOpenAIAssistantId()}. Falling back to rule-based response.`);
                 // Fallback to rule-based response instead of throwing error
                 return {
@@ -588,9 +599,9 @@ async function invokeLLM(params, apiKey, ctx) {
             const runStatusData = await statusResponse.json();
             runStatus = runStatusData.status;
             // Handle function calls (requires_action)
-            if (runStatus === 'requires_action' && ((_e = runStatusData.required_action) === null || _e === void 0 ? void 0 : _e.type) === 'submit_tool_outputs') {
+            if (runStatus === 'requires_action' && ((_h = runStatusData.required_action) === null || _h === void 0 ? void 0 : _h.type) === 'submit_tool_outputs') {
                 const toolCalls = runStatusData.required_action.submit_tool_outputs.tool_calls || [];
-                console.log(`Processing ${toolCalls.length} tool calls`);
+                console.log(`[AI Chat] ✅ Function calls detected! Processing ${toolCalls.length} tool calls`);
                 const toolOutputs = await Promise.all(toolCalls.map(async (toolCall) => {
                     var _a;
                     const functionName = toolCall.function.name;
@@ -642,7 +653,7 @@ async function invokeLLM(params, apiKey, ctx) {
                 const submitData = await submitResponse.json();
                 runStatus = submitData.status;
                 runId = submitData.id; // Update runId in case it changed
-                console.log(`Tool outputs submitted, new status: ${runStatus}`);
+                console.log(`[AI Chat] Tool outputs submitted, continuing with status: ${runStatus}`);
             }
             attempts++;
         }
@@ -662,16 +673,19 @@ async function invokeLLM(params, apiKey, ctx) {
             throw new Error(`Failed to get messages: ${messagesResponse.status} ${messagesResponse.statusText} – ${errorText}`);
         }
         const messagesData = await messagesResponse.json();
+        console.log(`[AI Chat] Retrieved ${messagesData.data.length} messages from thread`);
         // Find the assistant's response (latest message with role 'assistant' and text content)
         // Messages are ordered by creation time, so we need to find the latest one
         const assistantMessages = messagesData.data
             .filter((msg) => msg.role === 'assistant')
             .sort((a, b) => b.created_at - a.created_at); // Sort by creation time, newest first
+        console.log(`[AI Chat] Found ${assistantMessages.length} assistant messages`);
         if (assistantMessages.length === 0) {
             throw new Error('No assistant response found');
         }
         // Get the latest assistant message
         const assistantMessage = assistantMessages[0];
+        console.log(`[AI Chat] Using latest assistant message (created_at: ${assistantMessage.created_at})`);
         // Extract text content from the message
         // Handle both single text content and array of content items
         let content = '';
@@ -679,11 +693,11 @@ async function invokeLLM(params, apiKey, ctx) {
             // Find text content items
             const textContent = assistantMessage.content.find((item) => item.type === 'text');
             if (textContent) {
-                content = ((_f = textContent.text) === null || _f === void 0 ? void 0 : _f.value) || '';
+                content = ((_j = textContent.text) === null || _j === void 0 ? void 0 : _j.value) || '';
             }
         }
-        else if (((_g = assistantMessage.content) === null || _g === void 0 ? void 0 : _g.type) === 'text') {
-            content = ((_h = assistantMessage.content.text) === null || _h === void 0 ? void 0 : _h.value) || '';
+        else if (((_k = assistantMessage.content) === null || _k === void 0 ? void 0 : _k.type) === 'text') {
+            content = ((_l = assistantMessage.content.text) === null || _l === void 0 ? void 0 : _l.value) || '';
         }
         if (!content) {
             console.warn('No text content found in assistant message, content structure:', JSON.stringify(assistantMessage.content));

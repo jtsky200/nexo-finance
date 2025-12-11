@@ -469,10 +469,12 @@ async function executeFunction(functionName, args, userId) {
 }
 // Use OpenAI Assistants API
 async function invokeLLM(params, apiKey, ctx) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     if (!apiKey || apiKey.trim() === '') {
         throw new Error('OPENAI_API_KEY is not configured. Please set it in Firebase Functions environment variables or secrets.');
     }
+    console.log(`Using API key: ${apiKey.substring(0, 10)}... (length: ${apiKey.length})`);
+    console.log(`Using Assistant ID: ${getOpenAIAssistantId()}`);
     // Extract user messages (skip system message, it's handled by the assistant)
     const userMessages = params.messages.filter(msg => msg.role === 'user');
     if (userMessages.length === 0) {
@@ -516,7 +518,17 @@ async function invokeLLM(params, apiKey, ctx) {
             throw new Error(`Failed to add message: ${messageResponse.status} ${messageResponse.statusText} – ${errorText}`);
         }
         // Step 3: Run the assistant with tools (functions)
+        // Tools can be passed here to override assistant's tools, or configured in the assistant
         const tools = getOpenAITools(((_a = ctx.user) === null || _a === void 0 ? void 0 : _a.id) || '');
+        const assistantId = getOpenAIAssistantId();
+        console.log(`Running assistant: ${assistantId} with ${tools.length} tools`);
+        const runBody = {
+            assistant_id: assistantId,
+        };
+        // Only add tools if we have them and user is authenticated
+        if (tools.length > 0 && ((_b = ctx.user) === null || _b === void 0 ? void 0 : _b.id)) {
+            runBody.tools = tools;
+        }
         const runResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs`, {
             method: 'POST',
             headers: {
@@ -524,13 +536,31 @@ async function invokeLLM(params, apiKey, ctx) {
                 'Authorization': `Bearer ${apiKey}`,
                 'OpenAI-Beta': 'assistants=v2',
             },
-            body: JSON.stringify({
-                assistant_id: getOpenAIAssistantId(),
-                tools: tools.length > 0 ? tools : undefined,
-            }),
+            body: JSON.stringify(runBody),
         });
         if (!runResponse.ok) {
             const errorText = await runResponse.text();
+            let errorData = {};
+            try {
+                errorData = JSON.parse(errorText);
+            }
+            catch (_j) {
+                // Not JSON, use as is
+            }
+            // Check if assistant not found
+            if (runResponse.status === 404 && ((_d = (_c = errorData.error) === null || _c === void 0 ? void 0 : _c.message) === null || _d === void 0 ? void 0 : _d.includes('No assistant found'))) {
+                console.error(`Assistant not found: ${getOpenAIAssistantId()}. Falling back to rule-based response.`);
+                // Fallback to rule-based response instead of throwing error
+                return {
+                    choices: [{
+                            message: {
+                                role: 'assistant',
+                                content: getRuleBasedResponse(params.messages).content,
+                            },
+                        }],
+                    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+                };
+            }
             throw new Error(`Failed to run assistant: ${runResponse.status} ${runResponse.statusText} – ${errorText}`);
         }
         const run = await runResponse.json();
@@ -558,7 +588,7 @@ async function invokeLLM(params, apiKey, ctx) {
             const runStatusData = await statusResponse.json();
             runStatus = runStatusData.status;
             // Handle function calls (requires_action)
-            if (runStatus === 'requires_action' && ((_b = runStatusData.required_action) === null || _b === void 0 ? void 0 : _b.type) === 'submit_tool_outputs') {
+            if (runStatus === 'requires_action' && ((_e = runStatusData.required_action) === null || _e === void 0 ? void 0 : _e.type) === 'submit_tool_outputs') {
                 const toolCalls = runStatusData.required_action.submit_tool_outputs.tool_calls || [];
                 console.log(`Processing ${toolCalls.length} tool calls`);
                 const toolOutputs = await Promise.all(toolCalls.map(async (toolCall) => {
@@ -649,11 +679,11 @@ async function invokeLLM(params, apiKey, ctx) {
             // Find text content items
             const textContent = assistantMessage.content.find((item) => item.type === 'text');
             if (textContent) {
-                content = ((_c = textContent.text) === null || _c === void 0 ? void 0 : _c.value) || '';
+                content = ((_f = textContent.text) === null || _f === void 0 ? void 0 : _f.value) || '';
             }
         }
-        else if (((_d = assistantMessage.content) === null || _d === void 0 ? void 0 : _d.type) === 'text') {
-            content = ((_e = assistantMessage.content.text) === null || _e === void 0 ? void 0 : _e.value) || '';
+        else if (((_g = assistantMessage.content) === null || _g === void 0 ? void 0 : _g.type) === 'text') {
+            content = ((_h = assistantMessage.content.text) === null || _h === void 0 ? void 0 : _h.value) || '';
         }
         if (!content) {
             console.warn('No text content found in assistant message, content structure:', JSON.stringify(assistantMessage.content));
@@ -802,7 +832,7 @@ const appRouter = (0, exports.router)({
             })),
         }))
             .mutation(async ({ ctx, input }) => {
-            var _a;
+            var _a, _b, _c;
             try {
                 // Get OpenAI API key from secret or environment variable
                 let apiKey = '';
@@ -818,27 +848,43 @@ const appRouter = (0, exports.router)({
                     return getRuleBasedResponse(input.messages);
                 }
                 // Use OpenAI Assistants API if key is available
-                const result = await invokeLLM({
-                    messages: input.messages,
-                }, apiKey, ctx);
-                // Extract the assistant's response
-                const assistantMessage = (_a = result.choices[0]) === null || _a === void 0 ? void 0 : _a.message;
-                if (!assistantMessage) {
-                    throw new Error('No response from AI');
-                }
-                // Handle both string and array content
-                const content = typeof assistantMessage.content === 'string'
-                    ? assistantMessage.content
-                    : Array.isArray(assistantMessage.content)
+                try {
+                    const result = await invokeLLM({
+                        messages: input.messages,
+                    }, apiKey, ctx);
+                    // Extract the assistant's response
+                    const assistantMessage = (_a = result.choices[0]) === null || _a === void 0 ? void 0 : _a.message;
+                    if (!assistantMessage) {
+                        throw new Error('No response from AI');
+                    }
+                    // Handle both string and array content
+                    const content = typeof assistantMessage.content === 'string'
                         ? assistantMessage.content
-                            .filter((c) => c.type === 'text')
-                            .map((c) => c.text)
-                            .join('\n')
-                        : 'Keine Antwort erhalten';
-                return {
-                    content,
-                    usage: result.usage,
-                };
+                        : Array.isArray(assistantMessage.content)
+                            ? assistantMessage.content
+                                .filter((c) => c.type === 'text')
+                                .map((c) => c.text)
+                                .join('\n')
+                            : 'Keine Antwort erhalten';
+                    return {
+                        content,
+                        usage: result.usage,
+                    };
+                }
+                catch (openaiError) {
+                    // If OpenAI API fails (e.g., assistant not found), fallback to rule-based
+                    if (((_b = openaiError.message) === null || _b === void 0 ? void 0 : _b.includes('No assistant found')) ||
+                        ((_c = openaiError.message) === null || _c === void 0 ? void 0 : _c.includes('404'))) {
+                        console.warn('OpenAI Assistant not found, using rule-based fallback:', openaiError.message);
+                        const fallbackResponse = getRuleBasedResponse(input.messages);
+                        return {
+                            content: fallbackResponse.content + '\n\n💡 **Hinweis:** Der OpenAI Assistant konnte nicht erreicht werden. Bitte überprüfe die Assistant ID in den Einstellungen.',
+                            usage: fallbackResponse.usage,
+                        };
+                    }
+                    // Re-throw other errors
+                    throw openaiError;
+                }
             }
             catch (error) {
                 console.error('AI chat error:', error);

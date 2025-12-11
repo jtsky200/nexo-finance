@@ -498,6 +498,9 @@ async function invokeLLM(params: {
   if (!apiKey || apiKey.trim() === '') {
     throw new Error('OPENAI_API_KEY is not configured. Please set it in Firebase Functions environment variables or secrets.');
   }
+  
+  console.log(`Using API key: ${apiKey.substring(0, 10)}... (length: ${apiKey.length})`);
+  console.log(`Using Assistant ID: ${getOpenAIAssistantId()}`);
 
   // Extract user messages (skip system message, it's handled by the assistant)
   const userMessages = params.messages.filter(msg => msg.role === 'user');
@@ -553,7 +556,20 @@ async function invokeLLM(params: {
     }
 
     // Step 3: Run the assistant with tools (functions)
+    // Tools can be passed here to override assistant's tools, or configured in the assistant
     const tools = getOpenAITools(ctx.user?.id || '');
+    const assistantId = getOpenAIAssistantId();
+    console.log(`Running assistant: ${assistantId} with ${tools.length} tools`);
+    
+    const runBody: any = {
+      assistant_id: assistantId,
+    };
+    
+    // Only add tools if we have them and user is authenticated
+    if (tools.length > 0 && ctx.user?.id) {
+      runBody.tools = tools;
+    }
+    
     const runResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs`, {
       method: 'POST',
       headers: {
@@ -561,14 +577,33 @@ async function invokeLLM(params: {
         'Authorization': `Bearer ${apiKey}`,
         'OpenAI-Beta': 'assistants=v2',
       },
-      body: JSON.stringify({
-        assistant_id: getOpenAIAssistantId(),
-        tools: tools.length > 0 ? tools : undefined,
-      }),
+      body: JSON.stringify(runBody),
     });
 
     if (!runResponse.ok) {
       const errorText = await runResponse.text();
+      let errorData: any = {};
+      try {
+        errorData = JSON.parse(errorText);
+      } catch {
+        // Not JSON, use as is
+      }
+      
+      // Check if assistant not found
+      if (runResponse.status === 404 && errorData.error?.message?.includes('No assistant found')) {
+        console.error(`Assistant not found: ${getOpenAIAssistantId()}. Falling back to rule-based response.`);
+        // Fallback to rule-based response instead of throwing error
+        return {
+          choices: [{
+            message: {
+              role: 'assistant',
+              content: getRuleBasedResponse(params.messages).content,
+            },
+          }],
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        };
+      }
+      
       throw new Error(
         `Failed to run assistant: ${runResponse.status} ${runResponse.statusText} – ${errorText}`
       );
@@ -887,30 +922,45 @@ const appRouter = router({
           }
           
           // Use OpenAI Assistants API if key is available
-          const result = await invokeLLM({
-            messages: input.messages,
-          }, apiKey, ctx);
+          try {
+            const result = await invokeLLM({
+              messages: input.messages,
+            }, apiKey, ctx);
 
-          // Extract the assistant's response
-          const assistantMessage = result.choices[0]?.message;
-          if (!assistantMessage) {
-            throw new Error('No response from AI');
+            // Extract the assistant's response
+            const assistantMessage = result.choices[0]?.message;
+            if (!assistantMessage) {
+              throw new Error('No response from AI');
+            }
+
+            // Handle both string and array content
+            const content = typeof assistantMessage.content === 'string'
+              ? assistantMessage.content
+              : Array.isArray(assistantMessage.content)
+              ? assistantMessage.content
+                  .filter((c: any): c is { type: 'text'; text: string } => c.type === 'text')
+                  .map((c: { text: string }) => c.text)
+                  .join('\n')
+              : 'Keine Antwort erhalten';
+
+            return {
+              content,
+              usage: result.usage,
+            };
+          } catch (openaiError: any) {
+            // If OpenAI API fails (e.g., assistant not found), fallback to rule-based
+            if (openaiError.message?.includes('No assistant found') || 
+                openaiError.message?.includes('404')) {
+              console.warn('OpenAI Assistant not found, using rule-based fallback:', openaiError.message);
+              const fallbackResponse = getRuleBasedResponse(input.messages);
+              return {
+                content: fallbackResponse.content + '\n\n💡 **Hinweis:** Der OpenAI Assistant konnte nicht erreicht werden. Bitte überprüfe die Assistant ID in den Einstellungen.',
+                usage: fallbackResponse.usage,
+              };
+            }
+            // Re-throw other errors
+            throw openaiError;
           }
-
-          // Handle both string and array content
-          const content = typeof assistantMessage.content === 'string'
-            ? assistantMessage.content
-            : Array.isArray(assistantMessage.content)
-            ? assistantMessage.content
-                .filter((c: any): c is { type: 'text'; text: string } => c.type === 'text')
-                .map((c: { text: string }) => c.text)
-                .join('\n')
-            : 'Keine Antwort erhalten';
-
-          return {
-            content,
-            usage: result.usage,
-          };
         } catch (error) {
           console.error('AI chat error:', error);
           const errorMessage = error instanceof Error ? error.message : 'AI request failed';

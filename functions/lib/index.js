@@ -45,7 +45,7 @@ var __rest = (this && this.__rest) || function (s, e) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createSchoolSchedule = exports.getChildren = exports.deleteVacation = exports.updateVacation = exports.createVacation = exports.getVacations = exports.deleteWorkSchedule = exports.updateWorkSchedule = exports.createWorkSchedule = exports.getWorkSchedules = exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.getAllBills = exports.convertToInstallmentPlan = exports.updateInstallmentPlan = exports.recordInstallmentPayment = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
-exports.trpc = exports.scheduledDailyBackup = exports.restoreFromBackup = exports.listAllBackups = exports.createManualBackup = exports.transcribeAIChatAudio = exports.uploadAIChatImage = exports.uploadAIChatFile = exports.getReceipts = exports.getStores = exports.getStoreItems = exports.saveReceipt = exports.analyzeSingleLine = exports.analyzeReceipt = exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = void 0;
+exports.trpc = exports.migrateUserIds = exports.debugUserData = exports.clearChatHistory = exports.getChatThread = exports.getChatHistory = exports.chat = exports.scheduledDailyBackup = exports.restoreFromBackup = exports.listAllBackups = exports.createManualBackup = exports.transcribeAIChatAudio = exports.uploadAIChatImage = exports.uploadAIChatFile = exports.getReceipts = exports.getStores = exports.getStoreItems = exports.saveReceipt = exports.analyzeSingleLine = exports.analyzeReceipt = exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
@@ -4566,6 +4566,225 @@ exports.scheduledDailyBackup = (0, scheduler_1.onSchedule)({
         console.error('[Backup] Scheduled backup failed:', error);
         // Wirf keinen Fehler, damit der Job nicht als fehlgeschlagen markiert wird
     }
+});
+// ========== Chat Functions (manus.ai compatibility) ==========
+const params_1 = require("firebase-functions/params");
+const openaiApiKeySecret = (0, params_1.defineSecret)('OPENAI_API_KEY');
+// Chat function - AI Chat with OpenAI
+exports.chat = (0, https_1.onCall)({ secrets: [openaiApiKeySecret] }, async (request) => {
+    var _a, _b, _c;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const { messages, threadId } = request.data || {};
+    const userId = request.auth.uid;
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+        throw new https_1.HttpsError('invalid-argument', 'messages array is required');
+    }
+    // Get the last user message
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage || lastMessage.role !== 'user') {
+        throw new https_1.HttpsError('invalid-argument', 'Last message must be from user');
+    }
+    try {
+        // Get OpenAI API key
+        let apiKey = '';
+        try {
+            apiKey = openaiApiKeySecret.value();
+        }
+        catch (_d) {
+            apiKey = process.env.OPENAI_API_KEY || '';
+        }
+        if (!apiKey) {
+            // Fallback to rule-based response
+            return {
+                response: getRuleBasedResponse(lastMessage.content),
+                threadId: threadId || `thread_${Date.now()}`,
+            };
+        }
+        // Call OpenAI API
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+                model: 'gpt-4o-mini',
+                messages: messages.map((m) => ({
+                    role: m.role,
+                    content: m.content,
+                })),
+                max_tokens: 2000,
+            }),
+        });
+        if (!response.ok) {
+            const error = await response.text();
+            console.error('[Chat] OpenAI error:', error);
+            return {
+                response: getRuleBasedResponse(lastMessage.content),
+                threadId: threadId || `thread_${Date.now()}`,
+            };
+        }
+        const data = await response.json();
+        const aiResponse = ((_c = (_b = (_a = data.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) === null || _c === void 0 ? void 0 : _c.content) || 'Keine Antwort erhalten.';
+        // Save chat history
+        const chatRef = db.collection('chatHistory').doc();
+        await chatRef.set({
+            userId,
+            threadId: threadId || `thread_${Date.now()}`,
+            messages: [...messages, { role: 'assistant', content: aiResponse }],
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return {
+            response: aiResponse,
+            threadId: threadId || `thread_${Date.now()}`,
+            chatId: chatRef.id,
+        };
+    }
+    catch (error) {
+        console.error('[Chat] Error:', error);
+        return {
+            response: getRuleBasedResponse(lastMessage.content),
+            threadId: threadId || `thread_${Date.now()}`,
+        };
+    }
+});
+// Rule-based response function
+function getRuleBasedResponse(message) {
+    const lowerMessage = message.toLowerCase();
+    if (lowerMessage.includes('rechnung') || lowerMessage.includes('rechnungsverwaltung')) {
+        return `**Rechnungsverwaltung in Nexo:**\n\n1. **Rechnung scannen**: Nutze die Dokumente-Funktion, um Rechnungen zu scannen\n2. **Rechnung erstellen**: Gehe zu "Rechnungen" und klicke auf "Neu erstellen"\n3. **Rechnungen verwalten**: Alle Rechnungen findest du in der Rechnungen-Übersicht\n\nMöchtest du mehr erfahren?`;
+    }
+    if (lowerMessage.includes('erinnerung') || lowerMessage.includes('termin')) {
+        return `**Erinnerungen erstellen:**\n\n1. Gehe zum Kalender oder Erinnerungen-Bereich\n2. Klicke auf das + Symbol\n3. Fülle die Details aus\n4. Speichere die Erinnerung\n\nErinnerungen werden dir automatisch angezeigt.`;
+    }
+    if (lowerMessage.includes('finanz') || lowerMessage.includes('geld')) {
+        return `**Finanzen verwalten:**\n\n1. Gehe zu "Finanzen"\n2. Erfasse Einnahmen und Ausgaben\n3. Ordne sie Kategorien zu\n4. Sieh deine Übersicht im Dashboard`;
+    }
+    return `Ich helfe dir gerne bei Fragen zu Nexo!\n\n**Häufige Themen:**\n- 📄 Rechnungsverwaltung\n- 📅 Erinnerungen & Termine\n- 💰 Finanzen verwalten\n- 🛒 Einkaufsliste\n\nStelle eine spezifische Frage!`;
+}
+// Get chat history
+exports.getChatHistory = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { limit = 20 } = request.data || {};
+    const snapshot = await db.collection('chatHistory')
+        .where('userId', '==', userId)
+        .orderBy('updatedAt', 'desc')
+        .limit(limit)
+        .get();
+    const chats = snapshot.docs.map(doc => {
+        var _a, _b, _c, _d, _e, _f;
+        return (Object.assign(Object.assign({ id: doc.id }, doc.data()), { createdAt: ((_c = (_b = (_a = doc.data().createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null, updatedAt: ((_f = (_e = (_d = doc.data().updatedAt) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null }));
+    });
+    return { chats };
+});
+// Get specific chat thread
+exports.getChatThread = (0, https_1.onCall)(async (request) => {
+    var _a, _b, _c, _d, _e, _f;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { threadId } = request.data || {};
+    if (!threadId) {
+        throw new https_1.HttpsError('invalid-argument', 'threadId is required');
+    }
+    const snapshot = await db.collection('chatHistory')
+        .where('userId', '==', userId)
+        .where('threadId', '==', threadId)
+        .orderBy('updatedAt', 'desc')
+        .limit(1)
+        .get();
+    if (snapshot.empty) {
+        return { thread: null };
+    }
+    const doc = snapshot.docs[0];
+    return {
+        thread: Object.assign(Object.assign({ id: doc.id }, doc.data()), { createdAt: ((_c = (_b = (_a = doc.data().createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null, updatedAt: ((_f = (_e = (_d = doc.data().updatedAt) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null }),
+    };
+});
+// Clear chat history
+exports.clearChatHistory = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { threadId } = request.data || {};
+    let query = db.collection('chatHistory')
+        .where('userId', '==', userId);
+    if (threadId) {
+        query = query.where('threadId', '==', threadId);
+    }
+    const snapshot = await query.get();
+    const batch = db.batch();
+    snapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+    });
+    await batch.commit();
+    return {
+        success: true,
+        deletedCount: snapshot.size,
+    };
+});
+// Debug user data
+exports.debugUserData = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    // Get counts of all collections for this user
+    const collections = ['people', 'reminders', 'financeEntries', 'budgets', 'shoppingItems', 'chatHistory'];
+    const counts = {};
+    for (const collection of collections) {
+        const snapshot = await db.collection(collection)
+            .where('userId', '==', userId)
+            .count()
+            .get();
+        counts[collection] = snapshot.data().count;
+    }
+    return {
+        userId,
+        counts,
+        timestamp: new Date().toISOString(),
+    };
+});
+// Migrate user IDs (for data migration)
+exports.migrateUserIds = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const { oldUserId, newUserId } = request.data || {};
+    const currentUserId = request.auth.uid;
+    // Only allow migrating own data or admin migration
+    if (oldUserId !== currentUserId && newUserId !== currentUserId) {
+        throw new https_1.HttpsError('permission-denied', 'Can only migrate own data');
+    }
+    if (!oldUserId || !newUserId) {
+        throw new https_1.HttpsError('invalid-argument', 'Both oldUserId and newUserId are required');
+    }
+    const collections = ['people', 'reminders', 'financeEntries', 'budgets', 'shoppingItems', 'chatHistory'];
+    const migrated = {};
+    for (const collection of collections) {
+        const snapshot = await db.collection(collection)
+            .where('userId', '==', oldUserId)
+            .get();
+        const batch = db.batch();
+        snapshot.docs.forEach(doc => {
+            batch.update(doc.ref, { userId: newUserId });
+        });
+        await batch.commit();
+        migrated[collection] = snapshot.size;
+    }
+    return {
+        success: true,
+        migrated,
+        timestamp: new Date().toISOString(),
+    };
 });
 // Export tRPC function
 var trpc_1 = require("./trpc");

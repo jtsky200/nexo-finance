@@ -163,16 +163,72 @@ function getOpenAITools(userId: string): any[] {
       type: 'function',
       function: {
         name: 'createPerson',
-        description: 'Erstellt eine neue Person in der Datenbank.',
+        description: `Erstellt eine neue Person in der Datenbank.
+        
+WICHTIGE LOGIK für type:
+- "household": Familienmitglieder, Partner, Kinder - Menschen die im gleichen Haushalt leben
+- "external": Alle anderen - Freunde, Bekannte, Geschäftspartner, Handwerker, etc.
+
+WICHTIGE LOGIK für relationship (NUR bei type="external"):
+- "debtor": Die Person SCHULDET MIR Geld (z.B. "Herr X schuldet mir 400 CHF")
+- "creditor": ICH SCHULDE der Person Geld (z.B. "Ich schulde Frau Y 200 CHF")  
+- "both": Beides möglich (Standard für externe)
+
+BEISPIELE:
+- "Herr Dussel schuldet mir 400 CHF" → type="external", relationship="debtor"
+- "Meine Schwester" → type="household"
+- "Der Handwerker, dem ich noch 500 CHF schulde" → type="external", relationship="creditor"`,
         parameters: {
           type: 'object',
           properties: {
             name: { type: 'string', description: 'Name der Person (erforderlich)' },
+            type: { 
+              type: 'string', 
+              enum: ['household', 'external'],
+              description: 'household = Haushaltsmitglied (Familie), external = Externe Person (Freunde, Bekannte, etc.)' 
+            },
+            relationship: { 
+              type: 'string', 
+              enum: ['debtor', 'creditor', 'both'],
+              description: 'NUR für external! debtor = schuldet MIR, creditor = ICH schulde, both = beides' 
+            },
             email: { type: 'string', description: 'E-Mail-Adresse (optional)' },
             phone: { type: 'string', description: 'Telefonnummer (optional)' },
             notes: { type: 'string', description: 'Notizen zur Person (optional)' },
           },
-          required: ['name'],
+          required: ['name', 'type'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'createPersonWithDebt',
+        description: `INTELLIGENTE FUNKTION: Erstellt eine externe Person UND eine Rechnung in einem Schritt.
+        
+Verwende diese Funktion wenn der Benutzer sagt:
+- "Herr X schuldet mir 400 CHF" → Erstellt externe Person + Rechnung (direction: incoming)
+- "Ich schulde Frau Y 200 CHF" → Erstellt externe Person + Rechnung (direction: outgoing)
+- "Erfasse Max mit 1000 CHF Schulden" → Erstellt Person + Rechnung
+
+Die Funktion erkennt automatisch die Richtung basierend auf der Formulierung.`,
+        parameters: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Name der Person' },
+            amount: { type: 'number', description: 'Schulden-Betrag in CHF' },
+            direction: { 
+              type: 'string', 
+              enum: ['incoming', 'outgoing'],
+              description: 'incoming = Person schuldet MIR (Forderung), outgoing = ICH schulde Person (Verbindlichkeit)' 
+            },
+            description: { type: 'string', description: 'Beschreibung der Schuld (optional, z.B. "Darlehen", "Reparatur")' },
+            dueDate: { type: 'string', description: 'Fälligkeitsdatum YYYY-MM-DD (optional)' },
+            email: { type: 'string', description: 'E-Mail (optional)' },
+            phone: { type: 'string', description: 'Telefon (optional)' },
+            notes: { type: 'string', description: 'Notizen (optional)' },
+          },
+          required: ['name', 'amount', 'direction'],
         },
       },
     },
@@ -332,6 +388,52 @@ function getOpenAITools(userId: string): any[] {
             status: { type: 'string', enum: ['offen', 'bezahlt', 'überfällig', 'storniert'], description: 'Neuer Status' },
           },
           required: ['invoiceId', 'status'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'createInstallmentPlan',
+        description: `Erstellt einen Ratenplan für eine bestehende Rechnung.
+        
+BEISPIELE:
+- "Herr Dussel möchte die 400 CHF monatlich à 100 CHF abzahlen" → 4 Raten à 100 CHF
+- "Die Rechnung soll in 6 Raten bezahlt werden" → Teilt Betrag durch 6
+- "Ratenplan mit 50 CHF pro Monat" → Berechnet Anzahl Raten automatisch
+
+Die Funktion:
+1. Sucht die bestehende Rechnung der Person
+2. Konvertiert sie in einen Ratenplan
+3. Erstellt die einzelnen Raten mit korrekten Fälligkeitsdaten`,
+        parameters: {
+          type: 'object',
+          properties: {
+            personName: { type: 'string', description: 'Name der Person mit der Rechnung' },
+            invoiceId: { type: 'string', description: 'ID der Rechnung (optional, wenn nur eine offene Rechnung existiert)' },
+            installmentAmount: { type: 'number', description: 'Betrag pro Rate (z.B. 100 für 100 CHF/Monat)' },
+            numberOfInstallments: { type: 'number', description: 'Anzahl der Raten (alternativ zu installmentAmount)' },
+            frequency: { type: 'string', enum: ['weekly', 'biweekly', 'monthly'], description: 'Zahlungsintervall (Standard: monthly)' },
+            startDate: { type: 'string', description: 'Startdatum der ersten Rate YYYY-MM-DD (Standard: nächster Monat)' },
+          },
+          required: ['personName'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'recordInstallmentPayment',
+        description: 'Erfasst eine Ratenzahlung für einen bestehenden Ratenplan.',
+        parameters: {
+          type: 'object',
+          properties: {
+            personName: { type: 'string', description: 'Name der Person' },
+            amount: { type: 'number', description: 'Gezahlter Betrag' },
+            paymentDate: { type: 'string', description: 'Zahlungsdatum YYYY-MM-DD (Standard: heute)' },
+            notes: { type: 'string', description: 'Notizen zur Zahlung (optional)' },
+          },
+          required: ['personName', 'amount'],
         },
       },
     },
@@ -631,7 +733,15 @@ function getOpenAITools(userId: string): any[] {
 }
 
 // Helper function to find person by name
-async function findPersonByName(db: admin.firestore.Firestore, userId: string, personName: string): Promise<{ id: string; name: string; email?: string; phone?: string; notes?: string } | null> {
+async function findPersonByName(db: admin.firestore.Firestore, userId: string, personName: string): Promise<{ 
+  id: string; 
+  name: string; 
+  type?: string;
+  relationship?: string;
+  email?: string; 
+  phone?: string; 
+  notes?: string 
+} | null> {
   const snapshot = await db.collection('people')
     .where('userId', '==', userId)
     .get();
@@ -648,6 +758,8 @@ async function findPersonByName(db: admin.firestore.Firestore, userId: string, p
   return {
     id: personDoc.id,
     name: data.name || '',
+    type: data.type || 'household',
+    relationship: data.relationship,
     email: data.email,
     phone: data.phone,
     notes: data.notes,
@@ -711,21 +823,90 @@ async function executeFunction(functionName: string, args: any, userId: string):
     }
 
     case 'createPerson': {
-      const { name, email, phone, notes } = args;
+      const { name, type, relationship, email, phone, notes } = args;
+      
+      // Validierung
+      const personType = type || 'external'; // Default zu external für Schulden-Szenarien
+      const personRelationship = personType === 'external' ? (relationship || 'both') : null;
       
       const personRef = await db.collection('people').add({
         userId,
         name,
+        type: personType,
+        relationship: personRelationship,
         email: email || null,
         phone: phone || null,
         notes: notes || null,
+        currency: 'CHF',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
       return {
         success: true,
         personId: personRef.id,
-        message: `Person "${name}" wurde erstellt.`,
+        personType,
+        relationship: personRelationship,
+        message: `Person "${name}" wurde als ${personType === 'household' ? 'Haushaltsmitglied' : 'externe Person'} erstellt.`,
+      };
+    }
+
+    case 'createPersonWithDebt': {
+      const { name, amount, direction, description, dueDate, email, phone, notes } = args;
+      
+      // 1. Prüfe ob Person bereits existiert
+      let person = await findPersonByName(db, userId, name);
+      let personId: string;
+      
+      if (person) {
+        personId = person.id;
+      } else {
+        // 2. Erstelle externe Person mit korrektem relationship
+        const relationship = direction === 'incoming' ? 'debtor' : 'creditor';
+        
+        const personRef = await db.collection('people').add({
+          userId,
+          name,
+          type: 'external',
+          relationship,
+          email: email || null,
+          phone: phone || null,
+          notes: notes || null,
+          currency: 'CHF',
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        personId = personRef.id;
+      }
+      
+      // 3. Erstelle Rechnung
+      const invoiceData: any = {
+        description: description || (direction === 'incoming' ? `Schulden von ${name}` : `Schulden an ${name}`),
+        amount,
+        currency: 'CHF',
+        status: 'offen',
+        direction, // incoming = Person schuldet mir, outgoing = Ich schulde Person
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      
+      if (dueDate) {
+        invoiceData.dueDate = admin.firestore.Timestamp.fromDate(new Date(dueDate));
+      }
+      
+      const invoiceRef = await db.collection('people').doc(personId).collection('invoices').add(invoiceData);
+      
+      return {
+        success: true,
+        personId,
+        invoiceId: invoiceRef.id,
+        personCreated: !person,
+        message: direction === 'incoming' 
+          ? `${name} wurde als externe Person erfasst mit ${amount} CHF Schulden an dich.`
+          : `${name} wurde erfasst. Du schuldest ${amount} CHF.`,
+        summary: {
+          person: name,
+          type: 'external',
+          amount,
+          direction: direction === 'incoming' ? 'Person schuldet dir' : 'Du schuldest Person',
+        },
       };
     }
 
@@ -1057,6 +1238,205 @@ async function executeFunction(functionName: string, args: any, userId: string):
       });
 
       return { success: true, message: `Rechnung wurde auf "${status}" gesetzt.` };
+    }
+
+    case 'createInstallmentPlan': {
+      const { personName, invoiceId, installmentAmount, numberOfInstallments, frequency, startDate } = args;
+      
+      // 1. Finde Person
+      const person = await findPersonByName(db, userId, personName);
+      if (!person) {
+        return { error: `Person "${personName}" nicht gefunden` };
+      }
+      
+      // 2. Finde Rechnung
+      let targetInvoice: any = null;
+      let targetInvoiceId = invoiceId;
+      
+      if (invoiceId) {
+        const invoiceDoc = await db.collection('people').doc(person.id).collection('invoices').doc(invoiceId).get();
+        if (invoiceDoc.exists) {
+          targetInvoice = { id: invoiceDoc.id, ...invoiceDoc.data() };
+        }
+      } else {
+        // Suche offene Rechnungen
+        const invoicesSnapshot = await db.collection('people').doc(person.id).collection('invoices')
+          .where('status', '==', 'offen')
+          .get();
+        
+        if (invoicesSnapshot.empty) {
+          return { error: `Keine offene Rechnung für "${personName}" gefunden` };
+        }
+        
+        if (invoicesSnapshot.size > 1) {
+          const invoices = invoicesSnapshot.docs.map(doc => ({
+            id: doc.id,
+            description: doc.data().description,
+            amount: doc.data().amount,
+          }));
+          return { 
+            error: `Mehrere offene Rechnungen gefunden. Bitte gib die invoiceId an.`,
+            invoices,
+          };
+        }
+        
+        targetInvoice = { id: invoicesSnapshot.docs[0].id, ...invoicesSnapshot.docs[0].data() };
+        targetInvoiceId = invoicesSnapshot.docs[0].id;
+      }
+      
+      if (!targetInvoice) {
+        return { error: 'Rechnung nicht gefunden' };
+      }
+      
+      const totalAmount = targetInvoice.amount;
+      
+      // 3. Berechne Ratenplan
+      let numInstallments: number;
+      let amountPerInstallment: number;
+      
+      if (installmentAmount) {
+        numInstallments = Math.ceil(totalAmount / installmentAmount);
+        amountPerInstallment = installmentAmount;
+      } else if (numberOfInstallments) {
+        numInstallments = numberOfInstallments;
+        amountPerInstallment = Math.round((totalAmount / numberOfInstallments) * 100) / 100;
+      } else {
+        return { error: 'Bitte gib entweder installmentAmount oder numberOfInstallments an' };
+      }
+      
+      // 4. Berechne Fälligkeitsdaten
+      const freq = frequency || 'monthly';
+      const start = startDate ? new Date(startDate) : new Date(swissTime.getFullYear(), swissTime.getMonth() + 1, 1);
+      
+      const installments: any[] = [];
+      for (let i = 0; i < numInstallments; i++) {
+        const dueDate = new Date(start);
+        if (freq === 'weekly') {
+          dueDate.setDate(dueDate.getDate() + (i * 7));
+        } else if (freq === 'biweekly') {
+          dueDate.setDate(dueDate.getDate() + (i * 14));
+        } else {
+          dueDate.setMonth(dueDate.getMonth() + i);
+        }
+        
+        // Letzte Rate kann abweichen um Rundungsdifferenz auszugleichen
+        const amount = i === numInstallments - 1 
+          ? totalAmount - (amountPerInstallment * (numInstallments - 1))
+          : amountPerInstallment;
+        
+        installments.push({
+          number: i + 1,
+          amount: Math.round(amount * 100) / 100,
+          dueDate: dueDate.toISOString().split('T')[0],
+          status: 'pending',
+        });
+      }
+      
+      // 5. Update Rechnung mit Ratenplan
+      await db.collection('people').doc(person.id).collection('invoices').doc(targetInvoiceId!).update({
+        hasInstallmentPlan: true,
+        installmentPlan: {
+          totalAmount,
+          numberOfInstallments: numInstallments,
+          amountPerInstallment,
+          frequency: freq,
+          startDate: start.toISOString().split('T')[0],
+          installments,
+          paidAmount: 0,
+          paidInstallments: 0,
+        },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      
+      return {
+        success: true,
+        message: `Ratenplan für ${personName} erstellt: ${numInstallments} Raten à ${amountPerInstallment} CHF`,
+        plan: {
+          totalAmount,
+          numberOfInstallments: numInstallments,
+          amountPerInstallment,
+          frequency: freq,
+          firstPaymentDate: installments[0].dueDate,
+          lastPaymentDate: installments[installments.length - 1].dueDate,
+          installments,
+        },
+      };
+    }
+
+    case 'recordInstallmentPayment': {
+      const { personName, amount, paymentDate, notes: _notes } = args;
+      
+      // 1. Finde Person
+      const person = await findPersonByName(db, userId, personName);
+      if (!person) {
+        return { error: `Person "${personName}" nicht gefunden` };
+      }
+      
+      // 2. Finde Rechnung mit Ratenplan
+      const invoicesSnapshot = await db.collection('people').doc(person.id).collection('invoices')
+        .where('hasInstallmentPlan', '==', true)
+        .where('status', '==', 'offen')
+        .get();
+      
+      if (invoicesSnapshot.empty) {
+        return { error: `Kein aktiver Ratenplan für "${personName}" gefunden` };
+      }
+      
+      const invoiceDoc = invoicesSnapshot.docs[0];
+      const invoice = invoiceDoc.data();
+      const plan = invoice.installmentPlan;
+      
+      // 3. Aktualisiere Ratenplan
+      const newPaidAmount = (plan.paidAmount || 0) + amount;
+      const newPaidInstallments = (plan.paidInstallments || 0) + 1;
+      
+      // Markiere nächste unbezahlte Rate als bezahlt
+      const updatedInstallments = plan.installments.map((inst: any, idx: number) => {
+        if (inst.status === 'pending' && idx === plan.paidInstallments) {
+          return { ...inst, status: 'paid', paidDate: paymentDate || swissTime.toISOString().split('T')[0] };
+        }
+        return inst;
+      });
+      
+      const isFullyPaid = newPaidAmount >= plan.totalAmount;
+      
+      await invoiceDoc.ref.update({
+        status: isFullyPaid ? 'bezahlt' : 'offen',
+        installmentPlan: {
+          ...plan,
+          paidAmount: newPaidAmount,
+          paidInstallments: newPaidInstallments,
+          installments: updatedInstallments,
+        },
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      
+      // 4. Erstelle Zahlungseintrag in Finanzen
+      await db.collection('financeEntries').add({
+        userId,
+        type: 'income',
+        amount,
+        category: 'Ratenzahlung',
+        description: `Ratenzahlung von ${personName} (${newPaidInstallments}/${plan.numberOfInstallments})`,
+        date: admin.firestore.Timestamp.fromDate(paymentDate ? new Date(paymentDate) : swissTime),
+        personId: person.id,
+        invoiceId: invoiceDoc.id,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      
+      return {
+        success: true,
+        message: isFullyPaid 
+          ? `Letzte Rate von ${amount} CHF erfasst. Ratenplan vollständig bezahlt!`
+          : `Rate ${newPaidInstallments}/${plan.numberOfInstallments} über ${amount} CHF erfasst.`,
+        status: {
+          paidAmount: newPaidAmount,
+          remainingAmount: plan.totalAmount - newPaidAmount,
+          paidInstallments: newPaidInstallments,
+          remainingInstallments: plan.numberOfInstallments - newPaidInstallments,
+          isFullyPaid,
+        },
+      };
     }
 
     // ========== FINANZEN ==========
@@ -1695,8 +2075,44 @@ async function invokeLLM(params: {
       console.log(`[AI Chat] Tool names: ${tools.map((t: any) => t.function?.name).join(', ')}`);
     }
     
+    // Get current date for context
+    const now = new Date();
+    const swissNow = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Zurich' }));
+    const currentDate = swissNow.toISOString().split('T')[0];
+    
     const runBody: any = {
       assistant_id: assistantId,
+      // Additional instructions to make the AI smarter for this specific request
+      additional_instructions: `
+WICHTIGER KONTEXT FÜR DIESE ANFRAGE:
+- Aktuelles Datum: ${currentDate} (Schweizer Zeit)
+- Benutzer-ID: ${ctx.user?.id || 'unbekannt'}
+
+INTELLIGENTE PERSONEN-ERKENNUNG:
+Wenn jemand sagt "X schuldet mir Geld" oder "Erfasse X mit Schulden":
+1. Verwende createPersonWithDebt mit direction="incoming" (Person schuldet dem Benutzer)
+2. Die Person ist IMMER "external" (externe Person), NICHT "household"
+3. "Herr", "Frau", Nachnamen, Firmennamen → immer external
+
+Wenn jemand sagt "Ich schulde X Geld":
+1. Verwende createPersonWithDebt mit direction="outgoing" (Benutzer schuldet der Person)
+2. Die Person ist IMMER "external"
+
+HAUSHALT vs EXTERNAL:
+- household: Nur Familienmitglieder, Partner, Kinder die IM GLEICHEN HAUSHALT leben
+- external: ALLE anderen - Freunde, Bekannte, Geschäftspartner, Handwerker, Nachbarn, etc.
+- Im Zweifel: Wähle "external"
+
+RATENPLÄNE:
+Wenn jemand sagt "X möchte monatlich à Y CHF abzahlen":
+1. Suche zuerst die Person mit searchPerson
+2. Verwende createInstallmentPlan mit installmentAmount=Y
+3. Die Funktion berechnet automatisch die Anzahl der Raten
+
+TERMINE:
+- Rufe IMMER zuerst getCurrentDateTime auf bevor du Termine erstellst
+- Termine MÜSSEN nach dem aktuellen Datum liegen
+`,
     };
     
     // ALWAYS add tools if user is authenticated - this is critical for function calling

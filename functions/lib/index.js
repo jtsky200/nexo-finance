@@ -49,10 +49,8 @@ exports.trpc = exports.scheduledDailyBackup = exports.restoreFromBackup = export
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
-const storage_1 = require("firebase-admin/storage");
 admin.initializeApp();
 const db = admin.firestore();
-const storage = (0, storage_1.getStorage)();
 // ========== Validation Helpers ==========
 function validateString(value, fieldName, maxLength = 1000, required = false) {
     if (required && (!value || typeof value !== 'string' || value.trim().length === 0)) {

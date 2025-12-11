@@ -9,7 +9,7 @@ import {
   Banknote, Clock, AlertTriangle, CheckCircle2, ClipboardList,
   CalendarClock, CheckSquare
 } from 'lucide-react';
-import { useReminders, useFinanceEntries, getTaxProfileByYear, useAllBills, Bill } from '@/lib/firebaseHooks';
+import { useReminders, useFinanceEntries, getTaxProfileByYear, useAllBills, Bill, debugUserData } from '@/lib/firebaseHooks';
 import AddReminderDialog from '@/components/AddReminderDialog';
 import AddFinanceEntryDialog from '@/components/AddFinanceEntryDialog';
 import { useLocation } from 'wouter';
@@ -22,6 +22,31 @@ export default function Dashboard() {
   const [financeDialogOpen, setFinanceDialogOpen] = useState(false);
   const [taxProfile, setTaxProfile] = useState<any>(null);
   const [dismissedWarnings, setDismissedWarnings] = useState<Set<string>>(new Set());
+  const [debugInfo, setDebugInfo] = useState<any>(null);
+
+  // Debug function to check data
+  useEffect(() => {
+    const checkData = async () => {
+      try {
+        const info = await debugUserData();
+        setDebugInfo(info);
+        console.log('Debug Info:', info);
+        
+        // Show warning if no data found
+        if (info.dataCounts.usingFirebaseAuthUid.reminders === 0 && 
+            info.dataCounts.usingFirebaseAuthUid.financeEntries === 0 &&
+            info.dataCounts.usingFirebaseAuthUid.people === 0) {
+          toast.error('Keine Daten gefunden! Bitte prüfe die Browser-Konsole für Details.', {
+            duration: 10000,
+          });
+        }
+      } catch (error) {
+        console.error('Debug check failed:', error);
+      }
+    };
+    
+    checkData();
+  }, []);
 
   // Fetch all open reminders for appointments
   const now = useMemo(() => new Date(), []);

@@ -499,6 +499,34 @@ export async function deletePerson(personId: string) {
   await deletePersonFunc({ personId });
 }
 
+// ========== Debug Functions ==========
+
+export async function debugUserData() {
+  const debugFunc = httpsCallable(functions, 'debugUserData');
+  const result = await debugFunc({});
+  return result.data as {
+    userInfo: {
+      firebaseAuthUid: string;
+      firestoreUserExists: boolean;
+      firestoreUserId: string | null;
+      firestoreUserData: any;
+    };
+    dataCounts: {
+      usingFirebaseAuthUid: {
+        reminders: number;
+        financeEntries: number;
+        people: number;
+      };
+      usingFirestoreUserId: {
+        reminders: number;
+        financeEntries: number;
+        people: number;
+      };
+    };
+    recommendation: string;
+  };
+}
+
 export function usePersonDebts(personId: string) {
   const [debts, setDebts] = useState<FinanceEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);

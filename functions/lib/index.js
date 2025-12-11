@@ -45,7 +45,7 @@ var __rest = (this && this.__rest) || function (s, e) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createSchoolSchedule = exports.getChildren = exports.deleteVacation = exports.updateVacation = exports.createVacation = exports.getVacations = exports.deleteWorkSchedule = exports.updateWorkSchedule = exports.createWorkSchedule = exports.getWorkSchedules = exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.getAllBills = exports.convertToInstallmentPlan = exports.updateInstallmentPlan = exports.recordInstallmentPayment = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
-exports.trpc = exports.transcribeAIChatAudio = exports.uploadAIChatImage = exports.uploadAIChatFile = exports.getReceipts = exports.getStores = exports.getStoreItems = exports.saveReceipt = exports.analyzeSingleLine = exports.analyzeReceipt = exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = void 0;
+exports.trpc = exports.debugUserData = exports.transcribeAIChatAudio = exports.uploadAIChatImage = exports.uploadAIChatFile = exports.getReceipts = exports.getStores = exports.getStoreItems = exports.saveReceipt = exports.analyzeSingleLine = exports.analyzeReceipt = exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
@@ -4489,6 +4489,69 @@ exports.transcribeAIChatAudio = (0, https_1.onCall)(async (request) => {
     catch (error) {
         throw new https_1.HttpsError('internal', 'Audio transcription failed: ' + (error.message || 'Unknown error'));
     }
+});
+// ========== Debug Functions ==========
+// Debug function to check user data and data existence
+exports.debugUserData = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const firebaseAuthUid = request.auth.uid;
+    // Get user from Firestore users collection
+    const userDoc = await db.collection('users')
+        .where('openId', '==', firebaseAuthUid)
+        .limit(1)
+        .get();
+    const userInfo = {
+        firebaseAuthUid,
+        firestoreUserExists: !userDoc.empty,
+        firestoreUserId: userDoc.empty ? null : userDoc.docs[0].id,
+        firestoreUserData: userDoc.empty ? null : userDoc.docs[0].data(),
+    };
+    // Check data counts using Firebase Auth UID
+    const remindersCount = (await db.collection('reminders')
+        .where('userId', '==', firebaseAuthUid)
+        .get()).size;
+    const financeEntriesCount = (await db.collection('financeEntries')
+        .where('userId', '==', firebaseAuthUid)
+        .get()).size;
+    const peopleCount = (await db.collection('people')
+        .where('userId', '==', firebaseAuthUid)
+        .get()).size;
+    // Also check if there's data with the Firestore user ID
+    let remindersWithFirestoreUserId = 0;
+    let financeEntriesWithFirestoreUserId = 0;
+    let peopleWithFirestoreUserId = 0;
+    if (!userDoc.empty) {
+        const firestoreUserId = userDoc.docs[0].id;
+        remindersWithFirestoreUserId = (await db.collection('reminders')
+            .where('userId', '==', firestoreUserId)
+            .get()).size;
+        financeEntriesWithFirestoreUserId = (await db.collection('financeEntries')
+            .where('userId', '==', firestoreUserId)
+            .get()).size;
+        peopleWithFirestoreUserId = (await db.collection('people')
+            .where('userId', '==', firestoreUserId)
+            .get()).size;
+    }
+    return {
+        userInfo,
+        dataCounts: {
+            usingFirebaseAuthUid: {
+                reminders: remindersCount,
+                financeEntries: financeEntriesCount,
+                people: peopleCount,
+            },
+            usingFirestoreUserId: {
+                reminders: remindersWithFirestoreUserId,
+                financeEntries: financeEntriesWithFirestoreUserId,
+                people: peopleWithFirestoreUserId,
+            },
+        },
+        recommendation: remindersCount === 0 && financeEntriesCount === 0 && peopleCount === 0
+            ? 'No data found with Firebase Auth UID. Check if data was saved with Firestore User ID instead.'
+            : 'Data found with Firebase Auth UID.',
+    };
 });
 // Export tRPC function
 var trpc_1 = require("./trpc");

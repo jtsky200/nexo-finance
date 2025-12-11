@@ -5181,5 +5181,81 @@ export const transcribeAIChatAudio = onCall(async (request) => {
   }
 });
 
+// ========== Debug Functions ==========
+
+// Debug function to check user data and data existence
+export const debugUserData = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const firebaseAuthUid = request.auth.uid;
+  
+  // Get user from Firestore users collection
+  const userDoc = await db.collection('users')
+    .where('openId', '==', firebaseAuthUid)
+    .limit(1)
+    .get();
+  
+  const userInfo = {
+    firebaseAuthUid,
+    firestoreUserExists: !userDoc.empty,
+    firestoreUserId: userDoc.empty ? null : userDoc.docs[0].id,
+    firestoreUserData: userDoc.empty ? null : userDoc.docs[0].data(),
+  };
+
+  // Check data counts using Firebase Auth UID
+  const remindersCount = (await db.collection('reminders')
+    .where('userId', '==', firebaseAuthUid)
+    .get()).size;
+  
+  const financeEntriesCount = (await db.collection('financeEntries')
+    .where('userId', '==', firebaseAuthUid)
+    .get()).size;
+  
+  const peopleCount = (await db.collection('people')
+    .where('userId', '==', firebaseAuthUid)
+    .get()).size;
+
+  // Also check if there's data with the Firestore user ID
+  let remindersWithFirestoreUserId = 0;
+  let financeEntriesWithFirestoreUserId = 0;
+  let peopleWithFirestoreUserId = 0;
+  
+  if (!userDoc.empty) {
+    const firestoreUserId = userDoc.docs[0].id;
+    remindersWithFirestoreUserId = (await db.collection('reminders')
+      .where('userId', '==', firestoreUserId)
+      .get()).size;
+    
+    financeEntriesWithFirestoreUserId = (await db.collection('financeEntries')
+      .where('userId', '==', firestoreUserId)
+      .get()).size;
+    
+    peopleWithFirestoreUserId = (await db.collection('people')
+      .where('userId', '==', firestoreUserId)
+      .get()).size;
+  }
+
+  return {
+    userInfo,
+    dataCounts: {
+      usingFirebaseAuthUid: {
+        reminders: remindersCount,
+        financeEntries: financeEntriesCount,
+        people: peopleCount,
+      },
+      usingFirestoreUserId: {
+        reminders: remindersWithFirestoreUserId,
+        financeEntries: financeEntriesWithFirestoreUserId,
+        people: peopleWithFirestoreUserId,
+      },
+    },
+    recommendation: remindersCount === 0 && financeEntriesCount === 0 && peopleCount === 0
+      ? 'No data found with Firebase Auth UID. Check if data was saved with Firestore User ID instead.'
+      : 'Data found with Firebase Auth UID.',
+  };
+});
+
 // Export tRPC function
 export { trpc } from './trpc';

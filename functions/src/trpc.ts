@@ -163,21 +163,20 @@ function getOpenAITools(userId: string): any[] {
       type: 'function',
       function: {
         name: 'createPerson',
-        description: `Erstellt eine neue Person in der Datenbank.
+        description: `Erstellt eine neue Person in der Datenbank. Kann optional gleich Schulden erfassen.
         
-WICHTIGE LOGIK für type:
-- "household": Familienmitglieder, Partner, Kinder - Menschen die im gleichen Haushalt leben
-- "external": Alle anderen - Freunde, Bekannte, Geschäftspartner, Handwerker, etc.
+🔴 WICHTIG - TYPE:
+- "external" (STANDARD für Schulden): "Herr X", "Frau Y", Nachnamen, Bekannte, Geschäftspartner
+- "household": NUR Familienmitglieder die im GLEICHEN Haushalt leben ("mein Mann", "meine Tochter")
 
-WICHTIGE LOGIK für relationship (NUR bei type="external"):
-- "debtor": Die Person SCHULDET MIR Geld (z.B. "Herr X schuldet mir 400 CHF")
-- "creditor": ICH SCHULDE der Person Geld (z.B. "Ich schulde Frau Y 200 CHF")  
-- "both": Beides möglich (Standard für externe)
+🔴 WICHTIG - SCHULDEN ERFASSEN:
+Wenn jemand Geld schuldet, IMMER debtAmount und debtDirection angeben:
+- "X schuldet mir 400 CHF" → debtAmount=400, debtDirection="incoming"
+- "Ich schulde X 200 CHF" → debtAmount=200, debtDirection="outgoing"
 
 BEISPIELE:
-- "Herr Dussel schuldet mir 400 CHF" → type="external", relationship="debtor"
-- "Meine Schwester" → type="household"
-- "Der Handwerker, dem ich noch 500 CHF schulde" → type="external", relationship="creditor"`,
+- "Herr Meier schuldet mir 500 CHF" → name="Herr Meier", type="external", debtAmount=500, debtDirection="incoming"
+- "Meine Schwester" → name="Schwester", type="household"`,
         parameters: {
           type: 'object',
           properties: {
@@ -185,18 +184,25 @@ BEISPIELE:
             type: { 
               type: 'string', 
               enum: ['household', 'external'],
-              description: 'household = Haushaltsmitglied (Familie), external = Externe Person (Freunde, Bekannte, etc.)' 
+              description: 'STANDARD: external für Schulden! household NUR für Familie im gleichen Haushalt' 
             },
             relationship: { 
               type: 'string', 
               enum: ['debtor', 'creditor', 'both'],
-              description: 'NUR für external! debtor = schuldet MIR, creditor = ICH schulde, both = beides' 
+              description: 'debtor = schuldet MIR (Standard bei Schulden), creditor = ICH schulde' 
             },
+            debtAmount: { type: 'number', description: 'Schulden-Betrag in CHF (z.B. 500 für "schuldet mir 500 CHF")' },
+            debtDirection: { 
+              type: 'string', 
+              enum: ['incoming', 'outgoing'],
+              description: 'incoming = Person schuldet MIR, outgoing = ICH schulde Person' 
+            },
+            debtDescription: { type: 'string', description: 'Beschreibung der Schuld (z.B. "Reparatur", "Darlehen")' },
             email: { type: 'string', description: 'E-Mail-Adresse (optional)' },
             phone: { type: 'string', description: 'Telefonnummer (optional)' },
-            notes: { type: 'string', description: 'Notizen zur Person (optional)' },
+            notes: { type: 'string', description: 'Notizen (optional)' },
           },
-          required: ['name', 'type'],
+          required: ['name'],
         },
       },
     },
@@ -823,11 +829,11 @@ async function executeFunction(functionName: string, args: any, userId: string):
     }
 
     case 'createPerson': {
-      const { name, type, relationship, email, phone, notes } = args;
+      const { name, type, relationship, email, phone, notes, debtAmount, debtDirection, debtDescription } = args;
       
-      // Validierung
-      const personType = type || 'external'; // Default zu external für Schulden-Szenarien
-      const personRelationship = personType === 'external' ? (relationship || 'both') : null;
+      // WICHTIG: Default zu external wenn kein type angegeben (bei Schulden-Szenarien)
+      const personType = type || 'external';
+      const personRelationship = personType === 'external' ? (relationship || 'debtor') : null;
       
       const personRef = await db.collection('people').add({
         userId,
@@ -841,12 +847,35 @@ async function executeFunction(functionName: string, args: any, userId: string):
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
+      let invoiceCreated = false;
+      let invoiceId = null;
+
+      // Wenn debtAmount angegeben, erstelle automatisch eine Rechnung
+      if (debtAmount && debtAmount > 0) {
+        const invoiceData: any = {
+          description: debtDescription || `Schulden von ${name}`,
+          amount: debtAmount,
+          currency: 'CHF',
+          status: 'offen',
+          direction: debtDirection || 'incoming', // incoming = Person schuldet mir
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+        
+        const invoiceRef = await db.collection('people').doc(personRef.id).collection('invoices').add(invoiceData);
+        invoiceCreated = true;
+        invoiceId = invoiceRef.id;
+      }
+
       return {
         success: true,
         personId: personRef.id,
         personType,
         relationship: personRelationship,
-        message: `Person "${name}" wurde als ${personType === 'household' ? 'Haushaltsmitglied' : 'externe Person'} erstellt.`,
+        invoiceCreated,
+        invoiceId,
+        message: invoiceCreated 
+          ? `${name} wurde als ${personType === 'household' ? 'Haushaltsmitglied' : 'externe Person'} erfasst mit ${debtAmount} CHF Schulden.`
+          : `Person "${name}" wurde als ${personType === 'household' ? 'Haushaltsmitglied' : 'externe Person'} erstellt.`,
       };
     }
 
@@ -2084,34 +2113,56 @@ async function invokeLLM(params: {
       assistant_id: assistantId,
       // Additional instructions to make the AI smarter for this specific request
       additional_instructions: `
-WICHTIGER KONTEXT FÜR DIESE ANFRAGE:
-- Aktuelles Datum: ${currentDate} (Schweizer Zeit)
-- Benutzer-ID: ${ctx.user?.id || 'unbekannt'}
+🚨 KRITISCHE ANWEISUNGEN - UNBEDINGT BEFOLGEN:
 
-INTELLIGENTE PERSONEN-ERKENNUNG:
-Wenn jemand sagt "X schuldet mir Geld" oder "Erfasse X mit Schulden":
-1. Verwende createPersonWithDebt mit direction="incoming" (Person schuldet dem Benutzer)
-2. Die Person ist IMMER "external" (externe Person), NICHT "household"
-3. "Herr", "Frau", Nachnamen, Firmennamen → immer external
+AKTUELLES DATUM: ${currentDate} (Schweizer Zeit, Europe/Zurich)
+BENUTZER-ID: ${ctx.user?.id || 'unbekannt'}
 
-Wenn jemand sagt "Ich schulde X Geld":
-1. Verwende createPersonWithDebt mit direction="outgoing" (Benutzer schuldet der Person)
-2. Die Person ist IMMER "external"
+═══════════════════════════════════════════════════════════════
+🔴 SCHULDEN ERFASSEN - VERWENDE IMMER createPersonWithDebt!
+═══════════════════════════════════════════════════════════════
 
-HAUSHALT vs EXTERNAL:
-- household: Nur Familienmitglieder, Partner, Kinder die IM GLEICHEN HAUSHALT leben
-- external: ALLE anderen - Freunde, Bekannte, Geschäftspartner, Handwerker, Nachbarn, etc.
-- Im Zweifel: Wähle "external"
+Wenn der Benutzer sagt:
+- "X schuldet mir Y CHF" → createPersonWithDebt(name="X", amount=Y, direction="incoming")
+- "Erfasse X mit Y CHF Schulden" → createPersonWithDebt(name="X", amount=Y, direction="incoming")  
+- "Ich schulde X Y CHF" → createPersonWithDebt(name="X", amount=Y, direction="outgoing")
 
-RATENPLÄNE:
-Wenn jemand sagt "X möchte monatlich à Y CHF abzahlen":
-1. Suche zuerst die Person mit searchPerson
-2. Verwende createInstallmentPlan mit installmentAmount=Y
-3. Die Funktion berechnet automatisch die Anzahl der Raten
+WICHTIG: NICHT createPerson verwenden wenn Schulden erwähnt werden!
+IMMER createPersonWithDebt verwenden - diese Funktion erstellt Person UND Rechnung!
 
-TERMINE:
-- Rufe IMMER zuerst getCurrentDateTime auf bevor du Termine erstellst
-- Termine MÜSSEN nach dem aktuellen Datum liegen
+═══════════════════════════════════════════════════════════════
+🔴 EXTERNE vs HAUSHALT - STANDARD IST EXTERNAL!
+═══════════════════════════════════════════════════════════════
+
+EXTERNAL (Standard für alle die Geld schulden):
+- "Herr X", "Frau X" → IMMER external
+- Nachnamen ohne "mein/meine" → external
+- Geschäftspartner, Handwerker, Bekannte → external
+- Personen die Geld schulden → IMMER external
+
+HOUSEHOLD (nur wenn explizit Familienmitglied):
+- "mein Mann/meine Frau" → household
+- "mein Sohn/meine Tochter" → household
+- Explizit als Familie bezeichnet → household
+
+═══════════════════════════════════════════════════════════════
+🔴 RATENPLÄNE - createInstallmentPlan
+═══════════════════════════════════════════════════════════════
+
+Wenn: "X möchte monatlich à Y CHF abzahlen"
+1. Rufe searchPerson(searchTerm="X") auf um die Person zu finden
+2. Rufe createInstallmentPlan(personName="X", installmentAmount=Y) auf
+3. Die Anzahl Raten wird automatisch berechnet (Gesamtbetrag / Ratenbetrag)
+
+═══════════════════════════════════════════════════════════════
+🔴 TERMINE - DATUM PRÜFEN!
+═══════════════════════════════════════════════════════════════
+
+1. Rufe ZUERST getCurrentDateTime auf
+2. Das Datum für createReminder MUSS nach ${currentDate} liegen!
+3. Vergangenheitsdaten werden abgelehnt
+
+═══════════════════════════════════════════════════════════════
 `,
     };
     

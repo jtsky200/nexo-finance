@@ -469,7 +469,7 @@ async function executeFunction(functionName, args, userId) {
 }
 // Use OpenAI Assistants API
 async function invokeLLM(params, apiKey, ctx) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     if (!apiKey || apiKey.trim() === '') {
         throw new Error('OPENAI_API_KEY is not configured. Please set it in Firebase Functions environment variables or secrets.');
     }
@@ -536,12 +536,12 @@ async function invokeLLM(params, apiKey, ctx) {
         const run = await runResponse.json();
         let runId = run.id;
         let runStatus = run.status;
-        // Step 4: Poll for completion (max 30 seconds)
-        const maxAttempts = 30;
+        // Step 4: Poll for completion (max 60 seconds to allow for function calls)
+        const maxAttempts = 60;
         let attempts = 0;
-        while (runStatus === 'queued' || runStatus === 'in_progress') {
+        while (runStatus === 'queued' || runStatus === 'in_progress' || runStatus === 'requires_action') {
             if (attempts >= maxAttempts) {
-                throw new Error('Assistant run timed out');
+                throw new Error(`Assistant run timed out after ${maxAttempts} seconds. Last status: ${runStatus}`);
             }
             await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
             const statusResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs/${runId}`, {
@@ -560,18 +560,32 @@ async function invokeLLM(params, apiKey, ctx) {
             // Handle function calls (requires_action)
             if (runStatus === 'requires_action' && ((_b = runStatusData.required_action) === null || _b === void 0 ? void 0 : _b.type) === 'submit_tool_outputs') {
                 const toolCalls = runStatusData.required_action.submit_tool_outputs.tool_calls || [];
+                console.log(`Processing ${toolCalls.length} tool calls`);
                 const toolOutputs = await Promise.all(toolCalls.map(async (toolCall) => {
                     var _a;
                     const functionName = toolCall.function.name;
-                    const functionArgs = JSON.parse(toolCall.function.arguments || '{}');
+                    let functionArgs = {};
                     try {
+                        functionArgs = JSON.parse(toolCall.function.arguments || '{}');
+                    }
+                    catch (parseError) {
+                        console.error('Failed to parse function arguments:', toolCall.function.arguments);
+                        return {
+                            tool_call_id: toolCall.id,
+                            output: JSON.stringify({ error: 'Invalid function arguments' }),
+                        };
+                    }
+                    try {
+                        console.log(`Executing function: ${functionName} with args:`, functionArgs);
                         const result = await executeFunction(functionName, functionArgs, ((_a = ctx.user) === null || _a === void 0 ? void 0 : _a.id) || '');
+                        console.log(`Function ${functionName} completed successfully`);
                         return {
                             tool_call_id: toolCall.id,
                             output: JSON.stringify(result),
                         };
                     }
                     catch (error) {
+                        console.error(`Function ${functionName} failed:`, error);
                         return {
                             tool_call_id: toolCall.id,
                             output: JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
@@ -594,9 +608,11 @@ async function invokeLLM(params, apiKey, ctx) {
                     const errorText = await submitResponse.text();
                     throw new Error(`Failed to submit tool outputs: ${submitResponse.status} ${submitResponse.statusText} – ${errorText}`);
                 }
-                // Continue polling
+                // Continue polling - get the updated run status
                 const submitData = await submitResponse.json();
                 runStatus = submitData.status;
+                runId = submitData.id; // Update runId in case it changed
+                console.log(`Tool outputs submitted, new status: ${runStatus}`);
             }
             attempts++;
         }
@@ -616,13 +632,33 @@ async function invokeLLM(params, apiKey, ctx) {
             throw new Error(`Failed to get messages: ${messagesResponse.status} ${messagesResponse.statusText} – ${errorText}`);
         }
         const messagesData = await messagesResponse.json();
-        // Find the assistant's response (first message with role 'assistant')
-        const assistantMessage = messagesData.data.find((msg) => msg.role === 'assistant');
-        if (!assistantMessage) {
+        // Find the assistant's response (latest message with role 'assistant' and text content)
+        // Messages are ordered by creation time, so we need to find the latest one
+        const assistantMessages = messagesData.data
+            .filter((msg) => msg.role === 'assistant')
+            .sort((a, b) => b.created_at - a.created_at); // Sort by creation time, newest first
+        if (assistantMessages.length === 0) {
             throw new Error('No assistant response found');
         }
+        // Get the latest assistant message
+        const assistantMessage = assistantMessages[0];
         // Extract text content from the message
-        const content = ((_d = (_c = assistantMessage.content[0]) === null || _c === void 0 ? void 0 : _c.text) === null || _d === void 0 ? void 0 : _d.value) || '';
+        // Handle both single text content and array of content items
+        let content = '';
+        if (Array.isArray(assistantMessage.content)) {
+            // Find text content items
+            const textContent = assistantMessage.content.find((item) => item.type === 'text');
+            if (textContent) {
+                content = ((_c = textContent.text) === null || _c === void 0 ? void 0 : _c.value) || '';
+            }
+        }
+        else if (((_d = assistantMessage.content) === null || _d === void 0 ? void 0 : _d.type) === 'text') {
+            content = ((_e = assistantMessage.content.text) === null || _e === void 0 ? void 0 : _e.value) || '';
+        }
+        if (!content) {
+            console.warn('No text content found in assistant message, content structure:', JSON.stringify(assistantMessage.content));
+            content = 'Entschuldigung, ich konnte keine Antwort generieren. Bitte versuchen Sie es erneut.';
+        }
         return {
             choices: [{
                     message: {
@@ -805,9 +841,11 @@ const appRouter = (0, exports.router)({
                 };
             }
             catch (error) {
+                console.error('AI chat error:', error);
+                const errorMessage = error instanceof Error ? error.message : 'AI request failed';
                 throw new server_1.TRPCError({
                     code: 'INTERNAL_SERVER_ERROR',
-                    message: error instanceof Error ? error.message : 'AI request failed',
+                    message: errorMessage,
                     cause: error,
                 });
             }

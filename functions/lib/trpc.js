@@ -33,13 +33,46 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.trpc = exports.protectedProcedure = exports.publicProcedure = exports.router = void 0;
+exports.trpc = exports.protectedProcedure = exports.publicProcedure = exports.router = exports.currencyUtils = exports.STATUS_COMPLETED = exports.STATUS_POSTPONED = exports.STATUS_PAID = exports.STATUS_OPEN = void 0;
+exports.isStatusPaid = isStatusPaid;
 const fetch_1 = require("@trpc/server/adapters/fetch");
 const server_1 = require("@trpc/server");
 const https_1 = require("firebase-functions/v2/https");
 const params_1 = require("firebase-functions/params");
 const zod_1 = require("zod");
 const admin = __importStar(require("firebase-admin"));
+// ========== MEHRSPRACHIGE STATUS-KONSTANTEN (DE/EN/FR/IT) ==========
+exports.STATUS_OPEN = ['open', 'offen', 'ouvert', 'aperto'];
+exports.STATUS_PAID = ['paid', 'bezahlt', 'payé', 'pagato'];
+exports.STATUS_POSTPONED = ['postponed', 'verschoben', 'reporté', 'rinviato'];
+exports.STATUS_COMPLETED = ['completed', 'erledigt', 'terminé', 'completato'];
+function isStatusOpen(s) { return !!s && exports.STATUS_OPEN.includes(s.toLowerCase()); }
+function isStatusPaid(s) { return !!s && exports.STATUS_PAID.includes(s.toLowerCase()); }
+function getOpenStatusVariants() { return exports.STATUS_OPEN; }
+// ========== SCHWEIZER WÄHRUNGS-HILFSFUNKTIONEN ==========
+/**
+ * Rundet auf 5 Rappen (Schweizer Rundung)
+ * z.B. 1.02 -> 1.00, 1.03 -> 1.05, 1.07 -> 1.05, 1.08 -> 1.10
+ */
+function roundToSwiss5Rappen(amount) {
+    return Math.round(amount * 20) / 20;
+}
+/**
+ * Konvertiert CHF zu Rappen (Cents) für die Speicherung
+ * Die App speichert Beträge in Rappen (1 CHF = 100 Rappen)
+ */
+function chfToRappen(chfAmount) {
+    const rounded = roundToSwiss5Rappen(chfAmount);
+    return Math.round(rounded * 100);
+}
+/**
+ * Konvertiert Rappen zu CHF für die Anzeige
+ */
+function rappenToChf(rappenAmount) {
+    return roundToSwiss5Rappen(rappenAmount / 100);
+}
+// Export für zukünftige Verwendung (verhindert TypeScript unused warning)
+exports.currencyUtils = { roundToSwiss5Rappen, chfToRappen, rappenToChf };
 // Define the secret for OpenAI API Key
 const openaiApiKeySecret = (0, params_1.defineSecret)('OPENAI_API_KEY');
 // Initialize tRPC for Firebase Functions without transformer (superjson is ESM only)
@@ -111,14 +144,14 @@ async function createContext(opts) {
     };
 }
 // OpenAI Assistant ID - can be set via environment variable or secret
-// Default: asst_Es1kVA8SKX4G4LPtsvDtCFp9 (your current assistant)
+// Default: asst_eXeVnct9xxf67H4rpyK2jjrb (Nexo Finance Assistant - Intelligent & Context-Aware)
 function getOpenAIAssistantId() {
     // Try environment variable first
     if (process.env.OPENAI_ASSISTANT_ID) {
         return process.env.OPENAI_ASSISTANT_ID;
     }
     // Fallback to default
-    return 'asst_Es1kVA8SKX4G4LPtsvDtCFp9';
+    return 'asst_eXeVnct9xxf67H4rpyK2jjrb';
 }
 // Define OpenAI Functions/Tools for database access - ALLE FUNKTIONEN
 function getOpenAITools(userId) {
@@ -850,16 +883,23 @@ async function executeFunction(functionName, args, userId) {
         }
         case 'createPersonWithDebt': {
             const { name, amount, direction, description, dueDate, email, phone, notes } = args;
+            // Schweizer 5-Rappen-Rundung und Konvertierung zu Rappen (die App speichert in Rappen)
+            const amountInChf = roundToSwiss5Rappen(amount);
+            const amountInRappen = chfToRappen(amount);
+            console.log(`[createPersonWithDebt] Starting for userId: ${userId}, name: ${name}, amount: ${amountInChf} CHF (${amountInRappen} Rappen), direction: ${direction}`);
             // 1. Prüfe ob Person bereits existiert
             let person = await findPersonByName(db, userId, name);
             let personId;
+            let personCreated = false;
             if (person) {
                 personId = person.id;
+                console.log(`[createPersonWithDebt] Person already exists with ID: ${personId}`);
             }
             else {
                 // 2. Erstelle externe Person mit korrektem relationship
                 const relationship = direction === 'incoming' ? 'debtor' : 'creditor';
-                const personRef = await db.collection('people').add({
+                console.log(`[createPersonWithDebt] Creating new person: type=external, relationship=${relationship}`);
+                const personData = {
                     userId,
                     name,
                     type: 'external',
@@ -868,35 +908,44 @@ async function executeFunction(functionName, args, userId) {
                     phone: phone || null,
                     notes: notes || null,
                     currency: 'CHF',
+                    totalOwed: amountInRappen, // In Rappen speichern!
                     createdAt: admin.firestore.FieldValue.serverTimestamp(),
-                });
+                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                };
+                const personRef = await db.collection('people').add(personData);
                 personId = personRef.id;
+                personCreated = true;
+                console.log(`[createPersonWithDebt] Person created with ID: ${personId}`);
             }
-            // 3. Erstelle Rechnung
+            // 3. Erstelle Rechnung (Betrag in Rappen!)
             const invoiceData = {
                 description: description || (direction === 'incoming' ? `Schulden von ${name}` : `Schulden an ${name}`),
-                amount,
+                amount: amountInRappen, // In Rappen speichern!
                 currency: 'CHF',
-                status: 'offen',
+                status: 'open',
                 direction, // incoming = Person schuldet mir, outgoing = Ich schulde Person
+                date: admin.firestore.FieldValue.serverTimestamp(),
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             };
             if (dueDate) {
                 invoiceData.dueDate = admin.firestore.Timestamp.fromDate(new Date(dueDate));
             }
+            console.log(`[createPersonWithDebt] Creating invoice for person ${personId}`);
             const invoiceRef = await db.collection('people').doc(personId).collection('invoices').add(invoiceData);
+            console.log(`[createPersonWithDebt] Invoice created with ID: ${invoiceRef.id}`);
             return {
                 success: true,
                 personId,
                 invoiceId: invoiceRef.id,
-                personCreated: !person,
+                personCreated,
                 message: direction === 'incoming'
-                    ? `${name} wurde als externe Person erfasst mit ${amount} CHF Schulden an dich.`
-                    : `${name} wurde erfasst. Du schuldest ${amount} CHF.`,
+                    ? `${name} wurde als externe Person erfasst mit ${amountInChf} CHF Schulden an dich.`
+                    : `${name} wurde erfasst. Du schuldest ${amountInChf} CHF.`,
                 summary: {
                     person: name,
                     type: 'external',
-                    amount,
+                    amountChf: amountInChf,
                     direction: direction === 'incoming' ? 'Person schuldet dir' : 'Du schuldest Person',
                 },
             };
@@ -908,7 +957,7 @@ async function executeFunction(functionName, args, userId) {
                 return { error: `Person "${personName}" nicht gefunden` };
             }
             const invoicesSnapshot = await db.collection('people').doc(person.id).collection('invoices')
-                .where('status', '==', 'offen')
+                .where('status', 'in', getOpenStatusVariants())
                 .get();
             const invoices = invoicesSnapshot.docs.map(doc => {
                 var _a, _b, _c;
@@ -1097,17 +1146,30 @@ async function executeFunction(functionName, args, userId) {
                 if (targetPersonId && personDoc.id !== targetPersonId)
                     continue;
                 let invoiceQuery = personDoc.ref.collection('invoices');
-                if (status)
-                    invoiceQuery = invoiceQuery.where('status', '==', status);
+                // Status-Filter mit mehrsprachiger Unterstützung
+                if (status) {
+                    // Prüfe ob der Status einer bekannten Kategorie entspricht und erweitere auf alle Varianten
+                    if (exports.STATUS_OPEN.includes(status.toLowerCase())) {
+                        invoiceQuery = invoiceQuery.where('status', 'in', getOpenStatusVariants());
+                    }
+                    else if (exports.STATUS_PAID.includes(status.toLowerCase())) {
+                        invoiceQuery = invoiceQuery.where('status', 'in', exports.STATUS_PAID);
+                    }
+                    else {
+                        invoiceQuery = invoiceQuery.where('status', '==', status);
+                    }
+                }
                 const invoicesSnapshot = await invoiceQuery.get();
                 for (const invDoc of invoicesSnapshot.docs) {
                     const data = invDoc.data();
+                    // Konvertiere Beträge von Rappen zu CHF für die AI-Anzeige
+                    const amountInChf = rappenToChf(data.amount || 0);
                     const invoice = {
                         id: invDoc.id,
                         personId: personDoc.id,
                         personName: personDoc.data().name,
                         description: data.description || '',
-                        amount: data.amount || 0,
+                        amount: amountInChf,
                         currency: data.currency || 'CHF',
                         status: data.status || 'offen',
                         dueDate: ((_c = (_b = (_a = data.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
@@ -1122,7 +1184,7 @@ async function executeFunction(functionName, args, userId) {
                 }
             }
             const totalAmount = allInvoices.reduce((sum, inv) => sum + inv.amount, 0);
-            const openAmount = allInvoices.filter(inv => inv.status === 'offen').reduce((sum, inv) => sum + inv.amount, 0);
+            const openAmount = allInvoices.filter(inv => isStatusOpen(inv.status)).reduce((sum, inv) => sum + inv.amount, 0);
             return {
                 invoices: allInvoices,
                 count: allInvoices.length,
@@ -1198,11 +1260,14 @@ async function executeFunction(functionName, args, userId) {
         }
         case 'createInstallmentPlan': {
             const { personName, invoiceId, installmentAmount, numberOfInstallments, frequency, startDate } = args;
+            console.log(`[createInstallmentPlan] Starting for person: ${personName}, installmentAmount: ${installmentAmount}`);
             // 1. Finde Person
             const person = await findPersonByName(db, userId, personName);
             if (!person) {
+                console.log(`[createInstallmentPlan] Person not found: ${personName}`);
                 return { error: `Person "${personName}" nicht gefunden` };
             }
+            console.log(`[createInstallmentPlan] Found person: ${person.id}`);
             // 2. Finde Rechnung
             let targetInvoice = null;
             let targetInvoiceId = invoiceId;
@@ -1215,9 +1280,11 @@ async function executeFunction(functionName, args, userId) {
             else {
                 // Suche offene Rechnungen
                 const invoicesSnapshot = await db.collection('people').doc(person.id).collection('invoices')
-                    .where('status', '==', 'offen')
+                    .where('status', 'in', getOpenStatusVariants())
                     .get();
+                console.log(`[createInstallmentPlan] Found ${invoicesSnapshot.size} open invoices`);
                 if (invoicesSnapshot.empty) {
+                    console.log(`[createInstallmentPlan] No open invoice found for ${personName}`);
                     return { error: `Keine offene Rechnung für "${personName}" gefunden` };
                 }
                 if (invoicesSnapshot.size > 1) {
@@ -1237,17 +1304,19 @@ async function executeFunction(functionName, args, userId) {
             if (!targetInvoice) {
                 return { error: 'Rechnung nicht gefunden' };
             }
-            const totalAmount = targetInvoice.amount;
+            // Betrag ist in Rappen gespeichert, konvertiere zu CHF für Berechnungen
+            const totalAmountInChf = rappenToChf(targetInvoice.amount);
             // 3. Berechne Ratenplan
             let numInstallments;
             let amountPerInstallment;
             if (installmentAmount) {
-                numInstallments = Math.ceil(totalAmount / installmentAmount);
-                amountPerInstallment = installmentAmount;
+                // installmentAmount ist in CHF (vom Benutzer angegeben)
+                numInstallments = Math.ceil(totalAmountInChf / installmentAmount);
+                amountPerInstallment = roundToSwiss5Rappen(installmentAmount);
             }
             else if (numberOfInstallments) {
                 numInstallments = numberOfInstallments;
-                amountPerInstallment = Math.round((totalAmount / numberOfInstallments) * 100) / 100;
+                amountPerInstallment = roundToSwiss5Rappen(totalAmountInChf / numberOfInstallments);
             }
             else {
                 return { error: 'Bitte gib entweder installmentAmount oder numberOfInstallments an' };
@@ -1269,35 +1338,38 @@ async function executeFunction(functionName, args, userId) {
                 }
                 // Letzte Rate kann abweichen um Rundungsdifferenz auszugleichen
                 const amount = i === numInstallments - 1
-                    ? totalAmount - (amountPerInstallment * (numInstallments - 1))
+                    ? roundToSwiss5Rappen(totalAmountInChf - (amountPerInstallment * (numInstallments - 1)))
                     : amountPerInstallment;
                 installments.push({
                     number: i + 1,
-                    amount: Math.round(amount * 100) / 100,
+                    amount: roundToSwiss5Rappen(amount),
                     dueDate: dueDate.toISOString().split('T')[0],
                     status: 'pending',
                 });
             }
-            // 5. Update Rechnung mit Ratenplan
+            // 5. Update Rechnung mit Ratenplan (Format passend zum Frontend)
+            console.log(`[createInstallmentPlan] Saving installment plan to invoice ${targetInvoiceId}`);
+            console.log(`[createInstallmentPlan] Plan: ${numInstallments} installments of ${amountPerInstallment} CHF`);
+            // Frontend erwartet: isInstallmentPlan + installments Array direkt auf der Rechnung
             await db.collection('people').doc(person.id).collection('invoices').doc(targetInvoiceId).update({
-                hasInstallmentPlan: true,
-                installmentPlan: {
-                    totalAmount,
-                    numberOfInstallments: numInstallments,
-                    amountPerInstallment,
-                    frequency: freq,
-                    startDate: start.toISOString().split('T')[0],
-                    installments,
-                    paidAmount: 0,
-                    paidInstallments: 0,
-                },
+                isInstallmentPlan: true,
+                installmentCount: numInstallments,
+                installmentAmount: chfToRappen(amountPerInstallment), // In Rappen für Konsistenz
+                installmentInterval: freq,
+                installments: installments.map((inst, idx) => ({
+                    number: idx + 1,
+                    amount: chfToRappen(inst.amount), // In Rappen
+                    dueDate: inst.dueDate,
+                    status: inst.status,
+                    paidDate: null,
+                })),
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
             return {
                 success: true,
-                message: `Ratenplan für ${personName} erstellt: ${numInstallments} Raten à ${amountPerInstallment} CHF`,
+                message: `Ratenplan für ${personName} erstellt: ${numInstallments} Raten à ${amountPerInstallment} CHF (Gesamtbetrag: ${totalAmountInChf} CHF)`,
                 plan: {
-                    totalAmount,
+                    totalAmountChf: totalAmountInChf,
                     numberOfInstallments: numInstallments,
                     amountPerInstallment,
                     frequency: freq,
@@ -1316,8 +1388,8 @@ async function executeFunction(functionName, args, userId) {
             }
             // 2. Finde Rechnung mit Ratenplan
             const invoicesSnapshot = await db.collection('people').doc(person.id).collection('invoices')
-                .where('hasInstallmentPlan', '==', true)
-                .where('status', '==', 'offen')
+                .where('isInstallmentPlan', '==', true)
+                .where('status', 'in', getOpenStatusVariants())
                 .get();
             if (invoicesSnapshot.empty) {
                 return { error: `Kein aktiver Ratenplan für "${personName}" gefunden` };
@@ -1824,7 +1896,7 @@ async function executeFunction(functionName, args, userId) {
             // Get total debts
             let totalDebts = 0;
             for (const personDoc of peopleSnapshot.docs) {
-                const invoicesSnapshot = await personDoc.ref.collection('invoices').where('status', '==', 'offen').get();
+                const invoicesSnapshot = await personDoc.ref.collection('invoices').where('status', 'in', getOpenStatusVariants()).get();
                 totalDebts += invoicesSnapshot.docs.reduce((sum, doc) => sum + (doc.data().amount || 0), 0);
             }
             const summary = {
@@ -1860,13 +1932,15 @@ async function executeFunction(functionName, args, userId) {
 }
 // Use OpenAI Assistants API
 async function invokeLLM(params, apiKey, ctx) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
     if (!apiKey || apiKey.trim() === '') {
         throw new Error('OPENAI_API_KEY is not configured. Please set it in Firebase Functions environment variables or secrets.');
     }
     console.log(`[AI Chat] Using API key: ${apiKey.substring(0, 10)}... (length: ${apiKey.length})`);
     console.log(`[AI Chat] Using Assistant ID: ${getOpenAIAssistantId()}`);
-    console.log(`[AI Chat] User context: ${((_a = ctx.user) === null || _a === void 0 ? void 0 : _a.id) ? `Authenticated as ${ctx.user.id}` : 'NOT AUTHENTICATED'}`);
+    // Use openId (Firebase Auth UID) for consistency with other functions
+    const firebaseUserId = ((_a = ctx.user) === null || _a === void 0 ? void 0 : _a.openId) || '';
+    console.log(`[AI Chat] User context: ${firebaseUserId ? `Authenticated as ${firebaseUserId}` : 'NOT AUTHENTICATED'}`);
     // Extract user messages (skip system message, it's handled by the assistant)
     const userMessages = params.messages.filter(msg => msg.role === 'user');
     if (userMessages.length === 0) {
@@ -1912,10 +1986,10 @@ async function invokeLLM(params, apiKey, ctx) {
         // Step 3: Run the assistant with tools (functions)
         // IMPORTANT: Tools MUST be passed here for function calling to work
         // Even if tools are configured in the assistant, passing them here ensures they're available
-        const tools = getOpenAITools(((_b = ctx.user) === null || _b === void 0 ? void 0 : _b.id) || '');
+        const tools = getOpenAITools(firebaseUserId);
         const assistantId = getOpenAIAssistantId();
         console.log(`[AI Chat] Running assistant: ${assistantId}`);
-        console.log(`[AI Chat] User ID: ${((_c = ctx.user) === null || _c === void 0 ? void 0 : _c.id) || 'NOT AUTHENTICATED'}`);
+        console.log(`[AI Chat] User ID (Firebase Auth): ${firebaseUserId || 'NOT AUTHENTICATED'}`);
         console.log(`[AI Chat] Tools available: ${tools.length}`);
         if (tools.length > 0) {
             console.log(`[AI Chat] Tool names: ${tools.map((t) => { var _a; return (_a = t.function) === null || _a === void 0 ? void 0 : _a.name; }).join(', ')}`);
@@ -1931,7 +2005,7 @@ async function invokeLLM(params, apiKey, ctx) {
 🚨 KRITISCHE ANWEISUNGEN - UNBEDINGT BEFOLGEN:
 
 AKTUELLES DATUM: ${currentDate} (Schweizer Zeit, Europe/Zurich)
-BENUTZER-ID: ${((_d = ctx.user) === null || _d === void 0 ? void 0 : _d.id) || 'unbekannt'}
+BENUTZER-ID: ${firebaseUserId || 'unbekannt'}
 
 ═══════════════════════════════════════════════════════════════
 🔴 SCHULDEN ERFASSEN - VERWENDE IMMER createPersonWithDebt!
@@ -1981,12 +2055,12 @@ Wenn: "X möchte monatlich à Y CHF abzahlen"
 `,
         };
         // ALWAYS add tools if user is authenticated - this is critical for function calling
-        if (((_e = ctx.user) === null || _e === void 0 ? void 0 : _e.id) && tools.length > 0) {
+        if (firebaseUserId && tools.length > 0) {
             runBody.tools = tools;
             console.log(`[AI Chat] Adding ${tools.length} tools to run`);
         }
         else {
-            console.warn(`[AI Chat] WARNING: No tools added! User authenticated: ${!!((_f = ctx.user) === null || _f === void 0 ? void 0 : _f.id)}, Tools count: ${tools.length}`);
+            console.warn(`[AI Chat] WARNING: No tools added! User authenticated: ${!!firebaseUserId}, Tools count: ${tools.length}`);
         }
         const runResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/runs`, {
             method: 'POST',
@@ -2003,13 +2077,13 @@ Wenn: "X möchte monatlich à Y CHF abzahlen"
             try {
                 errorData = JSON.parse(errorText);
             }
-            catch (_q) {
+            catch (_k) {
                 // Not JSON, use as is
             }
             console.error(`[AI Chat] Run failed: ${runResponse.status} ${runResponse.statusText}`);
             console.error(`[AI Chat] Error details:`, JSON.stringify(errorData, null, 2));
             // Check if assistant not found
-            if (runResponse.status === 404 && (((_h = (_g = errorData.error) === null || _g === void 0 ? void 0 : _g.message) === null || _h === void 0 ? void 0 : _h.includes('No assistant found')) || ((_k = (_j = errorData.error) === null || _j === void 0 ? void 0 : _j.message) === null || _k === void 0 ? void 0 : _k.includes('not found')))) {
+            if (runResponse.status === 404 && (((_c = (_b = errorData.error) === null || _b === void 0 ? void 0 : _b.message) === null || _c === void 0 ? void 0 : _c.includes('No assistant found')) || ((_e = (_d = errorData.error) === null || _d === void 0 ? void 0 : _d.message) === null || _e === void 0 ? void 0 : _e.includes('not found')))) {
                 console.error(`[AI Chat] ❌ Assistant not found: ${assistantId}`);
                 console.error(`[AI Chat] This usually means:`);
                 console.error(`[AI Chat] 1. The Assistant ID doesn't exist`);
@@ -2076,11 +2150,10 @@ Wenn: "X möchte monatlich à Y CHF abzahlen"
             const runStatusData = await statusResponse.json();
             runStatus = runStatusData.status;
             // Handle function calls (requires_action)
-            if (runStatus === 'requires_action' && ((_l = runStatusData.required_action) === null || _l === void 0 ? void 0 : _l.type) === 'submit_tool_outputs') {
+            if (runStatus === 'requires_action' && ((_f = runStatusData.required_action) === null || _f === void 0 ? void 0 : _f.type) === 'submit_tool_outputs') {
                 const toolCalls = runStatusData.required_action.submit_tool_outputs.tool_calls || [];
                 console.log(`[AI Chat] ✅ Function calls detected! Processing ${toolCalls.length} tool calls`);
                 const toolOutputs = await Promise.all(toolCalls.map(async (toolCall) => {
-                    var _a;
                     const functionName = toolCall.function.name;
                     let functionArgs = {};
                     try {
@@ -2095,7 +2168,7 @@ Wenn: "X möchte monatlich à Y CHF abzahlen"
                     }
                     try {
                         console.log(`Executing function: ${functionName} with args:`, functionArgs);
-                        const result = await executeFunction(functionName, functionArgs, ((_a = ctx.user) === null || _a === void 0 ? void 0 : _a.id) || '');
+                        const result = await executeFunction(functionName, functionArgs, firebaseUserId);
                         console.log(`Function ${functionName} completed successfully`);
                         return {
                             tool_call_id: toolCall.id,
@@ -2170,11 +2243,11 @@ Wenn: "X möchte monatlich à Y CHF abzahlen"
             // Find text content items
             const textContent = assistantMessage.content.find((item) => item.type === 'text');
             if (textContent) {
-                content = ((_m = textContent.text) === null || _m === void 0 ? void 0 : _m.value) || '';
+                content = ((_g = textContent.text) === null || _g === void 0 ? void 0 : _g.value) || '';
             }
         }
-        else if (((_o = assistantMessage.content) === null || _o === void 0 ? void 0 : _o.type) === 'text') {
-            content = ((_p = assistantMessage.content.text) === null || _p === void 0 ? void 0 : _p.value) || '';
+        else if (((_h = assistantMessage.content) === null || _h === void 0 ? void 0 : _h.type) === 'text') {
+            content = ((_j = assistantMessage.content.text) === null || _j === void 0 ? void 0 : _j.value) || '';
         }
         if (!content) {
             console.warn('No text content found in assistant message, content structure:', JSON.stringify(assistantMessage.content));

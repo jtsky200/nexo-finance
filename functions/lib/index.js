@@ -51,6 +51,16 @@ const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
 const db = admin.firestore();
+// ========== MEHRSPRACHIGE STATUS-KONSTANTEN (DE/EN/FR/IT) ==========
+const STATUS_OPEN = ['open', 'offen', 'ouvert', 'aperto'];
+const STATUS_PAID = ['paid', 'bezahlt', 'payé', 'pagato'];
+const STATUS_POSTPONED = ['postponed', 'verschoben', 'reporté', 'rinviato'];
+const STATUS_COMPLETED = ['completed', 'erledigt', 'terminé', 'completato'];
+function isStatusOpen(s) { return !!s && STATUS_OPEN.includes(s.toLowerCase()); }
+function isStatusPaid(s) { return !!s && STATUS_PAID.includes(s.toLowerCase()); }
+function isStatusPostponed(s) { return !!s && STATUS_POSTPONED.includes(s.toLowerCase()); }
+function isStatusCompleted(s) { return !!s && STATUS_COMPLETED.includes(s.toLowerCase()); }
+function isStatusOpenOrPostponed(s) { return isStatusOpen(s) || isStatusPostponed(s); }
 // ========== Validation Helpers ==========
 function validateString(value, fieldName, maxLength = 1000, required = false) {
     if (required && (!value || typeof value !== 'string' || value.trim().length === 0)) {
@@ -467,10 +477,13 @@ exports.getPeople = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
     const userId = request.auth.uid;
+    console.log(`[getPeople] Fetching people for userId: ${userId}`);
     const snapshot = await db.collection('people').where('userId', '==', userId).get();
+    console.log(`[getPeople] Found ${snapshot.docs.length} people documents`);
     // Get people with their invoices
     const people = await Promise.all(snapshot.docs.map(async (doc) => {
         const data = doc.data();
+        console.log(`[getPeople] Person: ${doc.id}, name: ${data.name}, type: ${data.type}`);
         const person = Object.assign({ id: doc.id }, data);
         // Convert Firestore Timestamps to ISO strings
         if (data.createdAt && typeof data.createdAt.toDate === 'function') {
@@ -481,6 +494,7 @@ exports.getPeople = (0, https_1.onCall)(async (request) => {
         }
         // Load invoices for this person
         const invoicesSnapshot = await db.collection('people').doc(doc.id).collection('invoices').get();
+        let installmentPlanCount = 0;
         person.invoices = invoicesSnapshot.docs.map(invDoc => {
             const invData = invDoc.data();
             const invoice = Object.assign({ id: invDoc.id }, invData);
@@ -490,8 +504,15 @@ exports.getPeople = (0, https_1.onCall)(async (request) => {
             if (invData.createdAt && typeof invData.createdAt.toDate === 'function') {
                 invoice.createdAt = invData.createdAt.toDate().toISOString();
             }
+            // Zähle Rechnungen mit Ratenplänen
+            if (invData.isInstallmentPlan) {
+                installmentPlanCount++;
+            }
             return invoice;
         });
+        // Füge Statistiken hinzu
+        person.invoiceCount = invoicesSnapshot.size;
+        person.installmentPlanCount = installmentPlanCount;
         return person;
     }));
     return { people };
@@ -797,7 +818,7 @@ exports.createInvoice = (0, https_1.onCall)(async (request) => {
     }
     const docRef = await personRef.collection('invoices').add(invoiceData);
     // Update person's totalOwed if status is open or postponed
-    if (status === 'open' || status === 'postponed') {
+    if (isStatusOpenOrPostponed(status)) {
         await personRef.update({
             totalOwed: admin.firestore.FieldValue.increment(amount),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -940,7 +961,7 @@ exports.updateInvoiceStatus = (0, https_1.onCall)(async (request) => {
     // Update person's totalOwed based on status change
     let totalOwedChange = 0;
     // If changing from open/postponed to paid
-    if ((oldStatus === 'open' || oldStatus === 'postponed') && status === 'paid') {
+    if (isStatusOpenOrPostponed(oldStatus) && isStatusPaid(status)) {
         totalOwedChange = -amount;
         // Create expense entry when invoice is marked as paid
         const expenseData = {
@@ -960,7 +981,7 @@ exports.updateInvoiceStatus = (0, https_1.onCall)(async (request) => {
         await db.collection('financeEntries').add(expenseData);
     }
     // If changing from paid to open/postponed
-    else if (oldStatus === 'paid' && (status === 'open' || status === 'postponed')) {
+    else if (isStatusPaid(oldStatus) && isStatusOpenOrPostponed(status)) {
         totalOwedChange = amount;
         // Delete the expense entry if it exists
         const expenseSnapshot = await db.collection('financeEntries')
@@ -973,8 +994,8 @@ exports.updateInvoiceStatus = (0, https_1.onCall)(async (request) => {
         });
         await batch.commit();
     }
-    // If changing between open and postponed
-    else if ((oldStatus === 'open' && status === 'postponed') || (oldStatus === 'postponed' && status === 'open')) {
+    // If changing between open and postponed (no change in totalOwed)
+    else if ((isStatusOpen(oldStatus) && isStatusPostponed(status)) || (isStatusPostponed(oldStatus) && isStatusOpen(status))) {
         totalOwedChange = 0; // No change in totalOwed
     }
     if (totalOwedChange !== 0) {
@@ -1007,7 +1028,7 @@ exports.deleteInvoice = (0, https_1.onCall)(async (request) => {
     const amount = (invoiceData === null || invoiceData === void 0 ? void 0 : invoiceData.amount) || 0;
     const status = invoiceData === null || invoiceData === void 0 ? void 0 : invoiceData.status;
     // Delete associated expense if invoice was paid
-    if (status === 'paid') {
+    if (isStatusPaid(status)) {
         const expenseSnapshot = await db.collection('financeEntries')
             .where('userId', '==', userId)
             .where('invoiceId', '==', invoiceId)
@@ -1019,7 +1040,7 @@ exports.deleteInvoice = (0, https_1.onCall)(async (request) => {
         await batch.commit();
     }
     // Update person's totalOwed if invoice was open or postponed
-    if (status === 'open' || status === 'postponed') {
+    if (isStatusOpenOrPostponed(status)) {
         await personRef.update({
             totalOwed: admin.firestore.FieldValue.increment(-amount),
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1065,7 +1086,7 @@ exports.recordInstallmentPayment = (0, https_1.onCall)(async (request) => {
     installments[installmentIndex] = Object.assign(Object.assign({}, installment), { paidAmount: parseFloat(newPaidAmount.toFixed(2)), status: isFullyPaid ? 'paid' : 'partial', paidDate: isFullyPaid ? admin.firestore.Timestamp.fromDate(new Date(paidDate || new Date())) : installment.paidDate });
     // Calculate total paid
     const totalPaid = installments.reduce((sum, inst) => sum + (inst.paidAmount || 0), 0);
-    const allPaid = installments.every((inst) => inst.status === 'paid');
+    const allPaid = installments.every((inst) => isStatusPaid(inst.status));
     // Update invoice
     await invoiceRef.update({
         installments,
@@ -1107,7 +1128,7 @@ exports.updateInstallmentPlan = (0, https_1.onCall)(async (request) => {
     }
     // Calculate total paid
     const totalPaid = installments.reduce((sum, inst) => sum + (inst.paidAmount || 0), 0);
-    const allPaid = installments.every((inst) => inst.status === 'paid');
+    const allPaid = installments.every((inst) => isStatusPaid(inst.status));
     // Update invoice
     await invoiceRef.update({
         installments: installments.map((inst) => (Object.assign(Object.assign({}, inst), { dueDate: inst.dueDate ? (typeof inst.dueDate === 'string' ? admin.firestore.Timestamp.fromDate(new Date(inst.dueDate)) : inst.dueDate) : inst.dueDate, paidDate: inst.paidDate ? (typeof inst.paidDate === 'string' ? admin.firestore.Timestamp.fromDate(new Date(inst.paidDate)) : inst.paidDate) : inst.paidDate, paidAmount: parseFloat((inst.paidAmount || 0).toFixed(2)), amount: parseFloat((inst.amount || 0).toFixed(2)) }))),
@@ -1143,7 +1164,7 @@ exports.convertToInstallmentPlan = (0, https_1.onCall)(async (request) => {
     if (invoiceData.isInstallmentPlan) {
         throw new https_1.HttpsError('invalid-argument', 'Invoice is already an installment plan');
     }
-    if (invoiceData.status === 'paid') {
+    if (isStatusPaid(invoiceData.status)) {
         throw new https_1.HttpsError('invalid-argument', 'Cannot convert paid invoice to installment plan');
     }
     const amount = invoiceData.amount / 100; // Convert from cents to CHF
@@ -1303,7 +1324,7 @@ exports.getAllBills = (0, https_1.onCall)(async (request) => {
             description: reminderData.notes || reminderData.title,
             amount: reminderData.amount,
             currency: reminderData.currency || 'CHF',
-            status: reminderData.status === 'erledigt' ? 'paid' : 'open',
+            status: isStatusCompleted(reminderData.status) ? 'paid' : 'open',
             direction: 'outgoing',
             dueDate: ((_f = reminderData.dueDate) === null || _f === void 0 ? void 0 : _f.toDate) ? reminderData.dueDate.toDate().toISOString() : null,
             reminderDate: null,
@@ -1331,12 +1352,12 @@ exports.getAllBills = (0, https_1.onCall)(async (request) => {
     // Calculate statistics
     const stats = {
         total: bills.length,
-        open: bills.filter(b => b.status === 'open').length,
-        openAmount: bills.filter(b => b.status === 'open').reduce((sum, b) => sum + (b.amount || 0), 0),
+        open: bills.filter(b => isStatusOpen(b.status)).length,
+        openAmount: bills.filter(b => isStatusOpen(b.status)).reduce((sum, b) => sum + (b.amount || 0), 0),
         overdue: bills.filter(b => b.isOverdue).length,
         overdueAmount: bills.filter(b => b.isOverdue).reduce((sum, b) => sum + (b.amount || 0), 0),
-        paid: bills.filter(b => b.status === 'paid').length,
-        paidAmount: bills.filter(b => b.status === 'paid').reduce((sum, b) => sum + (b.amount || 0), 0),
+        paid: bills.filter(b => isStatusPaid(b.status)).length,
+        paidAmount: bills.filter(b => isStatusPaid(b.status)).reduce((sum, b) => sum + (b.amount || 0), 0),
     };
     return { bills, stats };
 });
@@ -1359,7 +1380,7 @@ exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
         for (const invoiceDoc of invoicesSnapshot.docs) {
             const invoiceData = invoiceDoc.data();
             // Skip paid invoices
-            if (invoiceData.status === 'paid')
+            if (isStatusPaid(invoiceData.status))
                 continue;
             // Determine the date to use (dueDate > date > createdAt)
             let eventDate;
@@ -1473,7 +1494,7 @@ exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
             description: reminderData.notes || reminderData.description,
             category: reminderData.type, // termin, aufgabe
             priority: reminderData.priority,
-            completed: reminderData.status === 'erledigt',
+            completed: isStatusCompleted(reminderData.status),
         });
     }
     // Get work schedules

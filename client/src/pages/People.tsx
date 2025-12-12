@@ -227,9 +227,16 @@ export default function People() {
                   <Badge className="bg-green-500 text-white text-xs">Alles bezahlt</Badge>
                 )}
               </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <FileText className="w-4 h-4" />
-                {person.invoiceCount} Rechnungen
+              <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                <FileText className="w-4 h-4 flex-shrink-0" />
+                <span>
+                  {person.invoiceCount} {person.invoiceCount === 1 ? 'Rechnung' : 'Rechnungen'}
+                  {person.installmentPlanCount > 0 && (
+                    <span className="text-primary font-medium ml-1">
+                      ({person.installmentPlanCount} in Raten)
+                    </span>
+                  )}
+                </span>
               </div>
             </div>
           </div>

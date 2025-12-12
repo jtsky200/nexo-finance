@@ -11,10 +11,7 @@ import { toast } from 'sonner';
 import { AIChatBox, type Message } from './AIChatBox';
 
 import { Button } from './ui/button';
-import {
-  Dialog,
-  DialogContent,
-} from './ui/dialog';
+import { Dialog } from './ui/dialog';
 
 const CHAT_STORAGE_KEY = 'nexo_chat_messages';
 const SYSTEM_MESSAGE: Message = {
@@ -30,50 +27,59 @@ interface AIChatDialogProps {
 export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
   const { t } = useTranslation();
   
-  // Drag state für bewegbaren Dialog
-  const [position, setPosition] = useState({ x: 0, y: 0 });
+  // Refs für flüssige Drag-Performance (direkte DOM-Manipulation)
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const positionRef = useRef({ x: 0, y: 0 });
+  const dragDataRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const dragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null);
 
   // Reset position when dialog opens
   useEffect(() => {
     if (open) {
-      setPosition({ x: 0, y: 0 });
+      positionRef.current = { x: 0, y: 0 };
+      if (dialogRef.current) {
+        dialogRef.current.style.left = '50%';
+        dialogRef.current.style.top = '50%';
+      }
     }
   }, [open]);
 
-  // Drag handlers
+  // Drag handlers - direkte DOM-Manipulation für flüssige Bewegung
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsDragging(true);
-    dragRef.current = {
+    dragDataRef.current = {
       startX: e.clientX,
       startY: e.clientY,
-      initialX: position.x,
-      initialY: position.y,
+      initialX: positionRef.current.x,
+      initialY: positionRef.current.y,
     };
-  }, [position]);
+  }, []);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging || !dragRef.current) return;
+      if (!dragDataRef.current || !dialogRef.current) return;
       
-      const deltaX = e.clientX - dragRef.current.startX;
-      const deltaY = e.clientY - dragRef.current.startY;
+      const deltaX = e.clientX - dragDataRef.current.startX;
+      const deltaY = e.clientY - dragDataRef.current.startY;
       
-      setPosition({
-        x: dragRef.current.initialX + deltaX,
-        y: dragRef.current.initialY + deltaY,
-      });
+      const newX = dragDataRef.current.initialX + deltaX;
+      const newY = dragDataRef.current.initialY + deltaY;
+      
+      // Direkte DOM-Manipulation - kein React re-render!
+      dialogRef.current.style.left = `calc(50% + ${newX}px)`;
+      dialogRef.current.style.top = `calc(50% + ${newY}px)`;
+      
+      positionRef.current = { x: newX, y: newY };
     };
 
     const handleMouseUp = () => {
       setIsDragging(false);
-      dragRef.current = null;
+      dragDataRef.current = null;
     };
 
     if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mousemove', handleMouseMove, { passive: true });
       document.addEventListener('mouseup', handleMouseUp);
     }
 
@@ -190,13 +196,15 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent 
-        className="max-w-3xl w-[95vw] sm:w-[85vw] md:w-[75vw] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden [&_*]:!scrollbar-none [&_*]:[-ms-overflow-style:none] [&_*]:[scrollbar-width:none] [&_*::-webkit-scrollbar]:hidden !translate-x-0 !translate-y-0" 
-        showCloseButton={false}
+      {/* Draggable Dialog Container */}
+      <div
+        ref={dialogRef}
+        className="fixed z-50 bg-background rounded-lg border shadow-lg max-w-3xl w-[95vw] sm:w-[85vw] md:w-[75vw] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden"
         style={{
-          left: `calc(50% + ${position.x}px)`,
-          top: `calc(50% + ${position.y}px)`,
+          left: '50%',
+          top: '50%',
           transform: 'translate(-50%, -50%)',
+          willChange: isDragging ? 'left, top' : 'auto',
         }}
       >
         {/* Header - Draggable */}
@@ -245,7 +253,12 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
             suggestedPrompts={hasUserMessages ? [] : suggestedPrompts}
           />
         </div>
-      </DialogContent>
+      </div>
+      {/* Background overlay */}
+      <div 
+        className="fixed inset-0 z-40 bg-black/50" 
+        onClick={() => onOpenChange(false)}
+      />
     </Dialog>
   );
 }

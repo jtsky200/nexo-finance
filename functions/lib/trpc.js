@@ -1099,38 +1099,46 @@ async function executeFunction(functionName, args, userId) {
             const invoicesSnapshot = await db.collection('people').doc(person.id).collection('invoices').get();
             console.log(`[getPersonInstallments] Found ${invoicesSnapshot.size} total invoices`);
             // Log all invoices for debugging
-            invoicesSnapshot.docs.forEach((doc, idx) => {
+            const allInvoicesDebug = invoicesSnapshot.docs.map((doc, idx) => {
                 const data = doc.data();
-                console.log(`[getPersonInstallments] Invoice ${idx}: id=${doc.id}, isInstallmentPlan=${data.isInstallmentPlan}, installments=${Array.isArray(data.installments) ? data.installments.length : 'not array'}, installmentCount=${data.installmentCount}`);
+                const debugInfo = {
+                    idx,
+                    id: doc.id,
+                    description: data.description,
+                    amount: data.amount,
+                    isInstallmentPlan: data.isInstallmentPlan,
+                    installmentCount: data.installmentCount,
+                    hasInstallmentsArray: Array.isArray(data.installments),
+                    installmentsLength: Array.isArray(data.installments) ? data.installments.length : 0,
+                    installmentInterval: data.installmentInterval,
+                    status: data.status,
+                    // Alle Keys des Dokuments für vollständiges Debugging
+                    allKeys: Object.keys(data),
+                };
+                console.log(`[getPersonInstallments] Invoice ${idx}:`, JSON.stringify(debugInfo));
+                return debugInfo;
             });
-            // Filtere Rechnungen die entweder isInstallmentPlan=true haben ODER ein installments Array mit Einträgen ODER installmentCount > 0
+            // Filtere Rechnungen - SEHR PERMISSIV um alle Rate-Daten zu finden
             const invoicesWithInstallments = invoicesSnapshot.docs.filter(doc => {
                 const data = doc.data();
                 const hasInstallmentPlanFlag = data.isInstallmentPlan === true;
                 const hasInstallmentsArray = Array.isArray(data.installments) && data.installments.length > 0;
                 const hasInstallmentCount = typeof data.installmentCount === 'number' && data.installmentCount > 0;
-                return hasInstallmentPlanFlag || hasInstallmentsArray || hasInstallmentCount;
+                const hasInstallmentInterval = data.installmentInterval != null;
+                const hasInstallmentEndDate = data.installmentEndDate != null;
+                // Sehr permissive Prüfung - jede Eigenschaft reicht
+                return hasInstallmentPlanFlag || hasInstallmentsArray || hasInstallmentCount || hasInstallmentInterval || hasInstallmentEndDate;
             });
             console.log(`[getPersonInstallments] Found ${invoicesWithInstallments.length} invoices with installments`);
             if (invoicesWithInstallments.length === 0) {
-                // Return debug info if no installments found
-                const debugInfo = invoicesSnapshot.docs.map(doc => {
-                    const data = doc.data();
-                    return {
-                        id: doc.id,
-                        description: data.description,
-                        amount: data.amount,
-                        isInstallmentPlan: data.isInstallmentPlan,
-                        installmentCount: data.installmentCount,
-                        hasInstallmentsArray: Array.isArray(data.installments),
-                        installmentsLength: Array.isArray(data.installments) ? data.installments.length : 0,
-                    };
-                });
+                // Detaillierte Debug-Info wenn keine Raten gefunden
                 return {
                     personName: person.name,
                     hasInstallmentPlan: false,
-                    message: `${person.name} hat keinen aktiven Ratenplan. (Debug: ${invoicesSnapshot.size} Rechnungen gefunden)`,
-                    debugInvoices: debugInfo,
+                    message: `${person.name} hat keinen aktiven Ratenplan.`,
+                    totalInvoices: invoicesSnapshot.size,
+                    debugInvoices: allInvoicesDebug,
+                    hint: 'Prüfe debugInvoices - wenn installmentsLength > 0, dann existiert ein Ratenplan aber die Erkennung hat versagt.',
                 };
             }
             // Helper: Bestimme ob Betrag in CHF oder Rappen ist und konvertiere

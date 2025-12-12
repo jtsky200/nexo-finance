@@ -191,21 +191,23 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent 
-        className="max-w-3xl w-[95vw] sm:w-[85vw] md:w-[75vw] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden [&_*]:!scrollbar-none [&_*]:[-ms-overflow-style:none] [&_*]:[scrollbar-width:none] [&_*::-webkit-scrollbar]:hidden" 
+        className="max-w-3xl w-[95vw] sm:w-[85vw] md:w-[75vw] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden [&_*]:!scrollbar-none [&_*]:[-ms-overflow-style:none] [&_*]:[scrollbar-width:none] [&_*::-webkit-scrollbar]:hidden !translate-x-0 !translate-y-0" 
         showCloseButton={false}
         style={{
-          transform: `translate(calc(-50% + ${position.x}px), calc(-50% + ${position.y}px))`,
+          left: `calc(50% + ${position.x}px)`,
+          top: `calc(50% + ${position.y}px)`,
+          transform: 'translate(-50%, -50%)',
         }}
       >
         {/* Header - Draggable */}
         <div 
-          className={`flex items-center justify-between px-4 py-3 border-b bg-gray-50/50 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+          className={`flex items-center justify-between px-4 py-3 border-b bg-gray-50/50 select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
           onMouseDown={handleMouseDown}
         >
           <div className="flex items-center gap-2 min-w-0">
             <GripVertical className="w-4 h-4 text-gray-400 flex-shrink-0" />
             <MessageSquare className="w-5 h-5 text-primary flex-shrink-0" />
-            <span className="font-semibold text-gray-900 select-none">Assistent</span>
+            <span className="font-semibold text-gray-900">Assistent</span>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0 ml-4">
             {hasUserMessages && (

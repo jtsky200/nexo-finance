@@ -2126,16 +2126,16 @@ async function invokeLLM(params: {
   const firebaseUserId = ctx.user?.openId || '';
   console.log(`[AI Chat] User context: ${firebaseUserId ? `Authenticated as ${firebaseUserId}` : 'NOT AUTHENTICATED'}`);
 
-  // Extract user messages (skip system message, it's handled by the assistant)
-  const userMessages = params.messages.filter(msg => msg.role === 'user');
+  // Extract all non-system messages to preserve conversation history
+  const conversationMessages = params.messages.filter(msg => msg.role !== 'system');
+  const userMessages = conversationMessages.filter(msg => msg.role === 'user');
   if (userMessages.length === 0) {
     throw new Error('No user messages found');
   }
 
-  // Get the last user message
-  const lastUserMessage = userMessages[userMessages.length - 1];
+  console.log(`[AI Chat] Sending ${conversationMessages.length} messages to preserve context`);
 
-  // Create a thread and send message to OpenAI Assistant
+  // Create a thread and send ALL messages to OpenAI Assistant
   // Step 1: Create a thread
   const threadResponse = await fetch('https://api.openai.com/v1/threads', {
     method: 'POST',
@@ -2158,26 +2158,30 @@ async function invokeLLM(params: {
   const threadId = thread.id;
 
   try {
-    // Step 2: Add message to thread
-    const messageResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'OpenAI-Beta': 'assistants=v2',
-      },
-      body: JSON.stringify({
-        role: 'user',
-        content: lastUserMessage.content,
-      }),
-    });
+    // Step 2: Add ALL conversation messages to thread to preserve context
+    // This ensures the AI understands the full conversation history
+    for (const msg of conversationMessages) {
+      const messageResponse = await fetch(`https://api.openai.com/v1/threads/${threadId}/messages`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'OpenAI-Beta': 'assistants=v2',
+        },
+        body: JSON.stringify({
+          role: msg.role === 'assistant' ? 'assistant' : 'user',
+          content: msg.content,
+        }),
+      });
 
-    if (!messageResponse.ok) {
-      const errorText = await messageResponse.text();
-      throw new Error(
-        `Failed to add message: ${messageResponse.status} ${messageResponse.statusText} – ${errorText}`
-      );
+      if (!messageResponse.ok) {
+        const errorText = await messageResponse.text();
+        console.warn(`[AI Chat] Failed to add message (${msg.role}): ${errorText}`);
+        // Continue with other messages even if one fails
+      }
     }
+    
+    console.log(`[AI Chat] Added ${conversationMessages.length} messages to thread ${threadId}`)
 
     // Step 3: Run the assistant with tools (functions)
     // IMPORTANT: Tools MUST be passed here for function calling to work

@@ -137,10 +137,13 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
             
             return (
               <button
+                type="button"
                 key={item.path}
-                onClick={() => {
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
                   setLocation(item.path);
-                  onClose?.();
+                  if (onClose) onClose();
                 }}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors cursor-pointer w-full text-left",
@@ -150,8 +153,8 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                     : "text-muted-foreground"
                 )}
               >
-                <Icon className="w-5 h-5" />
-                <span className="font-medium">{item.label}</span>
+                <Icon className="w-5 h-5 pointer-events-none" />
+                <span className="font-medium pointer-events-none">{item.label}</span>
               </button>
             );
           })}

@@ -97,28 +97,40 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setLocation('/settings')}>
+            <DropdownMenuItem 
+              className="cursor-pointer"
+              onSelect={() => setLocation('/settings')}
+            >
               <Settings className="mr-2 h-4 w-4" />
               <span>{t('nav.settings', 'Einstellungen')}</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setLocation('/dashboard')}>
+            <DropdownMenuItem 
+              className="cursor-pointer"
+              onSelect={() => setLocation('/dashboard')}
+            >
               <User className="mr-2 h-4 w-4" />
               <span>{t('nav.dashboard', 'Dashboard')}</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setAiChatOpen(true)}>
+            <DropdownMenuItem 
+              className="cursor-pointer"
+              onSelect={() => setAiChatOpen(true)}
+            >
               <MessageSquare className="mr-2 h-4 w-4" />
               <span>Assistent</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => {
-              // TODO: Open help/documentation
-              window.open('https://help.nexo.com', '_blank');
-            }}>
+            <DropdownMenuItem 
+              className="cursor-pointer"
+              onSelect={() => window.open('https://help.nexo.com', '_blank')}
+            >
               <HelpCircle className="mr-2 h-4 w-4" />
               <span>{t('common.help', 'Hilfe')}</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => logout()}>
+            <DropdownMenuItem 
+              className="cursor-pointer"
+              onSelect={() => logout()}
+            >
               <LogOut className="mr-2 h-4 w-4" />
               <span>{t('common.logout', 'Abmelden')}</span>
             </DropdownMenuItem>

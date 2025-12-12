@@ -986,22 +986,41 @@ async function executeFunction(functionName, args, userId) {
                 var _a, _b, _c, _d;
                 const data = doc.data();
                 const amountInChf = rappenToChf(data.amount || 0);
-                // Prüfe ob Ratenplan existiert
-                const hasInstallmentPlan = data.isInstallmentPlan === true;
+                // Prüfe ob Ratenplan existiert - sowohl Flag als auch Array prüfen
                 const installments = data.installments || [];
+                const hasInstallmentPlan = data.isInstallmentPlan === true ||
+                    (Array.isArray(installments) && installments.length > 0) ||
+                    (typeof data.installmentCount === 'number' && data.installmentCount > 0);
                 // Berechne offene und bezahlte Raten
                 const openInstallments = installments.filter((i) => i.status === 'pending' || i.status === 'open');
                 const paidInstallments = installments.filter((i) => i.status === 'paid' || i.status === 'completed');
                 // Berechne Restschuld basierend auf offenen Raten
                 let remainingDebt = amountInChf;
                 if (hasInstallmentPlan && installments.length > 0) {
-                    remainingDebt = openInstallments.reduce((sum, inst) => sum + rappenToChf(inst.amount || 0), 0);
+                    // Intelligente Betragskonvertierung für Raten
+                    const expectedPerRateChf = amountInChf / installments.length;
+                    const toChfSafe = (amount) => {
+                        if (!amount)
+                            return 0;
+                        // Wenn Betrag nahe am erwarteten CHF-Wert ist, ist es CHF
+                        if (amount >= expectedPerRateChf * 0.8 && amount <= expectedPerRateChf * 1.2) {
+                            return amount;
+                        }
+                        // Wenn Betrag nahe am erwarteten Rappen-Wert ist, konvertieren
+                        const expectedPerRateRappen = (data.amount || 0) / installments.length;
+                        if (amount >= expectedPerRateRappen * 0.8 && amount <= expectedPerRateRappen * 1.2) {
+                            return rappenToChf(amount);
+                        }
+                        // Default: Annahme CHF
+                        return amount;
+                    };
+                    remainingDebt = openInstallments.reduce((sum, inst) => sum + toChfSafe(inst.amount || 0), 0);
                 }
                 return {
                     id: doc.id,
                     description: data.description || '',
                     totalAmountChf: amountInChf,
-                    remainingDebtChf: remainingDebt,
+                    remainingDebtChf: roundToSwiss5Rappen(remainingDebt),
                     status: data.status || 'open',
                     dueDate: ((_c = (_b = (_a = data.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
                     hasInstallmentPlan,
@@ -1011,13 +1030,26 @@ async function executeFunction(functionName, args, userId) {
                     nextDueDate: openInstallments.length > 0
                         ? (_d = openInstallments.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0]) === null || _d === void 0 ? void 0 : _d.dueDate
                         : null,
-                    installments: hasInstallmentPlan ? installments.map((inst, idx) => ({
-                        number: idx + 1,
-                        amountChf: rappenToChf(inst.amount || 0),
-                        dueDate: inst.dueDate,
-                        status: inst.status,
-                        paidDate: inst.paidDate || null,
-                    })) : [],
+                    installments: hasInstallmentPlan ? installments.map((inst, idx) => {
+                        const expectedPerRateChf = amountInChf / installments.length;
+                        const toChfSafe = (amount) => {
+                            if (!amount)
+                                return 0;
+                            if (amount >= expectedPerRateChf * 0.8 && amount <= expectedPerRateChf * 1.2)
+                                return amount;
+                            const expectedPerRateRappen = (data.amount || 0) / installments.length;
+                            if (amount >= expectedPerRateRappen * 0.8 && amount <= expectedPerRateRappen * 1.2)
+                                return rappenToChf(amount);
+                            return amount;
+                        };
+                        return {
+                            number: idx + 1,
+                            amountChf: roundToSwiss5Rappen(toChfSafe(inst.amount || 0)),
+                            dueDate: inst.dueDate,
+                            status: inst.status,
+                            paidDate: inst.paidDate || null,
+                        };
+                    }) : [],
                 };
             });
             // Berechne Gesamtrestschuld (nur offene Rechnungen)

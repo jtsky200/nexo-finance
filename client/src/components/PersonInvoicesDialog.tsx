@@ -264,23 +264,35 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
   };
 
   // Intelligente Konvertierung von Ratenbeträgen zu Rappen für formatAmount
-  // Die Ratenbeträge können in CHF oder Rappen gespeichert sein, je nach Erstellungsmethode
+  // Die Ratenbeträge können in verschiedenen Formaten gespeichert sein aufgrund von Backend-Bugs
   const getInstallmentAmountInRappen = (inst: any, invoiceAmountInRappen: number, totalInstallments: number) => {
     const instAmount = inst.amount || 0;
+    if (instAmount === 0) return 0;
     
-    // Erwarteter Ratenbetrag in CHF wenn das Format CHF ist
+    // Erwarteter Ratenbetrag in CHF
     const expectedPerInstallmentChf = invoiceAmountInRappen / 100 / totalInstallments;
+    const expectedPerInstallmentRappen = invoiceAmountInRappen / totalInstallments;
     
-    // Wenn der Ratenbetrag nahe am erwarteten CHF-Betrag liegt (±50%), dann ist es in CHF
-    if (instAmount > 0 && instAmount <= expectedPerInstallmentChf * 1.5 && instAmount >= expectedPerInstallmentChf * 0.5) {
-      // Betrag ist in CHF gespeichert - konvertiere zu Rappen
-      return instAmount * 100;
+    // Fall 1: Betrag ist nahe am erwarteten CHF-Betrag (korrekt gespeichert in CHF)
+    if (instAmount >= expectedPerInstallmentChf * 0.8 && instAmount <= expectedPerInstallmentChf * 1.2) {
+      return instAmount * 100; // CHF zu Rappen
     }
     
-    // Wenn der Ratenbetrag viel größer ist, könnte er bereits in Rappen sein
-    if (instAmount > expectedPerInstallmentChf * 50) {
-      // Wahrscheinlich bereits in Rappen
-      return instAmount;
+    // Fall 2: Betrag ist nahe am erwarteten Rappen-Betrag (korrekt in Rappen)
+    if (instAmount >= expectedPerInstallmentRappen * 0.8 && instAmount <= expectedPerInstallmentRappen * 1.2) {
+      return instAmount; // Bereits Rappen
+    }
+    
+    // Fall 3: Betrag ist nahe am Gesamtbetrag (Bug: letzte Rate wurde mit Gesamtbetrag überschrieben)
+    if (instAmount >= invoiceAmountInRappen * 0.5 && instAmount <= invoiceAmountInRappen * 1.5) {
+      // Dies ist korrupte Daten - berechne den korrekten Ratenbetrag
+      return expectedPerInstallmentRappen;
+    }
+    
+    // Fall 4: Betrag ist viel größer als erwartet - wahrscheinlich korrupte Daten
+    if (instAmount > expectedPerInstallmentChf * 10) {
+      // Berechne den korrekten Ratenbetrag basierend auf dem Gesamtbetrag
+      return expectedPerInstallmentRappen;
     }
     
     // Standard: Annahme CHF, konvertiere zu Rappen

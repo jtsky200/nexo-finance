@@ -1040,9 +1040,11 @@ async function executeFunction(functionName: string, args: any, userId: string):
         const data = doc.data();
         const amountInChf = rappenToChf(data.amount || 0);
         
-        // Prüfe ob Ratenplan existiert
-        const hasInstallmentPlan = data.isInstallmentPlan === true;
+        // Prüfe ob Ratenplan existiert - sowohl Flag als auch Array prüfen
         const installments = data.installments || [];
+        const hasInstallmentPlan = data.isInstallmentPlan === true || 
+          (Array.isArray(installments) && installments.length > 0) ||
+          (typeof data.installmentCount === 'number' && data.installmentCount > 0);
         
         // Berechne offene und bezahlte Raten
         const openInstallments = installments.filter((i: any) => i.status === 'pending' || i.status === 'open');
@@ -1051,14 +1053,30 @@ async function executeFunction(functionName: string, args: any, userId: string):
         // Berechne Restschuld basierend auf offenen Raten
         let remainingDebt = amountInChf;
         if (hasInstallmentPlan && installments.length > 0) {
-          remainingDebt = openInstallments.reduce((sum: number, inst: any) => sum + rappenToChf(inst.amount || 0), 0);
+          // Intelligente Betragskonvertierung für Raten
+          const expectedPerRateChf = amountInChf / installments.length;
+          const toChfSafe = (amount: number): number => {
+            if (!amount) return 0;
+            // Wenn Betrag nahe am erwarteten CHF-Wert ist, ist es CHF
+            if (amount >= expectedPerRateChf * 0.8 && amount <= expectedPerRateChf * 1.2) {
+              return amount;
+            }
+            // Wenn Betrag nahe am erwarteten Rappen-Wert ist, konvertieren
+            const expectedPerRateRappen = (data.amount || 0) / installments.length;
+            if (amount >= expectedPerRateRappen * 0.8 && amount <= expectedPerRateRappen * 1.2) {
+              return rappenToChf(amount);
+            }
+            // Default: Annahme CHF
+            return amount;
+          };
+          remainingDebt = openInstallments.reduce((sum: number, inst: any) => sum + toChfSafe(inst.amount || 0), 0);
         }
         
         return {
           id: doc.id,
           description: data.description || '',
           totalAmountChf: amountInChf,
-          remainingDebtChf: remainingDebt,
+          remainingDebtChf: roundToSwiss5Rappen(remainingDebt),
           status: data.status || 'open',
           dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
           hasInstallmentPlan,
@@ -1068,13 +1086,23 @@ async function executeFunction(functionName: string, args: any, userId: string):
           nextDueDate: openInstallments.length > 0 
             ? openInstallments.sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0]?.dueDate 
             : null,
-          installments: hasInstallmentPlan ? installments.map((inst: any, idx: number) => ({
-            number: idx + 1,
-            amountChf: rappenToChf(inst.amount || 0),
-            dueDate: inst.dueDate,
-            status: inst.status,
-            paidDate: inst.paidDate || null,
-          })) : [],
+          installments: hasInstallmentPlan ? installments.map((inst: any, idx: number) => {
+            const expectedPerRateChf = amountInChf / installments.length;
+            const toChfSafe = (amount: number): number => {
+              if (!amount) return 0;
+              if (amount >= expectedPerRateChf * 0.8 && amount <= expectedPerRateChf * 1.2) return amount;
+              const expectedPerRateRappen = (data.amount || 0) / installments.length;
+              if (amount >= expectedPerRateRappen * 0.8 && amount <= expectedPerRateRappen * 1.2) return rappenToChf(amount);
+              return amount;
+            };
+            return {
+              number: idx + 1,
+              amountChf: roundToSwiss5Rappen(toChfSafe(inst.amount || 0)),
+              dueDate: inst.dueDate,
+              status: inst.status,
+              paidDate: inst.paidDate || null,
+            };
+          }) : [],
         };
       });
 

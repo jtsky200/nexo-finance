@@ -2210,13 +2210,25 @@ HOUSEHOLD (nur wenn explizit Familienmitglied):
 - Explizit als Familie bezeichnet → household
 
 ═══════════════════════════════════════════════════════════════
-RATENPLÄNE - createInstallmentPlan
+RATENPLÄNE - VOLLSTÄNDIGE ANLEITUNG
 ═══════════════════════════════════════════════════════════════
 
+1️⃣ RATEN ABFRAGEN (WICHTIG - IMMER ZUERST!):
+Wenn der Benutzer fragt "Welche Raten hat X?" oder "Wie viel schuldet X noch?":
+→ Rufe getPersonInstallments(personName="X") auf
+→ Diese Funktion zeigt ALLE Raten mit Status, Fälligkeitsdaten und Beträgen
+
+2️⃣ RATENPLAN ERSTELLEN:
 Wenn: "X möchte monatlich à Y CHF abzahlen"
-1. Rufe searchPerson(searchTerm="X") auf um die Person zu finden
-2. Rufe createInstallmentPlan(personName="X", installmentAmount=Y) auf
-3. Die Anzahl Raten wird automatisch berechnet (Gesamtbetrag / Ratenbetrag)
+→ Rufe createInstallmentPlan(personName="X", installmentAmount=Y) auf
+
+3️⃣ ZAHLUNG ERFASSEN:
+Wenn: "X hat die Rate bezahlt" oder "X hat heute 50 CHF gezahlt"
+→ Rufe recordInstallmentPayment(personName="X", amount=50) auf
+→ Die nächste offene Rate wird automatisch als bezahlt markiert
+
+WICHTIG: Bei JEDER Frage zu Schulden oder Raten ZUERST getPersonInstallments aufrufen!
+Dies zeigt die aktuellen, korrekten Daten aus der Datenbank.
 
 ═══════════════════════════════════════════════════════════════
 TERMINE - DATUM PRÜFEN!

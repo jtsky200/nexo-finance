@@ -805,9 +805,12 @@ exports.createInvoice = (0, https_1.onCall)(async (request) => {
             });
         }
         // Adjust last installment to account for rounding
+        // Note: totalInstallmentAmount and amountInChf are both in CHF
+        const amountInChf = amount / 100;
         const totalInstallmentAmount = installments.reduce((sum, inst) => sum + inst.amount, 0);
-        if (totalInstallmentAmount !== amount) {
-            installments[installments.length - 1].amount = parseFloat((amount - (totalInstallmentAmount - installments[installments.length - 1].amount)).toFixed(2));
+        if (Math.abs(totalInstallmentAmount - amountInChf) > 0.01) {
+            // Adjust last installment so total matches exactly
+            installments[installments.length - 1].amount = parseFloat((amountInChf - (totalInstallmentAmount - installments[installments.length - 1].amount)).toFixed(2));
         }
         invoiceData.isInstallmentPlan = true;
         invoiceData.installmentCount = installmentCount;

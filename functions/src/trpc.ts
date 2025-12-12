@@ -1055,15 +1055,29 @@ async function executeFunction(functionName: string, args: any, userId: string):
         if (hasInstallmentPlan && installments.length > 0) {
           // Intelligente Betragskonvertierung für Raten
           const expectedPerRateChf = amountInChf / installments.length;
+          const expectedPerRateRappen = (data.amount || 0) / installments.length;
+          
+          // Prüfe zuerst die Summe aller Raten um das Format zu bestimmen
+          const totalAmount = installments.reduce((s: number, i: any) => s + (i.amount || 0), 0);
+          const isChfFormat = Math.abs(totalAmount - amountInChf) < amountInChf * 0.1;
+          const isRappenFormat = Math.abs(totalAmount - (data.amount || 0)) < (data.amount || 1) * 0.1;
+          
           const toChfSafe = (amount: number): number => {
             if (!amount) return 0;
-            // Wenn Betrag nahe am erwarteten CHF-Wert ist, ist es CHF
-            if (amount >= expectedPerRateChf * 0.8 && amount <= expectedPerRateChf * 1.2) {
+            
+            // Wenn wir das Format schon kennen
+            if (isChfFormat) return amount;
+            if (isRappenFormat) return rappenToChf(amount);
+            
+            // Wenn Betrag sehr groß ist (korrupte Daten), verwende erwarteten Wert
+            if (amount > amountInChf) return expectedPerRateChf;
+            
+            // Wenn Betrag nahe am erwarteten CHF-Wert ist
+            if (amount >= expectedPerRateChf * 0.5 && amount <= expectedPerRateChf * 2) {
               return amount;
             }
-            // Wenn Betrag nahe am erwarteten Rappen-Wert ist, konvertieren
-            const expectedPerRateRappen = (data.amount || 0) / installments.length;
-            if (amount >= expectedPerRateRappen * 0.8 && amount <= expectedPerRateRappen * 1.2) {
+            // Wenn Betrag nahe am erwarteten Rappen-Wert ist
+            if (amount >= expectedPerRateRappen * 0.5 && amount <= expectedPerRateRappen * 2) {
               return rappenToChf(amount);
             }
             // Default: Annahme CHF
@@ -1086,23 +1100,31 @@ async function executeFunction(functionName: string, args: any, userId: string):
           nextDueDate: openInstallments.length > 0 
             ? openInstallments.sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0]?.dueDate 
             : null,
-          installments: hasInstallmentPlan ? installments.map((inst: any, idx: number) => {
+          installments: hasInstallmentPlan ? (() => {
             const expectedPerRateChf = amountInChf / installments.length;
+            const expectedPerRateRappen = (data.amount || 0) / installments.length;
+            const totalAmount = installments.reduce((s: number, i: any) => s + (i.amount || 0), 0);
+            const isChfFormat = Math.abs(totalAmount - amountInChf) < amountInChf * 0.1;
+            const isRappenFormat = Math.abs(totalAmount - (data.amount || 0)) < (data.amount || 1) * 0.1;
+            
             const toChfSafe = (amount: number): number => {
               if (!amount) return 0;
-              if (amount >= expectedPerRateChf * 0.8 && amount <= expectedPerRateChf * 1.2) return amount;
-              const expectedPerRateRappen = (data.amount || 0) / installments.length;
-              if (amount >= expectedPerRateRappen * 0.8 && amount <= expectedPerRateRappen * 1.2) return rappenToChf(amount);
+              if (isChfFormat) return amount;
+              if (isRappenFormat) return rappenToChf(amount);
+              if (amount > amountInChf) return expectedPerRateChf;
+              if (amount >= expectedPerRateChf * 0.5 && amount <= expectedPerRateChf * 2) return amount;
+              if (amount >= expectedPerRateRappen * 0.5 && amount <= expectedPerRateRappen * 2) return rappenToChf(amount);
               return amount;
             };
-            return {
+            
+            return installments.map((inst: any, idx: number) => ({
               number: idx + 1,
               amountChf: roundToSwiss5Rappen(toChfSafe(inst.amount || 0)),
               dueDate: inst.dueDate,
               status: inst.status,
               paidDate: inst.paidDate || null,
-            };
-          }) : [],
+            }));
+          })() : [],
         };
       });
 

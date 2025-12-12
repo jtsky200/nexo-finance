@@ -1256,7 +1256,7 @@ exports.convertToInstallmentPlan = (0, https_1.onCall)(async (request) => {
 });
 // ========== Bills Functions (All Invoices) ==========
 exports.getAllBills = (0, https_1.onCall)(async (request) => {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
@@ -1288,6 +1288,11 @@ exports.getAllBills = (0, https_1.onCall)(async (request) => {
                     inferredDirection = 'outgoing';
                 }
             }
+            // Prüfe auf Ratenplan
+            const installments = invoiceData.installments || [];
+            const hasInstallmentPlan = invoiceData.isInstallmentPlan === true ||
+                (Array.isArray(installments) && installments.length > 0) ||
+                (typeof invoiceData.installmentCount === 'number' && invoiceData.installmentCount > 0);
             bills.push({
                 id: invoiceDoc.id,
                 source: 'person',
@@ -1308,6 +1313,23 @@ exports.getAllBills = (0, https_1.onCall)(async (request) => {
                 date: ((_c = invoiceData.date) === null || _c === void 0 ? void 0 : _c.toDate) ? invoiceData.date.toDate().toISOString() : null,
                 createdAt: ((_d = invoiceData.createdAt) === null || _d === void 0 ? void 0 : _d.toDate) ? invoiceData.createdAt.toDate().toISOString() : null,
                 isOverdue: ((_e = invoiceData.dueDate) === null || _e === void 0 ? void 0 : _e.toDate) && invoiceData.dueDate.toDate() < new Date() && invoiceData.status !== 'paid',
+                // Ratenplan-Informationen
+                hasInstallmentPlan,
+                isInstallmentPlan: invoiceData.isInstallmentPlan || false,
+                installmentCount: installments.length,
+                installmentInterval: invoiceData.installmentInterval,
+                installmentEndDate: ((_f = invoiceData.installmentEndDate) === null || _f === void 0 ? void 0 : _f.toDate) ? invoiceData.installmentEndDate.toDate().toISOString() : null,
+                installments: hasInstallmentPlan ? installments.map((inst) => {
+                    var _a, _b;
+                    return ({
+                        number: inst.number,
+                        amount: inst.amount,
+                        dueDate: ((_a = inst.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) ? inst.dueDate.toDate().toISOString() : inst.dueDate,
+                        status: inst.status,
+                        paidDate: ((_b = inst.paidDate) === null || _b === void 0 ? void 0 : _b.toDate) ? inst.paidDate.toDate().toISOString() : inst.paidDate,
+                        paidAmount: inst.paidAmount,
+                    });
+                }) : [],
             });
         }
     }
@@ -1329,7 +1351,7 @@ exports.getAllBills = (0, https_1.onCall)(async (request) => {
             currency: reminderData.currency || 'CHF',
             status: isStatusCompleted(reminderData.status) ? 'paid' : 'open',
             direction: 'outgoing',
-            dueDate: ((_f = reminderData.dueDate) === null || _f === void 0 ? void 0 : _f.toDate) ? reminderData.dueDate.toDate().toISOString() : null,
+            dueDate: ((_g = reminderData.dueDate) === null || _g === void 0 ? void 0 : _g.toDate) ? reminderData.dueDate.toDate().toISOString() : null,
             reminderDate: null,
             reminderEnabled: false,
             isRecurring: !!reminderData.recurrenceRule,
@@ -1339,9 +1361,9 @@ exports.getAllBills = (0, https_1.onCall)(async (request) => {
             reference: reminderData.reference,
             creditorName: reminderData.creditorName,
             creditorAddress: reminderData.creditorAddress,
-            date: ((_g = reminderData.dueDate) === null || _g === void 0 ? void 0 : _g.toDate) ? reminderData.dueDate.toDate().toISOString() : null,
-            createdAt: ((_h = reminderData.createdAt) === null || _h === void 0 ? void 0 : _h.toDate) ? reminderData.createdAt.toDate().toISOString() : null,
-            isOverdue: ((_j = reminderData.dueDate) === null || _j === void 0 ? void 0 : _j.toDate) && reminderData.dueDate.toDate() < new Date() && reminderData.status !== 'erledigt',
+            date: ((_h = reminderData.dueDate) === null || _h === void 0 ? void 0 : _h.toDate) ? reminderData.dueDate.toDate().toISOString() : null,
+            createdAt: ((_j = reminderData.createdAt) === null || _j === void 0 ? void 0 : _j.toDate) ? reminderData.createdAt.toDate().toISOString() : null,
+            isOverdue: ((_k = reminderData.dueDate) === null || _k === void 0 ? void 0 : _k.toDate) && reminderData.dueDate.toDate() < new Date() && reminderData.status !== 'erledigt',
         });
     }
     // Sort by due date (most urgent first)

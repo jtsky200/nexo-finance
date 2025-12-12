@@ -234,13 +234,13 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
       >
         {/* Header - Draggable */}
         <div 
-          className={`flex items-center justify-between px-4 py-3 border-b bg-gray-50/50 select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+          className={`flex items-center justify-between px-4 py-3 border-b border-border bg-muted/50 select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
           onMouseDown={handleMouseDown}
         >
           <div className="flex items-center gap-2 min-w-0">
-            <GripVertical className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            <GripVertical className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             <MessageSquare className="w-5 h-5 text-primary flex-shrink-0" />
-            <span className="font-semibold text-gray-900">Assistent</span>
+            <span className="font-semibold text-foreground">Assistent</span>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0 ml-4">
             {hasUserMessages && (
@@ -249,7 +249,7 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
                 size="sm"
                 onClick={(e) => { e.stopPropagation(); handleNewConversation(); }}
                 onMouseDown={(e) => e.stopPropagation()}
-                className="h-8 text-xs text-gray-500 hover:text-gray-700 gap-1.5 px-3"
+                className="h-8 text-xs gap-1.5 px-3"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 Neu
@@ -258,7 +258,7 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
             <button
               onClick={(e) => { e.stopPropagation(); onOpenChange(false); }}
               onMouseDown={(e) => e.stopPropagation()}
-              className="rounded-full p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 transition-colors"
+              className="rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               aria-label="Schließen"
             >
               <X className="h-5 w-5" />

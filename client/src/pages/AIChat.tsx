@@ -110,7 +110,7 @@ export default function AIChat() {
 
   return (
     <Layout title="Assistent">
-      <div className="h-[calc(100vh-140px)] flex flex-col bg-white">
+      <div className="h-[calc(100vh-140px)] flex flex-col bg-background">
         {/* Kompakter Header - Nur wenn Nachrichten vorhanden */}
         {hasUserMessages && (
           <div className="flex items-center justify-end py-2 px-4 max-w-4xl mx-auto w-full">
@@ -118,7 +118,7 @@ export default function AIChat() {
               variant="outline"
               size="sm"
               onClick={handleNewConversation}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+              className="flex items-center gap-2"
             >
               <RotateCcw className="size-4" />
               <span className="hidden sm:inline">Neue Konversation</span>

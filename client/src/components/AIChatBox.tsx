@@ -228,7 +228,7 @@ function formatMarkdown(text: string): string {
     // Italic: *text* oder _text_
     .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
     // Inline code: `code`
-    .replace(/`(.+?)`/g, '<code class="bg-gray-100 px-1 rounded text-sm">$1</code>')
+    .replace(/`(.+?)`/g, '<code class="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">$1</code>')
     // Line breaks
     .replace(/\n/g, '<br />');
 }
@@ -513,13 +513,13 @@ export function AIChatBox({
       />
 
       <div className="max-w-3xl mx-auto">
-        <div className="relative flex items-center rounded-2xl border-2 border-gray-200 bg-white shadow-sm transition-all duration-200 py-1 focus-within:border-gray-400">
+        <div className="relative flex items-center rounded-2xl border-2 border-border bg-card shadow-sm transition-all duration-200 py-1 focus-within:border-primary/50">
           {/* Left Icons */}
           <div className="flex items-center gap-1 pl-2">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-150"
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-all duration-150"
               aria-label="Datei anhängen"
               disabled={isLoading}
             >
@@ -528,7 +528,7 @@ export function AIChatBox({
             <button
               type="button"
               onClick={() => imageInputRef.current?.click()}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-150"
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-all duration-150"
               aria-label="Bild hinzufügen"
               disabled={isLoading}
             >
@@ -550,7 +550,7 @@ export function AIChatBox({
             }}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            className="flex-1 resize-none border-0 bg-transparent py-2.5 px-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-0 focus:outline-none min-h-[44px] max-h-[150px] transition-all duration-200"
+            className="flex-1 resize-none border-0 bg-transparent py-2.5 px-2 text-sm text-foreground placeholder:text-muted-foreground focus:ring-0 focus:outline-none min-h-[44px] max-h-[150px] transition-all duration-200"
             rows={1}
             disabled={isLoading}
             style={{ height: 'auto' }}
@@ -561,7 +561,7 @@ export function AIChatBox({
             <button
               type="button"
               onClick={handleLanguageToggle}
-              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-150"
+              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-all duration-150"
               aria-label="Sprache wechseln"
               disabled={isLoading}
             >
@@ -573,8 +573,8 @@ export function AIChatBox({
               className={cn(
                 "p-2 rounded-lg transition-all duration-150",
                 isRecording
-                  ? "text-red-500 bg-red-50 hover:bg-red-100"
-                  : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                  ? "text-red-500 bg-red-500/10 hover:bg-red-500/20"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
               )}
               aria-label="Spracheingabe"
               disabled={isLoading}
@@ -587,8 +587,8 @@ export function AIChatBox({
               className={cn(
                 "p-2 rounded-lg transition-all duration-200",
                 input.trim() && !isLoading
-                  ? "bg-primary text-white hover:bg-primary/90 shadow-sm"
-                  : "text-gray-300 cursor-not-allowed"
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
+                  : "text-muted-foreground/50 cursor-not-allowed"
               )}
               aria-label={isLoading ? "Wird gesendet..." : "Nachricht senden"}
             >
@@ -608,7 +608,7 @@ export function AIChatBox({
     <div
       ref={containerRef}
       className={cn(
-        "flex flex-col bg-white text-gray-900",
+        "flex flex-col bg-background text-foreground",
         className
       )}
       style={{ height }}
@@ -619,7 +619,7 @@ export function AIChatBox({
           {/* Suggested Prompts */}
           {normalizedPrompts.length > 0 && (
             <div className="w-full max-w-2xl mx-auto mb-4">
-              <p className="text-sm text-gray-500 text-center mb-4">{emptyStateMessage}</p>
+              <p className="text-sm text-muted-foreground text-center mb-4">{emptyStateMessage}</p>
               <div className="grid grid-cols-2 gap-2.5">
                 {normalizedPrompts.map((prompt, index) => {
                   const IconComponent = iconMap[prompt.icon as keyof typeof iconMap];
@@ -628,10 +628,10 @@ export function AIChatBox({
                       key={index}
                       onClick={() => handleSuggestedPromptClick(prompt.text)}
                       disabled={isLoading}
-                      className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 px-3 py-2.5 text-sm text-gray-700 transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm hover:shadow text-left"
+                      className="flex items-center gap-2 rounded-xl border border-border bg-card hover:bg-muted hover:border-border px-3 py-2.5 text-sm text-foreground transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm hover:shadow text-left"
                       type="button"
                     >
-                      {IconComponent && <IconComponent className="size-4 text-gray-500 flex-shrink-0" />}
+                      {IconComponent && <IconComponent className="size-4 text-muted-foreground flex-shrink-0" />}
                       <span>{prompt.text}</span>
                     </button>
                   );
@@ -666,8 +666,8 @@ export function AIChatBox({
                       className={cn(
                         "max-w-[85%] select-text",
                         message.role === "user"
-                          ? "bg-gray-900 text-white rounded-2xl px-4 py-3"
-                          : "text-gray-900"
+                          ? "bg-primary text-primary-foreground rounded-2xl px-4 py-3"
+                          : "text-foreground"
                       )}
                       onClick={(e) => e.stopPropagation()}
                       onMouseDown={(e) => e.stopPropagation()}
@@ -685,8 +685,8 @@ export function AIChatBox({
 
                 {isLoading && (
                   <div className="flex items-start gap-4 justify-start animate-in fade-in duration-200">
-                    <div className="rounded-lg bg-gray-100 px-4 py-3">
-                      <Loader2 className="size-4 animate-spin text-gray-500" />
+                    <div className="rounded-lg bg-muted px-4 py-3">
+                      <Loader2 className="size-4 animate-spin text-muted-foreground" />
                     </div>
                   </div>
                 )}
@@ -695,7 +695,7 @@ export function AIChatBox({
           </div>
 
           {/* Input Area - Am unteren Rand */}
-          <div className="px-4 py-3 bg-white border-t border-gray-100">
+          <div className="px-4 py-3 bg-background border-t border-border">
             {renderInputForm()}
           </div>
         </>

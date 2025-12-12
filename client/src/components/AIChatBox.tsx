@@ -6,7 +6,7 @@ import {
   Loader2, Send, Paperclip, Image, Globe, Mic, Tag, FileText, Zap, ArrowUp, 
   ClipboardList, Bell, Wallet, ShoppingCart, Calendar, ScanLine,
   // Icons für AI-Antworten
-  LayoutDashboard, Users, Folder, Settings, Check, Plus, Search, Edit, Trash,
+  LayoutDashboard, Users, Settings, Check, Plus, Search, Edit, Trash,
   Clock, Euro, TrendingUp, TrendingDown, Info, AlertCircle, type LucideIcon
 } from "lucide-react";
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
@@ -96,7 +96,8 @@ const aiIconMap: Record<string, LucideIcon> = {
   'wallet': Wallet,
   'users': Users,
   'file-text': FileText,
-  'folder': Folder,
+  'folder': ScanLine,
+  'scan-line': ScanLine,
   'shopping-cart': ShoppingCart,
   'receipt': ClipboardList,
   'clipboard-list': ClipboardList,
@@ -127,8 +128,8 @@ const navRouteMap: Record<string, { path: string; icon: LucideIcon }> = {
   'invoices': { path: '/bills', icon: ClipboardList },
   'bills': { path: '/bills', icon: ClipboardList },
   'rechnungen': { path: '/bills', icon: ClipboardList },
-  'documents': { path: '/documents', icon: Folder },
-  'dokumente': { path: '/documents', icon: Folder },
+  'documents': { path: '/documents', icon: ScanLine },
+  'dokumente': { path: '/documents', icon: ScanLine },
   'shopping': { path: '/shopping', icon: ShoppingCart },
   'einkaufsliste': { path: '/shopping', icon: ShoppingCart },
   'settings': { path: '/settings', icon: Settings },

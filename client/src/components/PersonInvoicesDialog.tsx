@@ -263,6 +263,30 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     return Math.round(amount * 20) / 20;
   };
 
+  // Intelligente Konvertierung von Ratenbeträgen zu Rappen für formatAmount
+  // Die Ratenbeträge können in CHF oder Rappen gespeichert sein, je nach Erstellungsmethode
+  const getInstallmentAmountInRappen = (inst: any, invoiceAmountInRappen: number, totalInstallments: number) => {
+    const instAmount = inst.amount || 0;
+    
+    // Erwarteter Ratenbetrag in CHF wenn das Format CHF ist
+    const expectedPerInstallmentChf = invoiceAmountInRappen / 100 / totalInstallments;
+    
+    // Wenn der Ratenbetrag nahe am erwarteten CHF-Betrag liegt (±50%), dann ist es in CHF
+    if (instAmount > 0 && instAmount <= expectedPerInstallmentChf * 1.5 && instAmount >= expectedPerInstallmentChf * 0.5) {
+      // Betrag ist in CHF gespeichert - konvertiere zu Rappen
+      return instAmount * 100;
+    }
+    
+    // Wenn der Ratenbetrag viel größer ist, könnte er bereits in Rappen sein
+    if (instAmount > expectedPerInstallmentChf * 50) {
+      // Wahrscheinlich bereits in Rappen
+      return instAmount;
+    }
+    
+    // Standard: Annahme CHF, konvertiere zu Rappen
+    return instAmount * 100;
+  };
+
   const handleAddInvoice = async () => {
     if (!newInvoice.amount || !newInvoice.description) {
       toast.error('Bitte Beschreibung und Betrag eingeben');
@@ -1748,7 +1772,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Noch offen</p>
                     <p className="text-sm font-semibold text-red-600">
-                      {formatAmount((selectedInvoiceForPayment.amount - (selectedInvoiceForPayment.totalPaid || 0) * 100))}
+                      {formatAmount(selectedInvoiceForPayment.amount - ((selectedInvoiceForPayment.totalPaid || 0) * 100))}
                     </p>
                   </div>
                   <div>
@@ -1771,7 +1795,13 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 
                 <div className="space-y-2 max-h-[400px] overflow-y-auto">
                   {selectedInvoiceForPayment.installments.map((inst: any, idx: number) => {
-                    const remaining = inst.amount - (inst.paidAmount || 0);
+                    // Intelligente Betragskonvertierung
+                    const invoiceAmount = selectedInvoiceForPayment.amount || 0;
+                    const totalInstallments = selectedInvoiceForPayment.installments?.length || 1;
+                    const amountInRappen = getInstallmentAmountInRappen(inst, invoiceAmount, totalInstallments);
+                    const paidInRappen = (inst.paidAmount || 0) * (amountInRappen / (inst.amount || 1)); // Proportional konvertieren
+                    const remainingInRappen = amountInRappen - paidInRappen;
+                    
                     let dueDateObj: Date | null = null;
                     if (inst.dueDate) {
                       try {
@@ -1847,16 +1877,16 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                             <div className="grid grid-cols-3 gap-3 mt-3 text-xs">
                               <div>
                                 <p className="text-muted-foreground mb-1">Rate</p>
-                                <p className="font-semibold">{formatAmount(inst.amount * 100)}</p>
+                                <p className="font-semibold">{formatAmount(amountInRappen)}</p>
                               </div>
                               <div>
                                 <p className="text-muted-foreground mb-1">Bezahlt</p>
-                                <p className="font-semibold text-green-600">{formatAmount((inst.paidAmount || 0) * 100)}</p>
+                                <p className="font-semibold text-green-600">{formatAmount(paidInRappen)}</p>
                               </div>
                               <div>
                                 <p className="text-muted-foreground mb-1">Noch offen</p>
-                                <p className={`font-semibold ${remaining > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                  {formatAmount(remaining * 100)}
+                                <p className={`font-semibold ${remainingInRappen > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                  {formatAmount(remainingInRappen)}
                                 </p>
                               </div>
                             </div>
@@ -1865,21 +1895,21 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                               <div className="mt-2 w-full bg-background rounded-full h-1.5">
                                 <div 
                                   className="bg-orange-500 h-1.5 rounded-full"
-                                  style={{ width: `${(inst.paidAmount / inst.amount) * 100}%` }}
+                                  style={{ width: `${amountInRappen > 0 ? (paidInRappen / amountInRappen) * 100 : 0}%` }}
                                 />
                               </div>
                             )}
                           </div>
                           
                           <div className="flex flex-col gap-2">
-                            {remaining > 0 && (
+                            {remainingInRappen > 0 && (
                               <Button
                                 variant="outline"
                                 size="sm"
                                 className="h-8 text-xs whitespace-nowrap"
                                 onClick={() => {
                                   setSelectedInstallment(inst);
-                                  setPaymentAmount(remaining.toFixed(2));
+                                  setPaymentAmount((remainingInRappen / 100).toFixed(2));
                                 }}
                               >
                                 {inst.status === 'partial' ? 'Weiter zahlen' : 'Bezahlen'}

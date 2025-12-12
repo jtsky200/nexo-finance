@@ -1,8 +1,8 @@
 import { trpc } from '@/lib/trpc';
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 
-import { MessageSquare, RotateCcw, X } from 'lucide-react';
+import { MessageSquare, RotateCcw, X, GripVertical } from 'lucide-react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -30,6 +30,59 @@ interface AIChatDialogProps {
 export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
   const { t } = useTranslation();
   
+  // Drag state für bewegbaren Dialog
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef<{ startX: number; startY: number; initialX: number; initialY: number } | null>(null);
+
+  // Reset position when dialog opens
+  useEffect(() => {
+    if (open) {
+      setPosition({ x: 0, y: 0 });
+    }
+  }, [open]);
+
+  // Drag handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: position.x,
+      initialY: position.y,
+    };
+  }, [position]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging || !dragRef.current) return;
+      
+      const deltaX = e.clientX - dragRef.current.startX;
+      const deltaY = e.clientY - dragRef.current.startY;
+      
+      setPosition({
+        x: dragRef.current.initialX + deltaX,
+        y: dragRef.current.initialY + deltaY,
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      dragRef.current = null;
+    };
+
+    if (isDragging) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging]);
+
   // Lade gespeicherte Nachrichten aus LocalStorage
   const [messages, setMessages] = useState<Message[]>(() => {
     try {
@@ -137,19 +190,30 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl w-[95vw] sm:w-[85vw] md:w-[75vw] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden [&_*]:!scrollbar-none [&_*]:[-ms-overflow-style:none] [&_*]:[scrollbar-width:none] [&_*::-webkit-scrollbar]:hidden" showCloseButton={false}>
-        {/* Header - kompakt und professionell */}
-        <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50/50">
+      <DialogContent 
+        className="max-w-3xl w-[95vw] sm:w-[85vw] md:w-[75vw] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden [&_*]:!scrollbar-none [&_*]:[-ms-overflow-style:none] [&_*]:[scrollbar-width:none] [&_*::-webkit-scrollbar]:hidden" 
+        showCloseButton={false}
+        style={{
+          transform: `translate(calc(-50% + ${position.x}px), calc(-50% + ${position.y}px))`,
+        }}
+      >
+        {/* Header - Draggable */}
+        <div 
+          className={`flex items-center justify-between px-4 py-3 border-b bg-gray-50/50 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+          onMouseDown={handleMouseDown}
+        >
           <div className="flex items-center gap-2 min-w-0">
+            <GripVertical className="w-4 h-4 text-gray-400 flex-shrink-0" />
             <MessageSquare className="w-5 h-5 text-primary flex-shrink-0" />
-            <span className="font-semibold text-gray-900">Assistent</span>
+            <span className="font-semibold text-gray-900 select-none">Assistent</span>
           </div>
           <div className="flex items-center gap-3 flex-shrink-0 ml-4">
             {hasUserMessages && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleNewConversation}
+                onClick={(e) => { e.stopPropagation(); handleNewConversation(); }}
+                onMouseDown={(e) => e.stopPropagation()}
                 className="h-8 text-xs text-gray-500 hover:text-gray-700 gap-1.5 px-3"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
@@ -157,7 +221,8 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
               </Button>
             )}
             <button
-              onClick={() => onOpenChange(false)}
+              onClick={(e) => { e.stopPropagation(); onOpenChange(false); }}
+              onMouseDown={(e) => e.stopPropagation()}
               className="rounded-full p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 transition-colors"
               aria-label="Schließen"
             >

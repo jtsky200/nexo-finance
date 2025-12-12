@@ -1,4 +1,4 @@
-import { useAuth } from '@/_core/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,7 +15,7 @@ import { Menu, LogOut, Sun, Moon, Settings, User, HelpCircle, MessageSquare } fr
 
 import { useTranslation } from 'react-i18next';
 
-import { useLocation } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { useState } from 'react';
 import LanguageSwitcher from './LanguageSwitcher';
 import AIChatDialog from './AIChatDialog';
@@ -27,10 +27,19 @@ interface TopbarProps {
 
 export default function Topbar({ title, onMenuClick }: TopbarProps) {
   const { t } = useTranslation();
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
   const [aiChatOpen, setAiChatOpen] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      setLocation('/login');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
 
   const getUserInitials = () => {
     if (!user?.name) return 'U';
@@ -92,36 +101,34 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium">{user?.name || 'User'}</p>
+                <p className="text-sm font-medium">{user?.displayName || 'User'}</p>
                 <p className="text-xs text-muted-foreground">{user?.email}</p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem 
-              className="cursor-pointer"
-              onSelect={() => setLocation('/settings')}
-            >
-              <Settings className="mr-2 h-4 w-4" />
-              <span>{t('nav.settings', 'Einstellungen')}</span>
+            <DropdownMenuItem asChild className="cursor-pointer">
+              <Link href="/settings">
+                <Settings className="mr-2 h-4 w-4" />
+                <span>{t('nav.settings', 'Einstellungen')}</span>
+              </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem 
-              className="cursor-pointer"
-              onSelect={() => setLocation('/dashboard')}
-            >
-              <User className="mr-2 h-4 w-4" />
-              <span>{t('nav.dashboard', 'Dashboard')}</span>
+            <DropdownMenuItem asChild className="cursor-pointer">
+              <Link href="/dashboard">
+                <User className="mr-2 h-4 w-4" />
+                <span>{t('nav.dashboard', 'Dashboard')}</span>
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem 
               className="cursor-pointer"
-              onSelect={() => setAiChatOpen(true)}
+              onClick={() => setAiChatOpen(true)}
             >
               <MessageSquare className="mr-2 h-4 w-4" />
               <span>Assistent</span>
             </DropdownMenuItem>
             <DropdownMenuItem 
               className="cursor-pointer"
-              onSelect={() => window.open('https://help.nexo.com', '_blank')}
+              onClick={() => window.open('https://help.nexo.com', '_blank')}
             >
               <HelpCircle className="mr-2 h-4 w-4" />
               <span>{t('common.help', 'Hilfe')}</span>
@@ -129,7 +136,7 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
             <DropdownMenuSeparator />
             <DropdownMenuItem 
               className="cursor-pointer"
-              onSelect={() => logout()}
+              onClick={handleLogout}
             >
               <LogOut className="mr-2 h-4 w-4" />
               <span>{t('common.logout', 'Abmelden')}</span>

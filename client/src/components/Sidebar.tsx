@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 
 import { useState, useMemo, useCallback } from 'react';
 
-import { useLocation } from 'wouter';
+import { Link, useLocation } from 'wouter';
 
 import { useTranslation } from 'react-i18next';
 
@@ -31,7 +31,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
-  const [location, setLocation] = useLocation();
+  const [location] = useLocation();
   const { t } = useTranslation();
   const [miniCalMonth, setMiniCalMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -136,26 +136,21 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
             const isActive = location === item.path;
             
             return (
-              <button
-                type="button"
+              <Link
                 key={item.path}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setLocation(item.path);
-                  if (onClose) onClose();
-                }}
+                href={item.path}
+                onClick={() => onClose?.()}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors cursor-pointer w-full text-left",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors cursor-pointer w-full text-left no-underline",
                   "hover:bg-accent hover:text-accent-foreground",
                   isActive 
                     ? "bg-primary text-primary-foreground" 
                     : "text-muted-foreground"
                 )}
               >
-                <Icon className="w-5 h-5 pointer-events-none" />
-                <span className="font-medium pointer-events-none">{item.label}</span>
-              </button>
+                <Icon className="w-5 h-5" />
+                <span className="font-medium">{item.label}</span>
+              </Link>
             );
           })}
         </nav>

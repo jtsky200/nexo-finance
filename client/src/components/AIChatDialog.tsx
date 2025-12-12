@@ -137,7 +137,7 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl w-[95vw] sm:w-[90vw] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden" showCloseButton={false}>
+      <DialogContent className="max-w-3xl w-[95vw] sm:w-[85vw] md:w-[75vw] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden [&_*]:!scrollbar-none [&_*]:[-ms-overflow-style:none] [&_*]:[scrollbar-width:none] [&_*::-webkit-scrollbar]:hidden" showCloseButton={false}>
         {/* Header - kompakt und professionell */}
         <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50/50">
           <div className="flex items-center gap-2 min-w-0">
@@ -166,8 +166,8 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
           </div>
         </div>
 
-        {/* Chat Bereich - mehr Platz */}
-        <div className="flex-1 overflow-hidden">
+        {/* Chat Bereich - mehr Platz, keine Scrollbar */}
+        <div className="flex-1 overflow-hidden [&_*]:[-ms-overflow-style:none] [&_*]:[scrollbar-width:none]">
           <AIChatBox
             messages={messages}
             onSendMessage={handleSendMessage}

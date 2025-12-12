@@ -110,25 +110,10 @@ export default function AIChat() {
 
   return (
     <Layout title="Assistent">
-      <div className="min-h-[calc(100vh-200px)] flex flex-col bg-white">
-        {/* Header Section */}
-        <div className="flex items-center justify-between py-4 px-4 max-w-4xl mx-auto w-full">
-          {/* Titel - Nur anzeigen wenn noch keine Nachrichten */}
-          {!hasUserMessages ? (
-            <div className="text-center flex-1 animate-in fade-in duration-300">
-              <h1 className="text-2xl font-bold text-gray-900 mb-1">
-                Assistent
-              </h1>
-              <p className="text-sm text-gray-500">
-                Stelle Fragen und erhalte Hilfe zu allen Funktionen der Nexo-App
-              </p>
-            </div>
-          ) : (
-            <div className="flex-1" />
-          )}
-          
-          {/* Neue Konversation Button - Nur anzeigen wenn Nachrichten vorhanden */}
-          {hasUserMessages && (
+      <div className="h-[calc(100vh-140px)] flex flex-col bg-white">
+        {/* Kompakter Header - Nur wenn Nachrichten vorhanden */}
+        {hasUserMessages && (
+          <div className="flex items-center justify-end py-2 px-4 max-w-4xl mx-auto w-full">
             <Button
               variant="outline"
               size="sm"
@@ -138,18 +123,18 @@ export default function AIChat() {
               <RotateCcw className="size-4" />
               <span className="hidden sm:inline">Neue Konversation</span>
             </Button>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Chat Box */}
-        <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-4 pb-4">
+        {/* Chat Box - Nimmt den ganzen Platz */}
+        <div className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-4 pb-4 overflow-hidden">
           <AIChatBox
             messages={messages}
             onSendMessage={handleSendMessage}
             isLoading={chatMutation.isPending}
             placeholder={t('common.typeMessage', 'Nachricht eingeben...')}
-            height="calc(100vh - 300px)"
-            emptyStateMessage="Beginne eine Unterhaltung mit dem Assistenten"
+            height="100%"
+            emptyStateMessage="Wähle eine Frage oder stelle deine eigene"
             suggestedPrompts={hasUserMessages ? [] : suggestedPrompts}
           />
         </div>

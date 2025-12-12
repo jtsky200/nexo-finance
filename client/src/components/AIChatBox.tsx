@@ -479,6 +479,129 @@ export function AIChatBox({
     toast.success(newLang === 'de' ? 'Sprache auf Deutsch geändert' : 'Language changed to English');
   }, [i18n]);
 
+  // Render input form - wird in beiden Zuständen verwendet
+  const renderInputForm = () => (
+    <form
+      ref={inputAreaRef}
+      onSubmit={handleSubmit}
+      className="w-full"
+    >
+      {/* Hidden file inputs */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFileUpload(file);
+          e.target.value = '';
+        }}
+        accept="*/*"
+      />
+      <input
+        ref={imageInputRef}
+        type="file"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleImageUpload(file);
+          e.target.value = '';
+        }}
+        accept="image/*"
+      />
+
+      <div className="max-w-3xl mx-auto">
+        <div className="relative flex items-center rounded-2xl border-2 border-gray-200 bg-white shadow-sm transition-all duration-200 py-1 focus-within:border-gray-400">
+          {/* Left Icons */}
+          <div className="flex items-center gap-1 pl-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-150"
+              aria-label="Datei anhängen"
+              disabled={isLoading}
+            >
+              <Paperclip className="size-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => imageInputRef.current?.click()}
+              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-150"
+              aria-label="Bild hinzufügen"
+              disabled={isLoading}
+            >
+              <Image className="size-5" />
+            </button>
+          </div>
+
+          {/* Dynamisches Textarea */}
+          <Textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => {
+              setInput(e.target.value);
+              // Auto-resize
+              if (textareaRef.current) {
+                textareaRef.current.style.height = 'auto';
+                textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 150) + 'px';
+              }
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            className="flex-1 resize-none border-0 bg-transparent py-2.5 px-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-0 focus:outline-none min-h-[44px] max-h-[150px] transition-all duration-200"
+            rows={1}
+            disabled={isLoading}
+            style={{ height: 'auto' }}
+          />
+
+          {/* Right Icons */}
+          <div className="flex items-center gap-1 pr-2">
+            <button
+              type="button"
+              onClick={handleLanguageToggle}
+              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-150"
+              aria-label="Sprache wechseln"
+              disabled={isLoading}
+            >
+              <Globe className="size-5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleVoiceRecording}
+              className={cn(
+                "p-2 rounded-lg transition-all duration-150",
+                isRecording
+                  ? "text-red-500 bg-red-50 hover:bg-red-100"
+                  : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              )}
+              aria-label="Spracheingabe"
+              disabled={isLoading}
+            >
+              <Mic className="size-5" />
+            </button>
+            <button
+              type="submit"
+              disabled={!input.trim() || isLoading}
+              className={cn(
+                "p-2 rounded-lg transition-all duration-200",
+                input.trim() && !isLoading
+                  ? "bg-primary text-white hover:bg-primary/90 shadow-sm"
+                  : "text-gray-300 cursor-not-allowed"
+              )}
+              aria-label={isLoading ? "Wird gesendet..." : "Nachricht senden"}
+            >
+              {isLoading ? (
+                <Loader2 className="size-5 animate-spin" />
+              ) : (
+                <ArrowUp className="size-5" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  );
+
   return (
     <div
       ref={containerRef}
@@ -488,202 +611,93 @@ export function AIChatBox({
       )}
       style={{ height }}
     >
-      {/* Messages Area */}
-      <div ref={scrollAreaRef} className="flex-1 overflow-hidden">
-        {displayMessages.length === 0 ? (
-          /* Empty State - Zentriert mit Prompts */
-          <div className="flex h-full flex-col items-center justify-center p-6">
-            {/* Suggested Prompts - Zentriert im leeren Zustand */}
-            {normalizedPrompts.length > 0 && (
-              <div className="w-full max-w-xl animate-in fade-in duration-300 mb-6">
-                <div className="grid grid-cols-2 gap-3">
-                  {normalizedPrompts.map((prompt, index) => {
-                    const IconComponent = iconMap[prompt.icon as keyof typeof iconMap];
-                    return (
-                      <button
-                        key={index}
-                        onClick={() => handleSuggestedPromptClick(prompt.text)}
-                        disabled={isLoading}
-                        className="flex items-center gap-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 px-4 py-3.5 text-sm font-medium text-gray-700 transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm hover:shadow"
-                        type="button"
-                      >
-                        {IconComponent && <IconComponent className="size-4 text-gray-500 flex-shrink-0" />}
-                        <span className="text-left">{prompt.text}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+      {displayMessages.length === 0 ? (
+        /* Empty State - Alles kompakt zusammen oben */
+        <div className="flex flex-col p-4 animate-in fade-in duration-300">
+          {/* Suggested Prompts */}
+          {normalizedPrompts.length > 0 && (
+            <div className="w-full max-w-2xl mx-auto mb-4">
+              <p className="text-sm text-gray-500 text-center mb-4">{emptyStateMessage}</p>
+              <div className="grid grid-cols-2 gap-2.5">
+                {normalizedPrompts.map((prompt, index) => {
+                  const IconComponent = iconMap[prompt.icon as keyof typeof iconMap];
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => handleSuggestedPromptClick(prompt.text)}
+                      disabled={isLoading}
+                      className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 px-3 py-2.5 text-sm text-gray-700 transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm hover:shadow text-left"
+                      type="button"
+                    >
+                      {IconComponent && <IconComponent className="size-4 text-gray-500 flex-shrink-0" />}
+                      <span>{prompt.text}</span>
+                    </button>
+                  );
+                })}
               </div>
-            )}
-            <p className="text-sm text-gray-400">{emptyStateMessage}</p>
-          </div>
-        ) : (
-          <ScrollArea className="h-full">
-            <div className="flex flex-col p-6 space-y-4">
-              {displayMessages.map((message, index) => (
-                <div
-                  key={index}
-                  className={cn(
-                    "flex gap-4",
-                    message.role === "user"
-                      ? "justify-end"
-                      : "justify-start"
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "max-w-[85%] select-text",
-                      message.role === "user"
-                        ? "bg-gray-900 text-white rounded-2xl px-4 py-3"
-                        : "text-gray-900"
-                    )}
-                    // Prevent any click events that might trigger errors
-                    onClick={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                  >
-                    {message.role === "assistant" ? (
-                      <AIMessageContent content={message.content} onNavigate={handleNavigate} />
-                    ) : (
-                      <p className="whitespace-pre-wrap text-sm">
-                        {message.content}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              {isLoading && (
-                <div className="flex items-start gap-4 justify-start">
-                  <div className="rounded-lg bg-gray-100 px-4 py-3">
-                    <Loader2 className="size-4 animate-spin text-gray-500" />
-                  </div>
-                </div>
-              )}
             </div>
-          </ScrollArea>
-        )}
-      </div>
-
-      {/* Input Area - Dynamisches Eingabefeld mit professioneller Animation */}
-      <form
-        ref={inputAreaRef}
-        onSubmit={handleSubmit}
-        className="px-4 py-3 bg-white"
-      >
-        {/* Hidden file inputs */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) handleFileUpload(file);
-            e.target.value = '';
-          }}
-          accept="*/*"
-        />
-        <input
-          ref={imageInputRef}
-          type="file"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) handleImageUpload(file);
-            e.target.value = '';
-          }}
-          accept="image/*"
-        />
-
-        <div className="max-w-3xl mx-auto">
-          <div className="relative flex items-center rounded-2xl border-2 border-gray-200 bg-white shadow-sm transition-all duration-200 py-1 focus-within:border-gray-400">
-            {/* Left Icons */}
-            <div className="flex items-center gap-1 pl-2">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-150"
-                aria-label="Datei anhängen"
-                disabled={isLoading}
-              >
-                <Paperclip className="size-5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => imageInputRef.current?.click()}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-150"
-                aria-label="Bild hinzufügen"
-                disabled={isLoading}
-              >
-                <Image className="size-5" />
-              </button>
-            </div>
-
-            {/* Dynamisches Textarea */}
-            <Textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                // Auto-resize
-                if (textareaRef.current) {
-                  textareaRef.current.style.height = 'auto';
-                  textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 150) + 'px';
-                }
-              }}
-              onKeyDown={handleKeyDown}
-              placeholder={placeholder}
-              className="flex-1 resize-none border-0 bg-transparent py-2.5 px-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-0 focus:outline-none min-h-[44px] max-h-[150px] transition-all duration-200"
-              rows={1}
-              disabled={isLoading}
-              style={{ height: 'auto' }}
-            />
-
-            {/* Right Icons */}
-            <div className="flex items-center gap-1 pr-2">
-              <button
-                type="button"
-                onClick={handleLanguageToggle}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-150"
-                aria-label="Sprache wechseln"
-                disabled={isLoading}
-              >
-                <Globe className="size-5" />
-              </button>
-              <button
-                type="button"
-                onClick={handleVoiceRecording}
-                className={cn(
-                  "p-2 rounded-lg transition-all duration-150",
-                  isRecording
-                    ? "text-red-500 bg-red-50 hover:bg-red-100"
-                    : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
-                )}
-                aria-label="Spracheingabe"
-                disabled={isLoading}
-              >
-                <Mic className="size-5" />
-              </button>
-              <button
-                type="submit"
-                disabled={!input.trim() || isLoading}
-                className={cn(
-                  "p-2 rounded-lg transition-all duration-200",
-                  input.trim() && !isLoading
-                    ? "bg-primary text-white hover:bg-primary/90 shadow-sm"
-                    : "text-gray-300 cursor-not-allowed"
-                )}
-                aria-label={isLoading ? "Wird gesendet..." : "Nachricht senden"}
-              >
-                {isLoading ? (
-                  <Loader2 className="size-5 animate-spin" />
-                ) : (
-                  <ArrowUp className="size-5" />
-                )}
-              </button>
-            </div>
+          )}
+          
+          {/* Input direkt unter den Prompts */}
+          <div className="w-full max-w-2xl mx-auto px-0">
+            {renderInputForm()}
           </div>
         </div>
-      </form>
+      ) : (
+        /* Chat Mode - Messages und Input getrennt */
+        <>
+          {/* Messages Area */}
+          <div ref={scrollAreaRef} className="flex-1 overflow-hidden">
+            <ScrollArea className="h-full [&>div>div]:!overflow-y-auto [&>div>div]:[-ms-overflow-style:none] [&>div>div]:[scrollbar-width:none] [&>div>div::-webkit-scrollbar]:hidden">
+              <div className="flex flex-col p-4 space-y-4">
+                {displayMessages.map((message, index) => (
+                  <div
+                    key={index}
+                    className={cn(
+                      "flex gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300",
+                      message.role === "user"
+                        ? "justify-end"
+                        : "justify-start"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "max-w-[85%] select-text",
+                        message.role === "user"
+                          ? "bg-gray-900 text-white rounded-2xl px-4 py-3"
+                          : "text-gray-900"
+                      )}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      {message.role === "assistant" ? (
+                        <AIMessageContent content={message.content} onNavigate={handleNavigate} />
+                      ) : (
+                        <p className="whitespace-pre-wrap text-sm">
+                          {message.content}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {isLoading && (
+                  <div className="flex items-start gap-4 justify-start animate-in fade-in duration-200">
+                    <div className="rounded-lg bg-gray-100 px-4 py-3">
+                      <Loader2 className="size-4 animate-spin text-gray-500" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+
+          {/* Input Area - Am unteren Rand */}
+          <div className="px-4 py-3 bg-white border-t border-gray-100">
+            {renderInputForm()}
+          </div>
+        </>
+      )}
     </div>
   );
 }

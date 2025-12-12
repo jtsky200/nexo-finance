@@ -1040,6 +1040,17 @@ async function executeFunction(functionName: string, args: any, userId: string):
       
       console.log(`[getPersonDebts] Found ${invoicesSnapshot.docs.length} invoices`);
 
+      // RAW DEBUG: Log raw data for first invoice
+      if (invoicesSnapshot.docs.length > 0) {
+        const firstDoc = invoicesSnapshot.docs[0];
+        const rawData = firstDoc.data();
+        console.log(`[getPersonDebts] RAW first invoice keys: ${Object.keys(rawData).join(', ')}`);
+        console.log(`[getPersonDebts] RAW installments type: ${typeof rawData.installments}, isArray: ${Array.isArray(rawData.installments)}, length: ${rawData.installments?.length || 0}`);
+        if (rawData.installments && rawData.installments.length > 0) {
+          console.log(`[getPersonDebts] RAW first installment: ${JSON.stringify(rawData.installments[0])}`);
+        }
+      }
+
       const invoices = invoicesSnapshot.docs.map(doc => {
         const data = doc.data();
         const amountInChf = rappenToChf(data.amount || 0);
@@ -1050,7 +1061,7 @@ async function executeFunction(functionName: string, args: any, userId: string):
           (Array.isArray(installments) && installments.length > 0) ||
           (typeof data.installmentCount === 'number' && data.installmentCount > 0);
         
-        console.log(`[getPersonDebts] Invoice ${doc.id}: isInstallmentPlan=${data.isInstallmentPlan}, installments.length=${installments.length}, installmentCount=${data.installmentCount}, hasInstallmentPlan=${hasInstallmentPlan}`);
+        console.log(`[getPersonDebts] Invoice ${doc.id}: isInstallmentPlan=${data.isInstallmentPlan}, installments.length=${installments.length}, installmentCount=${data.installmentCount}, hasInstallmentPlan=${hasInstallmentPlan}, keys=${Object.keys(data).join(',')}`);
         
         // Berechne offene und bezahlte Raten
         const openInstallments = installments.filter((i: any) => i.status === 'pending' || i.status === 'open');
@@ -1103,6 +1114,13 @@ async function executeFunction(functionName: string, args: any, userId: string):
           installmentCount: installments.length,
           paidInstallments: paidInstallments.length,
           openInstallments: openInstallments.length,
+          // Debug fields
+          _debug: {
+            isInstallmentPlanFlag: data.isInstallmentPlan,
+            installmentsArrayLength: Array.isArray(data.installments) ? data.installments.length : 0,
+            installmentCountField: data.installmentCount,
+            allFields: Object.keys(data),
+          },
           nextDueDate: openInstallments.length > 0 
             ? openInstallments.sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0]?.dueDate 
             : null,
@@ -1139,6 +1157,10 @@ async function executeFunction(functionName: string, args: any, userId: string):
       const totalDebtChf = openInvoices.reduce((sum, inv) => sum + inv.remainingDebtChf, 0);
       const totalOpenInstallments = openInvoices.reduce((sum, inv) => sum + inv.openInstallments, 0);
 
+      // Prüfe ob irgendeine Rechnung einen Ratenplan hat
+      const hasAnyInstallmentPlan = invoices.some(inv => inv.hasInstallmentPlan);
+      const totalInstallmentCount = invoices.reduce((sum, inv) => sum + inv.installmentCount, 0);
+      
       return {
         personName: person.name,
         totalDebtChf: roundToSwiss5Rappen(totalDebtChf),
@@ -1146,7 +1168,31 @@ async function executeFunction(functionName: string, args: any, userId: string):
         invoiceCount: invoices.length,
         openInvoiceCount: openInvoices.length,
         totalOpenInstallments,
+        hasAnyInstallmentPlan,
+        totalInstallmentCount,
         invoices,
+        // Debug-Info für AI
+        debugSummary: `${person.name} hat ${invoices.length} Rechnung(en). ${hasAnyInstallmentPlan ? `Davon ${invoices.filter(i => i.hasInstallmentPlan).length} mit Ratenplan (gesamt ${totalInstallmentCount} Raten, ${totalOpenInstallments} offen).` : 'Keine Ratenpläne gefunden.'} RAW: installmentCounts=[${invoices.map(i => i.installmentCount).join(',')}]`,
+        // Explizite Ratenplan-Anzeige
+        ratenplanAnzeige: invoices.filter(i => i.hasInstallmentPlan && i.installments && i.installments.length > 0).map(i => ({
+          rechnung: i.description,
+          betragChf: i.totalAmountChf,
+          raten: i.installments,
+        })),
+        // RAW Debug für Fehlersuche - zeigt welche Felder in Firestore existieren
+        _rawDebug: invoicesSnapshot.docs.map(doc => {
+          const d = doc.data();
+          return {
+            id: doc.id,
+            fieldsInDoc: Object.keys(d),
+            hasInstallmentsField: 'installments' in d,
+            installmentsType: typeof d.installments,
+            installmentsIsArray: Array.isArray(d.installments),
+            installmentsLength: Array.isArray(d.installments) ? d.installments.length : 0,
+            isInstallmentPlanValue: d.isInstallmentPlan,
+            installmentCountValue: d.installmentCount,
+          };
+        }),
       };
     }
 
@@ -1508,7 +1554,14 @@ async function executeFunction(functionName: string, args: any, userId: string):
           const data = invDoc.data();
           // Konvertiere Beträge von Rappen zu CHF für die AI-Anzeige
           const amountInChf = rappenToChf(data.amount || 0);
-          const invoice = {
+          
+          // Prüfe auf Ratenplan
+          const installments = data.installments || [];
+          const hasInstallmentPlan = data.isInstallmentPlan === true || 
+            (Array.isArray(installments) && installments.length > 0) ||
+            (typeof data.installmentCount === 'number' && data.installmentCount > 0);
+          
+          const invoice: any = {
             id: invDoc.id,
             personId: personDoc.id,
             personName: personDoc.data().name,
@@ -1518,7 +1571,26 @@ async function executeFunction(functionName: string, args: any, userId: string):
             status: data.status || 'offen',
             dueDate: data.dueDate?.toDate?.()?.toISOString() || null,
             date: data.date?.toDate?.()?.toISOString() || null,
+            // Ratenplan-Informationen hinzufügen
+            hasInstallmentPlan,
+            installmentCount: installments.length,
+            isInstallmentPlan: data.isInstallmentPlan || false,
           };
+          
+          // Raten-Details wenn vorhanden
+          if (hasInstallmentPlan && installments.length > 0) {
+            const openInstallments = installments.filter((i: any) => i.status === 'pending' || i.status === 'open');
+            const paidInstallments = installments.filter((i: any) => i.status === 'paid' || i.status === 'completed');
+            invoice.paidInstallments = paidInstallments.length;
+            invoice.openInstallments = openInstallments.length;
+            invoice.installmentInterval = data.installmentInterval || 'monthly';
+            invoice.installments = installments.map((inst: any, idx: number) => ({
+              number: idx + 1,
+              amount: inst.amount,
+              dueDate: inst.dueDate?.toDate?.()?.toISOString() || inst.dueDate,
+              status: inst.status,
+            }));
+          }
           
           // Date filter
           if (startDate && invoice.dueDate && new Date(invoice.dueDate) < new Date(startDate)) continue;

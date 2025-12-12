@@ -816,7 +816,7 @@ async function findPersonByName(db, userId, personName) {
 }
 // Execute function calls from OpenAI Assistant - ALLE FUNKTIONEN
 async function executeFunction(functionName, args, userId) {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     if (!userId) {
         throw new Error('User ID is required');
     }
@@ -984,6 +984,16 @@ async function executeFunction(functionName, args, userId) {
             // Hole ALLE Rechnungen (nicht nur offene) um vollständiges Bild zu zeigen
             const invoicesSnapshot = await db.collection('people').doc(person.id).collection('invoices').get();
             console.log(`[getPersonDebts] Found ${invoicesSnapshot.docs.length} invoices`);
+            // RAW DEBUG: Log raw data for first invoice
+            if (invoicesSnapshot.docs.length > 0) {
+                const firstDoc = invoicesSnapshot.docs[0];
+                const rawData = firstDoc.data();
+                console.log(`[getPersonDebts] RAW first invoice keys: ${Object.keys(rawData).join(', ')}`);
+                console.log(`[getPersonDebts] RAW installments type: ${typeof rawData.installments}, isArray: ${Array.isArray(rawData.installments)}, length: ${((_a = rawData.installments) === null || _a === void 0 ? void 0 : _a.length) || 0}`);
+                if (rawData.installments && rawData.installments.length > 0) {
+                    console.log(`[getPersonDebts] RAW first installment: ${JSON.stringify(rawData.installments[0])}`);
+                }
+            }
             const invoices = invoicesSnapshot.docs.map(doc => {
                 var _a, _b, _c, _d;
                 const data = doc.data();
@@ -993,7 +1003,7 @@ async function executeFunction(functionName, args, userId) {
                 const hasInstallmentPlan = data.isInstallmentPlan === true ||
                     (Array.isArray(installments) && installments.length > 0) ||
                     (typeof data.installmentCount === 'number' && data.installmentCount > 0);
-                console.log(`[getPersonDebts] Invoice ${doc.id}: isInstallmentPlan=${data.isInstallmentPlan}, installments.length=${installments.length}, installmentCount=${data.installmentCount}, hasInstallmentPlan=${hasInstallmentPlan}`);
+                console.log(`[getPersonDebts] Invoice ${doc.id}: isInstallmentPlan=${data.isInstallmentPlan}, installments.length=${installments.length}, installmentCount=${data.installmentCount}, hasInstallmentPlan=${hasInstallmentPlan}, keys=${Object.keys(data).join(',')}`);
                 // Berechne offene und bezahlte Raten
                 const openInstallments = installments.filter((i) => i.status === 'pending' || i.status === 'open');
                 const paidInstallments = installments.filter((i) => i.status === 'paid' || i.status === 'completed');
@@ -1042,6 +1052,13 @@ async function executeFunction(functionName, args, userId) {
                     installmentCount: installments.length,
                     paidInstallments: paidInstallments.length,
                     openInstallments: openInstallments.length,
+                    // Debug fields
+                    _debug: {
+                        isInstallmentPlanFlag: data.isInstallmentPlan,
+                        installmentsArrayLength: Array.isArray(data.installments) ? data.installments.length : 0,
+                        installmentCountField: data.installmentCount,
+                        allFields: Object.keys(data),
+                    },
                     nextDueDate: openInstallments.length > 0
                         ? (_d = openInstallments.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0]) === null || _d === void 0 ? void 0 : _d.dueDate
                         : null,
@@ -1080,6 +1097,9 @@ async function executeFunction(functionName, args, userId) {
             const openInvoices = invoices.filter(inv => inv.status !== 'paid' && inv.status !== 'completed');
             const totalDebtChf = openInvoices.reduce((sum, inv) => sum + inv.remainingDebtChf, 0);
             const totalOpenInstallments = openInvoices.reduce((sum, inv) => sum + inv.openInstallments, 0);
+            // Prüfe ob irgendeine Rechnung einen Ratenplan hat
+            const hasAnyInstallmentPlan = invoices.some(inv => inv.hasInstallmentPlan);
+            const totalInstallmentCount = invoices.reduce((sum, inv) => sum + inv.installmentCount, 0);
             return {
                 personName: person.name,
                 totalDebtChf: roundToSwiss5Rappen(totalDebtChf),
@@ -1087,7 +1107,31 @@ async function executeFunction(functionName, args, userId) {
                 invoiceCount: invoices.length,
                 openInvoiceCount: openInvoices.length,
                 totalOpenInstallments,
+                hasAnyInstallmentPlan,
+                totalInstallmentCount,
                 invoices,
+                // Debug-Info für AI
+                debugSummary: `${person.name} hat ${invoices.length} Rechnung(en). ${hasAnyInstallmentPlan ? `Davon ${invoices.filter(i => i.hasInstallmentPlan).length} mit Ratenplan (gesamt ${totalInstallmentCount} Raten, ${totalOpenInstallments} offen).` : 'Keine Ratenpläne gefunden.'} RAW: installmentCounts=[${invoices.map(i => i.installmentCount).join(',')}]`,
+                // Explizite Ratenplan-Anzeige
+                ratenplanAnzeige: invoices.filter(i => i.hasInstallmentPlan && i.installments && i.installments.length > 0).map(i => ({
+                    rechnung: i.description,
+                    betragChf: i.totalAmountChf,
+                    raten: i.installments,
+                })),
+                // RAW Debug für Fehlersuche - zeigt welche Felder in Firestore existieren
+                _rawDebug: invoicesSnapshot.docs.map(doc => {
+                    const d = doc.data();
+                    return {
+                        id: doc.id,
+                        fieldsInDoc: Object.keys(d),
+                        hasInstallmentsField: 'installments' in d,
+                        installmentsType: typeof d.installments,
+                        installmentsIsArray: Array.isArray(d.installments),
+                        installmentsLength: Array.isArray(d.installments) ? d.installments.length : 0,
+                        isInstallmentPlanValue: d.isInstallmentPlan,
+                        installmentCountValue: d.installmentCount,
+                    };
+                }),
             };
         }
         case 'getPersonInstallments': {
@@ -1417,6 +1461,11 @@ async function executeFunction(functionName, args, userId) {
                     const data = invDoc.data();
                     // Konvertiere Beträge von Rappen zu CHF für die AI-Anzeige
                     const amountInChf = rappenToChf(data.amount || 0);
+                    // Prüfe auf Ratenplan
+                    const installments = data.installments || [];
+                    const hasInstallmentPlan = data.isInstallmentPlan === true ||
+                        (Array.isArray(installments) && installments.length > 0) ||
+                        (typeof data.installmentCount === 'number' && data.installmentCount > 0);
                     const invoice = {
                         id: invDoc.id,
                         personId: personDoc.id,
@@ -1425,9 +1474,30 @@ async function executeFunction(functionName, args, userId) {
                         amount: amountInChf,
                         currency: data.currency || 'CHF',
                         status: data.status || 'offen',
-                        dueDate: ((_c = (_b = (_a = data.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
-                        date: ((_f = (_e = (_d = data.date) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null,
+                        dueDate: ((_d = (_c = (_b = data.dueDate) === null || _b === void 0 ? void 0 : _b.toDate) === null || _c === void 0 ? void 0 : _c.call(_b)) === null || _d === void 0 ? void 0 : _d.toISOString()) || null,
+                        date: ((_g = (_f = (_e = data.date) === null || _e === void 0 ? void 0 : _e.toDate) === null || _f === void 0 ? void 0 : _f.call(_e)) === null || _g === void 0 ? void 0 : _g.toISOString()) || null,
+                        // Ratenplan-Informationen hinzufügen
+                        hasInstallmentPlan,
+                        installmentCount: installments.length,
+                        isInstallmentPlan: data.isInstallmentPlan || false,
                     };
+                    // Raten-Details wenn vorhanden
+                    if (hasInstallmentPlan && installments.length > 0) {
+                        const openInstallments = installments.filter((i) => i.status === 'pending' || i.status === 'open');
+                        const paidInstallments = installments.filter((i) => i.status === 'paid' || i.status === 'completed');
+                        invoice.paidInstallments = paidInstallments.length;
+                        invoice.openInstallments = openInstallments.length;
+                        invoice.installmentInterval = data.installmentInterval || 'monthly';
+                        invoice.installments = installments.map((inst, idx) => {
+                            var _a, _b, _c;
+                            return ({
+                                number: idx + 1,
+                                amount: inst.amount,
+                                dueDate: ((_c = (_b = (_a = inst.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || inst.dueDate,
+                                status: inst.status,
+                            });
+                        });
+                    }
                     // Date filter
                     if (startDate && invoice.dueDate && new Date(invoice.dueDate) < new Date(startDate))
                         continue;
@@ -1714,7 +1784,7 @@ async function executeFunction(functionName, args, userId) {
                     totalInstallments: installments.length,
                     isFullyPaid,
                     nextDueDate: openInstallments.length > 0
-                        ? (_g = openInstallments.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0]) === null || _g === void 0 ? void 0 : _g.dueDate
+                        ? (_h = openInstallments.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0]) === null || _h === void 0 ? void 0 : _h.dueDate
                         : null,
                 },
             };

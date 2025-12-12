@@ -980,8 +980,10 @@ async function executeFunction(functionName, args, userId) {
             if (!person) {
                 return { error: `Person "${personName}" nicht gefunden` };
             }
+            console.log(`[getPersonDebts] Looking up debts for person: ${person.id} (${person.name})`);
             // Hole ALLE Rechnungen (nicht nur offene) um vollständiges Bild zu zeigen
             const invoicesSnapshot = await db.collection('people').doc(person.id).collection('invoices').get();
+            console.log(`[getPersonDebts] Found ${invoicesSnapshot.docs.length} invoices`);
             const invoices = invoicesSnapshot.docs.map(doc => {
                 var _a, _b, _c, _d;
                 const data = doc.data();
@@ -991,6 +993,7 @@ async function executeFunction(functionName, args, userId) {
                 const hasInstallmentPlan = data.isInstallmentPlan === true ||
                     (Array.isArray(installments) && installments.length > 0) ||
                     (typeof data.installmentCount === 'number' && data.installmentCount > 0);
+                console.log(`[getPersonDebts] Invoice ${doc.id}: isInstallmentPlan=${data.isInstallmentPlan}, installments.length=${installments.length}, installmentCount=${data.installmentCount}, hasInstallmentPlan=${hasInstallmentPlan}`);
                 // Berechne offene und bezahlte Raten
                 const openInstallments = installments.filter((i) => i.status === 'pending' || i.status === 'open');
                 const paidInstallments = installments.filter((i) => i.status === 'paid' || i.status === 'completed');

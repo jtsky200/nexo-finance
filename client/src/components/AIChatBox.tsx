@@ -4,7 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { 
   Loader2, Send, Paperclip, Image, Globe, Mic, Tag, FileText, Zap, ArrowUp, 
-  Receipt, Bell, Wallet, ShoppingCart, Calendar, ScanLine,
+  ClipboardList, Bell, Wallet, ShoppingCart, Calendar, ScanLine,
   // Icons für AI-Antworten
   LayoutDashboard, Users, Folder, Settings, Check, Plus, Search, Edit, Trash,
   Clock, Euro, TrendingUp, TrendingDown, Info, AlertCircle, type LucideIcon
@@ -80,7 +80,7 @@ const iconMap = {
   tag: Tag,
   fileText: FileText,
   zap: Zap,
-  receipt: Receipt,
+  receipt: ClipboardList,
   bell: Bell,
   wallet: Wallet,
   shoppingCart: ShoppingCart,
@@ -98,7 +98,8 @@ const aiIconMap: Record<string, LucideIcon> = {
   'file-text': FileText,
   'folder': Folder,
   'shopping-cart': ShoppingCart,
-  'receipt': Receipt,
+  'receipt': ClipboardList,
+  'clipboard-list': ClipboardList,
   'settings': Settings,
   'check': Check,
   'plus': Plus,
@@ -123,9 +124,9 @@ const navRouteMap: Record<string, { path: string; icon: LucideIcon }> = {
   'finanzen': { path: '/finance', icon: Wallet },
   'people': { path: '/people', icon: Users },
   'personen': { path: '/people', icon: Users },
-  'invoices': { path: '/bills', icon: Receipt },
-  'bills': { path: '/bills', icon: Receipt },
-  'rechnungen': { path: '/bills', icon: Receipt },
+  'invoices': { path: '/bills', icon: ClipboardList },
+  'bills': { path: '/bills', icon: ClipboardList },
+  'rechnungen': { path: '/bills', icon: ClipboardList },
   'documents': { path: '/documents', icon: Folder },
   'dokumente': { path: '/documents', icon: Folder },
   'shopping': { path: '/shopping', icon: ShoppingCart },

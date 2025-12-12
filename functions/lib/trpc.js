@@ -1040,27 +1040,101 @@ async function executeFunction(functionName, args, userId) {
             if (!person) {
                 return { error: `Person "${personName}" nicht gefunden` };
             }
-            // Hole nur Rechnungen MIT Ratenplan
-            const invoicesSnapshot = await db.collection('people').doc(person.id).collection('invoices')
-                .where('isInstallmentPlan', '==', true)
-                .get();
-            if (invoicesSnapshot.empty) {
+            console.log(`[getPersonInstallments] Searching invoices for person: ${person.id} (${person.name})`);
+            // Hole ALLE Rechnungen und filtere dann nach Ratenplan
+            // Da Firestore keine "array is not empty" Abfrage unterstützt
+            const invoicesSnapshot = await db.collection('people').doc(person.id).collection('invoices').get();
+            console.log(`[getPersonInstallments] Found ${invoicesSnapshot.size} total invoices`);
+            // Log all invoices for debugging
+            invoicesSnapshot.docs.forEach((doc, idx) => {
+                const data = doc.data();
+                console.log(`[getPersonInstallments] Invoice ${idx}: id=${doc.id}, isInstallmentPlan=${data.isInstallmentPlan}, installments=${Array.isArray(data.installments) ? data.installments.length : 'not array'}, installmentCount=${data.installmentCount}`);
+            });
+            // Filtere Rechnungen die entweder isInstallmentPlan=true haben ODER ein installments Array mit Einträgen ODER installmentCount > 0
+            const invoicesWithInstallments = invoicesSnapshot.docs.filter(doc => {
+                const data = doc.data();
+                const hasInstallmentPlanFlag = data.isInstallmentPlan === true;
+                const hasInstallmentsArray = Array.isArray(data.installments) && data.installments.length > 0;
+                const hasInstallmentCount = typeof data.installmentCount === 'number' && data.installmentCount > 0;
+                return hasInstallmentPlanFlag || hasInstallmentsArray || hasInstallmentCount;
+            });
+            console.log(`[getPersonInstallments] Found ${invoicesWithInstallments.length} invoices with installments`);
+            if (invoicesWithInstallments.length === 0) {
+                // Return debug info if no installments found
+                const debugInfo = invoicesSnapshot.docs.map(doc => {
+                    const data = doc.data();
+                    return {
+                        id: doc.id,
+                        description: data.description,
+                        amount: data.amount,
+                        isInstallmentPlan: data.isInstallmentPlan,
+                        installmentCount: data.installmentCount,
+                        hasInstallmentsArray: Array.isArray(data.installments),
+                        installmentsLength: Array.isArray(data.installments) ? data.installments.length : 0,
+                    };
+                });
                 return {
                     personName: person.name,
                     hasInstallmentPlan: false,
-                    message: `${person.name} hat keinen aktiven Ratenplan.`,
+                    message: `${person.name} hat keinen aktiven Ratenplan. (Debug: ${invoicesSnapshot.size} Rechnungen gefunden)`,
+                    debugInvoices: debugInfo,
                 };
             }
-            const plans = invoicesSnapshot.docs.map(doc => {
+            // Helper: Bestimme ob Betrag in CHF oder Rappen ist und konvertiere
+            const toChf = (amount, totalAmountRappen) => {
+                if (!amount)
+                    return 0;
+                const numAmount = Number(amount);
+                // Wenn der Betrag sehr groß ist im Vergleich zum Gesamtbetrag (z.B. 5000 vs 20000),
+                // dann ist er wahrscheinlich schon in CHF. Wenn er kleiner ist, könnte er in Rappen sein.
+                // Einfache Heuristik: Wenn der Betrag > 100 und totalAmount in Rappen < Betrag * 100, dann CHF
+                const totalChf = totalAmountRappen / 100;
+                if (numAmount <= totalChf && numAmount > 0) {
+                    // Betrag ist kleiner oder gleich dem Gesamtbetrag in CHF -> wahrscheinlich CHF
+                    return numAmount;
+                }
+                // Sonst behandle als Rappen
+                return rappenToChf(numAmount);
+            };
+            // Helper: Konvertiere dueDate (kann Timestamp oder String sein)
+            const getDueDateString = (dueDate) => {
+                if (!dueDate)
+                    return null;
+                if (typeof dueDate === 'string')
+                    return dueDate;
+                if (typeof dueDate.toDate === 'function') {
+                    return dueDate.toDate().toISOString().split('T')[0];
+                }
+                if (dueDate instanceof Date) {
+                    return dueDate.toISOString().split('T')[0];
+                }
+                return String(dueDate);
+            };
+            // Helper: Konvertiere Date für Sortierung
+            const getDueDateForSort = (dueDate) => {
+                if (!dueDate)
+                    return 0;
+                if (typeof dueDate === 'string')
+                    return new Date(dueDate).getTime();
+                if (typeof dueDate.toDate === 'function')
+                    return dueDate.toDate().getTime();
+                if (dueDate instanceof Date)
+                    return dueDate.getTime();
+                return 0;
+            };
+            // Verwende die gefilterten Rechnungen
+            const plans = invoicesWithInstallments.map(doc => {
                 const data = doc.data();
-                const totalAmountChf = rappenToChf(data.amount || 0);
+                const totalAmountRappen = data.amount || 0;
+                const totalAmountChf = rappenToChf(totalAmountRappen);
                 const installments = data.installments || [];
                 const openInstallments = installments.filter((i) => i.status === 'pending' || i.status === 'open');
                 const paidInstallments = installments.filter((i) => i.status === 'paid' || i.status === 'completed');
-                const paidAmountChf = paidInstallments.reduce((sum, inst) => sum + rappenToChf(inst.amount || 0), 0);
-                const remainingAmountChf = openInstallments.reduce((sum, inst) => sum + rappenToChf(inst.amount || 0), 0);
+                // Konvertiere Beträge mit Heuristik
+                const paidAmountChf = paidInstallments.reduce((sum, inst) => sum + toChf(inst.amount, totalAmountRappen), 0);
+                const remainingAmountChf = openInstallments.reduce((sum, inst) => sum + toChf(inst.amount, totalAmountRappen), 0);
                 // Sortiere Raten nach Fälligkeit
-                const sortedInstallments = [...installments].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+                const sortedInstallments = [...installments].sort((a, b) => getDueDateForSort(a.dueDate) - getDueDateForSort(b.dueDate));
                 const nextDueInstallment = sortedInstallments.find((i) => i.status === 'pending' || i.status === 'open');
                 return {
                     invoiceId: doc.id,
@@ -1071,12 +1145,12 @@ async function executeFunction(functionName, args, userId) {
                     totalInstallments: installments.length,
                     paidInstallments: paidInstallments.length,
                     openInstallments: openInstallments.length,
-                    nextDueDate: (nextDueInstallment === null || nextDueInstallment === void 0 ? void 0 : nextDueInstallment.dueDate) || null,
-                    nextDueAmountChf: nextDueInstallment ? rappenToChf(nextDueInstallment.amount || 0) : null,
+                    nextDueDate: getDueDateString(nextDueInstallment === null || nextDueInstallment === void 0 ? void 0 : nextDueInstallment.dueDate),
+                    nextDueAmountChf: nextDueInstallment ? toChf(nextDueInstallment.amount, totalAmountRappen) : null,
                     installments: sortedInstallments.map((inst, idx) => ({
-                        number: idx + 1,
-                        amountChf: rappenToChf(inst.amount || 0),
-                        dueDate: inst.dueDate,
+                        number: inst.number || idx + 1,
+                        amountChf: toChf(inst.amount, totalAmountRappen),
+                        dueDate: getDueDateString(inst.dueDate),
                         status: inst.status === 'paid' || inst.status === 'completed' ? 'bezahlt' : 'offen',
                         paidDate: inst.paidDate || null,
                     })),

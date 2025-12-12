@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import { AIChatBox, type Message } from './AIChatBox';
 
 import { Button } from './ui/button';
-import { Dialog } from './ui/dialog';
+import { createPortal } from 'react-dom';
 
 const CHAT_STORAGE_KEY = 'nexo_chat_messages';
 const SYSTEM_MESSAGE: Message = {
@@ -88,6 +88,23 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
       document.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isDragging]);
+
+  // ESC-Taste zum Schließen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && open) {
+        onOpenChange(false);
+      }
+    };
+
+    if (open) {
+      document.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open, onOpenChange]);
 
   // Lade gespeicherte Nachrichten aus LocalStorage
   const [messages, setMessages] = useState<Message[]>(() => {
@@ -194,12 +211,20 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
     { text: 'Wie scanne ich eine Rechnung?', icon: 'scan' as const },
   ], []);
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+  // Nicht rendern wenn nicht offen
+  if (!open) return null;
+
+  return createPortal(
+    <>
+      {/* Background overlay */}
+      <div 
+        className="fixed inset-0 z-50 bg-black/50 animate-in fade-in-0" 
+        onClick={() => onOpenChange(false)}
+      />
       {/* Draggable Dialog Container */}
       <div
         ref={dialogRef}
-        className="fixed z-50 bg-background rounded-lg border shadow-lg max-w-3xl w-[95vw] sm:w-[85vw] md:w-[75vw] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden"
+        className="fixed z-50 bg-background rounded-lg border shadow-lg max-w-3xl w-[95vw] sm:w-[85vw] md:w-[75vw] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden animate-in fade-in-0 zoom-in-95"
         style={{
           left: '50%',
           top: '50%',
@@ -254,11 +279,7 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
           />
         </div>
       </div>
-      {/* Background overlay */}
-      <div 
-        className="fixed inset-0 z-40 bg-black/50" 
-        onClick={() => onOpenChange(false)}
-      />
-    </Dialog>
+    </>,
+    document.body
   );
 }

@@ -1,0 +1,153 @@
+name: Firebase Safe Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_to:
+        description: 'Which parts to deploy (none, functions, hosting, all)'
+        required: true
+        default: 'none'
+      production:
+        description: 'Deploy to production project? If false, use FIREBASE_PREVIEW_PROJECT'
+        required: true
+        default: 'false'
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - "**"
+
+jobs:
+  build_and_test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        run: npm i -g pnpm@latest
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Lint / Typecheck
+        run: pnpm check
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build client + server
+        run: |
+          pnpm build
+          cd functions && pnpm install && npm run build
+
+      - name: Upload build artifacts (optional)
+        uses: actions/upload-artifact@v4
+        with:
+          name: build
+          path: |
+            dist/**
+            functions/lib/**
+
+  deploy:
+    name: Deploy to Firebase
+    needs: build_and_test
+    if: github.event_name == 'workflow_dispatch' || (github.ref == 'refs/heads/main' && secrets.AUTO_DEPLOY == 'true')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      # Protect this environment for approval if you want (set in repo settings)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine changed paths
+        id: changed
+        run: |
+          git fetch origin main --quiet || true
+          CHANGED=$(git diff --name-only origin/main...HEAD || git diff --name-only $GITHUB_SHA || true)
+          echo "changed=$CHANGED" >> $GITHUB_OUTPUT
+
+      - name: Prevent accidental hosting deploy if client changes
+        if: contains(github.event.inputs.deploy_to, 'hosting') || github.event.inputs.deploy_to == 'all'
+        run: |
+          echo "Checking whether client/ or client-mobile/ are part of changed paths..."
+          if echo "${{ steps.changed.outputs.changed }}" | grep -E "^(client/|client-mobile/)"; then
+            echo "Client files changed — aborting hosting deploy."
+            exit 1
+          fi
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        run: npm i -g pnpm@latest
+
+      - name: Install project dependencies
+        run: pnpm install
+
+      - name: Install firebase-tools
+        run: npm i -g firebase-tools
+
+      - name: Configure service account (if provided)
+        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        run: |
+          echo "$FIREBASE_SERVICE_ACCOUNT" > ${HOME}/firebase-account.json
+          echo "::add-mask::$FIREBASE_SERVICE_ACCOUNT"
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Set GOOGLE_APPLICATION_CREDENTIALS
+        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        run: |
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${HOME}/firebase-account.json" >> $GITHUB_ENV
+          echo "Set GOOGLE_APPLICATION_CREDENTIALS to file"
+
+      - name: Select project
+        run: |
+          if [ "${{ github.event.inputs.production }}" = 'true' ]; then
+            echo "PROJECT=${{ secrets.FIREBASE_PROJECT_ID }}" >> $GITHUB_ENV
+          else
+            echo "PROJECT=${{ secrets.FIREBASE_PREVIEW_PROJECT_ID || secrets.FIREBASE_PROJECT_ID }}" >> $GITHUB_ENV
+          fi
+
+      - name: Deploy functions
+        if: |
+          github.event_name == 'workflow_dispatch' ||
+          (github.ref == 'refs/heads/main' && secrets.AUTO_DEPLOY == 'true') ||
+          contains(github.event.inputs.deploy_to, 'functions') ||
+          github.event.inputs.deploy_to == 'all'
+        run: |
+          echo "Deploying functions to project $PROJECT"
+          firebase deploy --only functions --project $PROJECT --token ${{ secrets.FIREBASE_TOKEN }}
+
+      - name: Decide hosting deploy
+        id: hosting_check
+        run: |
+          # HOSTING deploy allowed if manual or auto-hosting flag enabled
+          if [ "${{ github.event_name }}" = 'workflow_dispatch' ]; then
+            echo "host_deploy=true" >> $GITHUB_OUTPUT
+          else
+            if [ "${GITHUB_REF}" = 'refs/heads/main' ] && [ "${{ secrets.AUTO_DEPLOY_HOSTING }}" = 'true' ] && [ "${{ secrets.AUTO_DEPLOY }}" = 'true' ]; then
+              echo "host_deploy=true" >> $GITHUB_OUTPUT
+            else
+              echo "host_deploy=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Deploy hosting
+        if: steps.hosting_check.outputs.host_deploy == 'true' && (contains(github.event.inputs.deploy_to, 'hosting') || github.event.inputs.deploy_to == 'all' || (github.ref == 'refs/heads/main' && secrets.AUTO_DEPLOY_HOSTING == 'true'))
+        run: |
+          echo "Deploying hosting to project $PROJECT"
+          firebase deploy --only hosting --project $PROJECT --token ${{ secrets.FIREBASE_TOKEN }}

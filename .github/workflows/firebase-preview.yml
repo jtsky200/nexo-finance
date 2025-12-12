@@ -1,0 +1,104 @@
+name: Firebase Preview Deploy (PRs)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [ main ]
+
+jobs:
+  preview_deploy:
+    name: Deploy preview (PR)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    environment:
+      name: preview
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        run: npm i -g pnpm@latest
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Lint / Typecheck
+        run: pnpm check
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build client + server
+        run: |
+          pnpm build
+          cd functions && pnpm install && npm run build
+
+      - name: Install jq for JSON parsing
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Configure service account (if provided)
+        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        run: |
+          echo "$FIREBASE_SERVICE_ACCOUNT" > ${HOME}/firebase-account.json
+          echo "::add-mask::$FIREBASE_SERVICE_ACCOUNT"
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Set GOOGLE_APPLICATION_CREDENTIALS
+        if: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+        run: |
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${HOME}/firebase-account.json" >> $GITHUB_ENV
+
+      - name: Select preview project
+        run: |
+          if [ -n "${{ secrets.FIREBASE_PREVIEW_PROJECT_ID }}" ]; then
+            echo "PROJECT=${{ secrets.FIREBASE_PREVIEW_PROJECT_ID }}" >> $GITHUB_ENV
+          else
+            echo "PROJECT=${{ secrets.FIREBASE_PROJECT_ID }}" >> $GITHUB_ENV
+          fi
+
+      - name: Deploy functions to preview
+        run: |
+          echo "Deploying functions to preview project $PROJECT"
+          firebase deploy --only functions --project $PROJECT --token ${{ secrets.FIREBASE_TOKEN }}
+
+      - name: Deploy hosting to preview channel (PR)
+        if: ${{ secrets.FIREBASE_PREVIEW_PROJECT_ID != '' || secrets.FIREBASE_PROJECT_ID != '' }}
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          echo "Deploying hosting to preview project $PROJECT on channel pr-${PR_NUMBER}"
+          HOSTING_JSON=$(firebase hosting:channel:deploy pr-${PR_NUMBER} --project $PROJECT --token $FIREBASE_TOKEN --json 2>/dev/null || true)
+          echo "$HOSTING_JSON" > hosting-output.json || true
+          PREVIEW_URL=$(echo "$HOSTING_JSON" | jq -r '.result.previewUrl // .result.url // .hosting[0].url // .hosting[0].previewUrl' || true)
+          echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
+          echo "PREVIEW_URL=$PREVIEW_URL" >> $GITHUB_ENV
+
+      - name: Post PR comment with preview URL
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const previewUrl = process.env.PREVIEW_URL || process.env.preview_url || '';
+            const prNumber = ${{ github.event.pull_request.number }};
+            if (!previewUrl) {
+              console.log('No preview URL available.');
+              return;
+            }
+            const body = `Preview preview for PR #${prNumber} is available: ${previewUrl}`;
+            await github.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body,
+            });

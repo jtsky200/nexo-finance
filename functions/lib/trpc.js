@@ -282,7 +282,31 @@ Die Funktion erkennt automatisch die Richtung basierend auf der Formulierung.`,
             type: 'function',
             function: {
                 name: 'getPersonDebts',
-                description: 'Ermittelt die Schulden (offene Rechnungen) einer Person. Gibt den Gesamtbetrag und Details aller offenen Rechnungen zurück.',
+                description: 'Ermittelt die Schulden (offene Rechnungen) einer Person. Gibt den Gesamtbetrag, Details aller offenen Rechnungen UND Ratenpläne zurück. Verwendet diese Funktion um herauszufinden wie viel jemand noch schuldet und welche Raten offen sind.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        personName: { type: 'string', description: 'Der Name der Person' },
+                    },
+                    required: ['personName'],
+                },
+            },
+        },
+        {
+            type: 'function',
+            function: {
+                name: 'getPersonInstallments',
+                description: `Ermittelt die RATENPLAN-DETAILS einer Person. Zeigt:
+- Alle Raten mit Status (offen/bezahlt)
+- Fälligkeitsdaten
+- Beträge pro Rate
+- Restschuld
+
+WICHTIG: Verwende diese Funktion wenn der Nutzer fragt:
+- "Welche Raten hat Person X?"
+- "Wie viel hat Person X noch offen?"
+- "Wann ist die nächste Rate fällig?"
+- "Hat Person X schon bezahlt?"`,
                 parameters: {
                     type: 'object',
                     properties: {
@@ -792,7 +816,7 @@ async function findPersonByName(db, userId, personName) {
 }
 // Execute function calls from OpenAI Assistant - ALLE FUNKTIONEN
 async function executeFunction(functionName, args, userId) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g;
     if (!userId) {
         throw new Error('User ID is required');
     }
@@ -956,26 +980,117 @@ async function executeFunction(functionName, args, userId) {
             if (!person) {
                 return { error: `Person "${personName}" nicht gefunden` };
             }
-            const invoicesSnapshot = await db.collection('people').doc(person.id).collection('invoices')
-                .where('status', 'in', getOpenStatusVariants())
-                .get();
+            // Hole ALLE Rechnungen (nicht nur offene) um vollständiges Bild zu zeigen
+            const invoicesSnapshot = await db.collection('people').doc(person.id).collection('invoices').get();
             const invoices = invoicesSnapshot.docs.map(doc => {
-                var _a, _b, _c;
+                var _a, _b, _c, _d;
                 const data = doc.data();
+                const amountInChf = rappenToChf(data.amount || 0);
+                // Prüfe ob Ratenplan existiert
+                const hasInstallmentPlan = data.isInstallmentPlan === true;
+                const installments = data.installments || [];
+                // Berechne offene und bezahlte Raten
+                const openInstallments = installments.filter((i) => i.status === 'pending' || i.status === 'open');
+                const paidInstallments = installments.filter((i) => i.status === 'paid' || i.status === 'completed');
+                // Berechne Restschuld basierend auf offenen Raten
+                let remainingDebt = amountInChf;
+                if (hasInstallmentPlan && installments.length > 0) {
+                    remainingDebt = openInstallments.reduce((sum, inst) => sum + rappenToChf(inst.amount || 0), 0);
+                }
                 return {
                     id: doc.id,
                     description: data.description || '',
-                    amount: data.amount || 0,
+                    totalAmountChf: amountInChf,
+                    remainingDebtChf: remainingDebt,
+                    status: data.status || 'open',
                     dueDate: ((_c = (_b = (_a = data.dueDate) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
+                    hasInstallmentPlan,
+                    installmentCount: installments.length,
+                    paidInstallments: paidInstallments.length,
+                    openInstallments: openInstallments.length,
+                    nextDueDate: openInstallments.length > 0
+                        ? (_d = openInstallments.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0]) === null || _d === void 0 ? void 0 : _d.dueDate
+                        : null,
+                    installments: hasInstallmentPlan ? installments.map((inst, idx) => ({
+                        number: idx + 1,
+                        amountChf: rappenToChf(inst.amount || 0),
+                        dueDate: inst.dueDate,
+                        status: inst.status,
+                        paidDate: inst.paidDate || null,
+                    })) : [],
                 };
             });
-            const totalDebt = invoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+            // Berechne Gesamtrestschuld (nur offene Rechnungen)
+            const openInvoices = invoices.filter(inv => inv.status !== 'paid' && inv.status !== 'completed');
+            const totalDebtChf = openInvoices.reduce((sum, inv) => sum + inv.remainingDebtChf, 0);
+            const totalOpenInstallments = openInvoices.reduce((sum, inv) => sum + inv.openInstallments, 0);
             return {
                 personName: person.name,
-                totalDebt,
+                totalDebtChf: roundToSwiss5Rappen(totalDebtChf),
                 currency: 'CHF',
                 invoiceCount: invoices.length,
+                openInvoiceCount: openInvoices.length,
+                totalOpenInstallments,
                 invoices,
+            };
+        }
+        case 'getPersonInstallments': {
+            const { personName } = args;
+            const person = await findPersonByName(db, userId, personName);
+            if (!person) {
+                return { error: `Person "${personName}" nicht gefunden` };
+            }
+            // Hole nur Rechnungen MIT Ratenplan
+            const invoicesSnapshot = await db.collection('people').doc(person.id).collection('invoices')
+                .where('isInstallmentPlan', '==', true)
+                .get();
+            if (invoicesSnapshot.empty) {
+                return {
+                    personName: person.name,
+                    hasInstallmentPlan: false,
+                    message: `${person.name} hat keinen aktiven Ratenplan.`,
+                };
+            }
+            const plans = invoicesSnapshot.docs.map(doc => {
+                const data = doc.data();
+                const totalAmountChf = rappenToChf(data.amount || 0);
+                const installments = data.installments || [];
+                const openInstallments = installments.filter((i) => i.status === 'pending' || i.status === 'open');
+                const paidInstallments = installments.filter((i) => i.status === 'paid' || i.status === 'completed');
+                const paidAmountChf = paidInstallments.reduce((sum, inst) => sum + rappenToChf(inst.amount || 0), 0);
+                const remainingAmountChf = openInstallments.reduce((sum, inst) => sum + rappenToChf(inst.amount || 0), 0);
+                // Sortiere Raten nach Fälligkeit
+                const sortedInstallments = [...installments].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+                const nextDueInstallment = sortedInstallments.find((i) => i.status === 'pending' || i.status === 'open');
+                return {
+                    invoiceId: doc.id,
+                    description: data.description || 'Ratenplan',
+                    totalAmountChf,
+                    paidAmountChf: roundToSwiss5Rappen(paidAmountChf),
+                    remainingAmountChf: roundToSwiss5Rappen(remainingAmountChf),
+                    totalInstallments: installments.length,
+                    paidInstallments: paidInstallments.length,
+                    openInstallments: openInstallments.length,
+                    nextDueDate: (nextDueInstallment === null || nextDueInstallment === void 0 ? void 0 : nextDueInstallment.dueDate) || null,
+                    nextDueAmountChf: nextDueInstallment ? rappenToChf(nextDueInstallment.amount || 0) : null,
+                    installments: sortedInstallments.map((inst, idx) => ({
+                        number: idx + 1,
+                        amountChf: rappenToChf(inst.amount || 0),
+                        dueDate: inst.dueDate,
+                        status: inst.status === 'paid' || inst.status === 'completed' ? 'bezahlt' : 'offen',
+                        paidDate: inst.paidDate || null,
+                    })),
+                };
+            });
+            const totalRemainingChf = plans.reduce((sum, p) => sum + p.remainingAmountChf, 0);
+            const totalOpenInstallments = plans.reduce((sum, p) => sum + p.openInstallments, 0);
+            return {
+                personName: person.name,
+                hasInstallmentPlan: true,
+                totalRemainingChf: roundToSwiss5Rappen(totalRemainingChf),
+                totalOpenInstallments,
+                currency: 'CHF',
+                plans,
             };
         }
         // ========== ERINNERUNGEN & TERMINE ==========
@@ -1380,7 +1495,10 @@ async function executeFunction(functionName, args, userId) {
             };
         }
         case 'recordInstallmentPayment': {
-            const { personName, amount, paymentDate, notes: _notes } = args;
+            const { personName, amount, paymentDate, notes: paymentNotes } = args;
+            const paymentAmountInRappen = chfToRappen(amount);
+            const payDateStr = paymentDate || swissTime.toISOString().split('T')[0];
+            console.log(`[recordInstallmentPayment] Recording payment of ${amount} CHF for ${personName}`);
             // 1. Finde Person
             const person = await findPersonByName(db, userId, personName);
             if (!person) {
@@ -1389,53 +1507,77 @@ async function executeFunction(functionName, args, userId) {
             // 2. Finde Rechnung mit Ratenplan
             const invoicesSnapshot = await db.collection('people').doc(person.id).collection('invoices')
                 .where('isInstallmentPlan', '==', true)
-                .where('status', 'in', getOpenStatusVariants())
                 .get();
-            if (invoicesSnapshot.empty) {
+            // Filtere nach offenen Rechnungen
+            const openInvoices = invoicesSnapshot.docs.filter(doc => {
+                const data = doc.data();
+                return data.status !== 'paid' && data.status !== 'completed' && data.status !== 'bezahlt';
+            });
+            if (openInvoices.length === 0) {
                 return { error: `Kein aktiver Ratenplan für "${personName}" gefunden` };
             }
-            const invoiceDoc = invoicesSnapshot.docs[0];
+            const invoiceDoc = openInvoices[0];
             const invoice = invoiceDoc.data();
-            const plan = invoice.installmentPlan;
-            // 3. Aktualisiere Ratenplan
-            const newPaidAmount = (plan.paidAmount || 0) + amount;
-            const newPaidInstallments = (plan.paidInstallments || 0) + 1;
-            // Markiere nächste unbezahlte Rate als bezahlt
-            const updatedInstallments = plan.installments.map((inst, idx) => {
-                if (inst.status === 'pending' && idx === plan.paidInstallments) {
-                    return Object.assign(Object.assign({}, inst), { status: 'paid', paidDate: paymentDate || swissTime.toISOString().split('T')[0] });
+            // Installments sind direkt auf der Rechnung gespeichert (neues Format)
+            const installments = invoice.installments || [];
+            if (installments.length === 0) {
+                return { error: `Ratenplan für "${personName}" hat keine Raten definiert` };
+            }
+            // 3. Finde nächste offene Rate und markiere sie als bezahlt
+            let paidInstallmentNumber = 0;
+            let foundOpenInstallment = false;
+            const updatedInstallments = installments.map((inst) => {
+                if (!foundOpenInstallment && (inst.status === 'pending' || inst.status === 'open')) {
+                    foundOpenInstallment = true;
+                    paidInstallmentNumber = inst.number;
+                    return Object.assign(Object.assign({}, inst), { status: 'paid', paidDate: payDateStr, paidAmount: paymentAmountInRappen, notes: paymentNotes || null });
                 }
                 return inst;
             });
-            const isFullyPaid = newPaidAmount >= plan.totalAmount;
+            if (!foundOpenInstallment) {
+                return { error: `Alle Raten für "${personName}" sind bereits bezahlt` };
+            }
+            // 4. Berechne Status
+            const paidInstallments = updatedInstallments.filter((i) => i.status === 'paid' || i.status === 'completed');
+            const openInstallments = updatedInstallments.filter((i) => i.status === 'pending' || i.status === 'open');
+            const paidAmountInRappen = paidInstallments.reduce((sum, i) => sum + (i.amount || 0), 0);
+            const remainingAmountInRappen = openInstallments.reduce((sum, i) => sum + (i.amount || 0), 0);
+            const isFullyPaid = openInstallments.length === 0;
+            // 5. Update Rechnung
             await invoiceDoc.ref.update({
-                status: isFullyPaid ? 'bezahlt' : 'offen',
-                installmentPlan: Object.assign(Object.assign({}, plan), { paidAmount: newPaidAmount, paidInstallments: newPaidInstallments, installments: updatedInstallments }),
+                status: isFullyPaid ? 'paid' : 'open',
+                installments: updatedInstallments,
                 updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
-            // 4. Erstelle Zahlungseintrag in Finanzen
+            // 6. Erstelle Zahlungseintrag in Finanzen
             await db.collection('financeEntries').add({
                 userId,
                 type: 'income',
-                amount,
+                amount: paymentAmountInRappen,
                 category: 'Ratenzahlung',
-                description: `Ratenzahlung von ${personName} (${newPaidInstallments}/${plan.numberOfInstallments})`,
-                date: admin.firestore.Timestamp.fromDate(paymentDate ? new Date(paymentDate) : swissTime),
+                description: `Ratenzahlung von ${personName} (Rate ${paidInstallmentNumber}/${installments.length})`,
+                date: admin.firestore.Timestamp.fromDate(new Date(payDateStr)),
                 personId: person.id,
                 invoiceId: invoiceDoc.id,
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
             });
+            console.log(`[recordInstallmentPayment] Success: Rate ${paidInstallmentNumber}/${installments.length} marked as paid`);
             return {
                 success: true,
                 message: isFullyPaid
-                    ? `Letzte Rate von ${amount} CHF erfasst. Ratenplan vollständig bezahlt!`
-                    : `Rate ${newPaidInstallments}/${plan.numberOfInstallments} über ${amount} CHF erfasst.`,
+                    ? `Letzte Rate (${paidInstallmentNumber}/${installments.length}) über ${amount} CHF erfasst. Ratenplan für ${personName} ist nun vollständig bezahlt!`
+                    : `Rate ${paidInstallmentNumber}/${installments.length} über ${amount} CHF für ${personName} erfasst.`,
                 status: {
-                    paidAmount: newPaidAmount,
-                    remainingAmount: plan.totalAmount - newPaidAmount,
-                    paidInstallments: newPaidInstallments,
-                    remainingInstallments: plan.numberOfInstallments - newPaidInstallments,
+                    personName,
+                    paidAmountChf: rappenToChf(paidAmountInRappen),
+                    remainingAmountChf: rappenToChf(remainingAmountInRappen),
+                    paidInstallments: paidInstallments.length,
+                    openInstallments: openInstallments.length,
+                    totalInstallments: installments.length,
                     isFullyPaid,
+                    nextDueDate: openInstallments.length > 0
+                        ? (_g = openInstallments.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0]) === null || _g === void 0 ? void 0 : _g.dueDate
+                        : null,
                 },
             };
         }

@@ -488,34 +488,34 @@ export function AIChatBox({
       )}
       style={{ height }}
     >
-      {/* Suggested Prompts Section - Nur anzeigen wenn noch keine Nachrichten */}
-      {normalizedPrompts.length > 0 && (
-        <div className="px-6 pt-4 pb-3 animate-in fade-in duration-300">
-          <div className="grid grid-cols-2 gap-2 max-w-2xl mx-auto">
-            {normalizedPrompts.map((prompt, index) => {
-              const IconComponent = iconMap[prompt.icon as keyof typeof iconMap];
-              return (
-                <button
-                  key={index}
-                  onClick={() => handleSuggestedPromptClick(prompt.text)}
-                  disabled={isLoading}
-                  className="flex items-center gap-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 px-4 py-3 text-sm font-medium text-gray-700 transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm hover:shadow"
-                  type="button"
-                >
-                  {IconComponent && <IconComponent className="size-4 text-gray-500 flex-shrink-0" />}
-                  <span className="text-left">{prompt.text}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Messages Area */}
       <div ref={scrollAreaRef} className="flex-1 overflow-hidden">
         {displayMessages.length === 0 ? (
+          /* Empty State - Zentriert mit Prompts */
           <div className="flex h-full flex-col items-center justify-center p-6">
-            <p className="text-sm text-gray-500 mb-6">{emptyStateMessage}</p>
+            {/* Suggested Prompts - Zentriert im leeren Zustand */}
+            {normalizedPrompts.length > 0 && (
+              <div className="w-full max-w-xl animate-in fade-in duration-300 mb-6">
+                <div className="grid grid-cols-2 gap-3">
+                  {normalizedPrompts.map((prompt, index) => {
+                    const IconComponent = iconMap[prompt.icon as keyof typeof iconMap];
+                    return (
+                      <button
+                        key={index}
+                        onClick={() => handleSuggestedPromptClick(prompt.text)}
+                        disabled={isLoading}
+                        className="flex items-center gap-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 px-4 py-3.5 text-sm font-medium text-gray-700 transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm hover:shadow"
+                        type="button"
+                      >
+                        {IconComponent && <IconComponent className="size-4 text-gray-500 flex-shrink-0" />}
+                        <span className="text-left">{prompt.text}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            <p className="text-sm text-gray-400">{emptyStateMessage}</p>
           </div>
         ) : (
           <ScrollArea className="h-full">

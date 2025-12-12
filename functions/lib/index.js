@@ -4608,14 +4608,8 @@ exports.chat = (0, https_1.onCall)({ secrets: [openaiApiKeySecret] }, async (req
         throw new https_1.HttpsError('invalid-argument', 'Last message must be from user');
     }
     try {
-        // Get OpenAI API key
-        let apiKey = '';
-        try {
-            apiKey = openaiApiKeySecret.value();
-        }
-        catch (_d) {
-            apiKey = process.env.OPENAI_API_KEY || '';
-        }
+        // Get OpenAI API key from secret only (avoid process.env to prevent overlap error)
+        const apiKey = openaiApiKeySecret.value();
         if (!apiKey) {
             // Fallback to rule-based response
             return {

@@ -2,7 +2,7 @@ import { trpc } from '@/lib/trpc';
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
 
-import { MessageSquare, X, RotateCcw } from 'lucide-react';
+import { MessageSquare, RotateCcw, X } from 'lucide-react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -14,8 +14,6 @@ import { Button } from './ui/button';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from './ui/dialog';
 
 const CHAT_STORAGE_KEY = 'nexo_chat_messages';
@@ -130,51 +128,53 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
 
   const suggestedPrompts = useMemo(() => [
     { text: 'Wie funktioniert die Rechnungsverwaltung?', icon: 'receipt' as const },
-    { text: 'Wie verwalte ich meine Finanzen?', icon: 'wallet' as const },
     { text: 'Wie erstelle ich eine Erinnerung?', icon: 'bell' as const },
+    { text: 'Wie verwalte ich meine Finanzen?', icon: 'wallet' as const },
     { text: 'Was kann ich mit der Einkaufsliste machen?', icon: 'shoppingCart' as const },
+    { text: 'Wie funktioniert das Raten-System?', icon: 'calendar' as const },
+    { text: 'Wie scanne ich eine Rechnung?', icon: 'scan' as const },
   ], []);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-0">
-        <DialogHeader className="px-6 pt-6 pb-4 border-b">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-primary" />
-              <DialogTitle>Assistent</DialogTitle>
-            </div>
-            <div className="flex items-center gap-2">
-              {hasUserMessages && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleNewConversation}
-                  className="h-8 text-gray-500 hover:text-gray-700"
-                >
-                  <RotateCcw className="h-4 w-4 mr-1" />
-                  <span className="hidden sm:inline">Neu</span>
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onOpenChange(false)}
-                className="h-8 w-8"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+      <DialogContent className="max-w-2xl w-[95vw] sm:w-[90vw] h-[85vh] flex flex-col p-0 gap-0 overflow-hidden" showCloseButton={false}>
+        {/* Header - kompakt und professionell */}
+        <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50/50">
+          <div className="flex items-center gap-2 min-w-0">
+            <MessageSquare className="w-5 h-5 text-primary flex-shrink-0" />
+            <span className="font-semibold text-gray-900">Assistent</span>
           </div>
-        </DialogHeader>
-        <div className="flex-1 overflow-hidden px-6 pb-6">
+          <div className="flex items-center gap-3 flex-shrink-0 ml-4">
+            {hasUserMessages && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNewConversation}
+                className="h-8 text-xs text-gray-500 hover:text-gray-700 gap-1.5 px-3"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Neu
+              </Button>
+            )}
+            <button
+              onClick={() => onOpenChange(false)}
+              className="rounded-full p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 transition-colors"
+              aria-label="Schließen"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Chat Bereich - mehr Platz */}
+        <div className="flex-1 overflow-hidden">
           <AIChatBox
             messages={messages}
             onSendMessage={handleSendMessage}
             isLoading={chatMutation.isPending}
             placeholder={t('common.typeMessage', 'Nachricht eingeben...')}
             height="100%"
-            emptyStateMessage="Beginne eine Unterhaltung mit dem Assistenten"
+            emptyStateMessage="Wähle eine Frage oder starte eine eigene Unterhaltung"
             suggestedPrompts={hasUserMessages ? [] : suggestedPrompts}
           />
         </div>

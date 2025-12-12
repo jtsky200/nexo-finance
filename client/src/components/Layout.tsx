@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import AIChatFloatingButton from './AIChatFloatingButton';
+import { TutorialHighlight } from './TutorialHighlight';
 
 interface LayoutProps {
   children: ReactNode;
@@ -66,6 +67,9 @@ export default function Layout({ children, title }: LayoutProps) {
 
       {/* Floating AI Chat Button - nur anzeigen wenn nicht auf AI-Chat-Seite */}
       {!isAIChatPage && <AIChatFloatingButton />}
+
+      {/* Tutorial Highlight System */}
+      <TutorialHighlight />
     </div>
   );
 }

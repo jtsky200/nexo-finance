@@ -266,11 +266,16 @@ export function AIChatBox({
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
 
   // Navigation Handler - speichert Nachrichten und öffnet Popup nach Navigation
-  const handleNavigate = useCallback((route: string) => {
+  const handleNavigate = useCallback((route: string, tutorialSteps?: Array<{ selector: string; title: string; description: string }>) => {
     // Speichere aktuelle Nachrichten im localStorage für Popup-Kontinuität
     localStorage.setItem('nexo_chat_messages', JSON.stringify(messages));
     localStorage.setItem('nexo_chat_open_popup', 'true');
     localStorage.setItem('nexo_chat_from_route', route);
+    
+    // Optional: Tutorial-Schritte speichern
+    if (tutorialSteps && tutorialSteps.length > 0) {
+      localStorage.setItem('nexo_tutorial_highlight', JSON.stringify(tutorialSteps));
+    }
     
     // Navigiere zur Zielseite
     setLocation(route);

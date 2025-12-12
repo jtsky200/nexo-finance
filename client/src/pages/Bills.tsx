@@ -562,11 +562,11 @@ export default function Bills() {
             {t('bills.description', 'Verwalten Sie Ihre Rechnungen und Zahlungserinnerungen')}
           </p>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setScannerOpen(true)}>
+            <Button variant="outline" onClick={() => setScannerOpen(true)} data-tutorial="scan-bill">
               <Camera className="w-4 h-4 mr-2" />
               {t('bills.scan', 'Scannen')}
             </Button>
-            <Button onClick={openNewDialog}>
+            <Button onClick={openNewDialog} data-tutorial="add-bill">
               <Plus className="w-4 h-4 mr-2" />
               {t('bills.add', 'Rechnung hinzufügen')}
             </Button>

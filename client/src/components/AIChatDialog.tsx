@@ -1,8 +1,8 @@
 import { trpc } from '@/lib/trpc';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 
-import { MessageSquare, X } from 'lucide-react';
+import { MessageSquare, X, RotateCcw } from 'lucide-react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -18,6 +18,12 @@ import {
   DialogTitle,
 } from './ui/dialog';
 
+const CHAT_STORAGE_KEY = 'nexo_chat_messages';
+const SYSTEM_MESSAGE: Message = {
+  role: 'system',
+  content: 'Du bist ein hilfreicher Assistent für die Nexo-Anwendung. Du hilfst Benutzern bei Fragen zu Finanzen, Rechnungen, Terminen und anderen Funktionen der App.',
+};
+
 interface AIChatDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -25,12 +31,58 @@ interface AIChatDialogProps {
 
 export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
   const { t } = useTranslation();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'system',
-      content: 'Du bist ein hilfreicher Assistent für die Nexo-Anwendung. Du hilfst Benutzern bei Fragen zu Finanzen, Rechnungen, Terminen und anderen Funktionen der App.',
-    },
-  ]);
+  
+  // Lade gespeicherte Nachrichten aus LocalStorage
+  const [messages, setMessages] = useState<Message[]>(() => {
+    try {
+      const saved = localStorage.getItem(CHAT_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as Message[];
+        if (!parsed.some(m => m.role === 'system')) {
+          return [SYSTEM_MESSAGE, ...parsed];
+        }
+        return parsed;
+      }
+    } catch (e) {
+      console.error('Fehler beim Laden der Chat-Historie:', e);
+    }
+    return [SYSTEM_MESSAGE];
+  });
+
+  // Synchronisiere mit LocalStorage wenn Dialog geöffnet wird
+  useEffect(() => {
+    if (open) {
+      try {
+        const saved = localStorage.getItem(CHAT_STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved) as Message[];
+          if (!parsed.some(m => m.role === 'system')) {
+            setMessages([SYSTEM_MESSAGE, ...parsed]);
+          } else {
+            setMessages(parsed);
+          }
+        }
+      } catch (e) {
+        console.error('Fehler beim Laden der Chat-Historie:', e);
+      }
+    }
+  }, [open]);
+
+  // Speichere Nachrichten in LocalStorage bei jeder Änderung
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
+    } catch (e) {
+      console.error('Fehler beim Speichern der Chat-Historie:', e);
+    }
+  }, [messages]);
+
+  // Neue Konversation starten
+  const handleNewConversation = useCallback(() => {
+    setMessages([SYSTEM_MESSAGE]);
+    localStorage.removeItem(CHAT_STORAGE_KEY);
+    toast.success('Neue Konversation gestartet');
+  }, []);
 
   const chatMutation = trpc.ai.chat.useMutation({
     onSuccess: (data) => {
@@ -41,11 +93,10 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
       setMessages((prev) => [...prev, aiResponse]);
     },
     onError: (error) => {
-      // Better error handling for different error types
       let errorMessage = 'Ein unbekannter Fehler ist aufgetreten.';
       
       if (error.message.includes('<!doctype') || error.message.includes('Unexpected token')) {
-        errorMessage = 'Der Server ist nicht erreichbar oder gibt eine ungültige Antwort zurück. Bitte stelle sicher, dass der Server läuft.';
+        errorMessage = 'Der Server ist nicht erreichbar oder gibt eine ungültige Antwort zurück.';
       } else if (error.message.includes('Unable to transform')) {
         errorMessage = 'Fehler bei der Datenübertragung. Bitte versuche es erneut.';
       } else if (error.data?.code === 'UNAUTHORIZED') {
@@ -66,22 +117,22 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
   });
 
   const handleSendMessage = useCallback((content: string) => {
-    // Add user message
     const userMessage: Message = { role: 'user', content };
     const newMessages: Message[] = [...messages, userMessage];
     setMessages(newMessages);
 
-    // Call tRPC mutation
     chatMutation.mutate({
       messages: newMessages,
     });
   }, [messages, chatMutation]);
 
+  const hasUserMessages = messages.some(m => m.role === 'user');
+
   const suggestedPrompts = useMemo(() => [
-    'Wie funktioniert die Rechnungsverwaltung?',
-    'Wie erstelle ich eine Erinnerung?',
-    'Wie verwalte ich meine Finanzen?',
-    'Was kann ich mit der Einkaufsliste machen?',
+    { text: 'Wie funktioniert die Rechnungsverwaltung?', icon: 'receipt' as const },
+    { text: 'Wie verwalte ich meine Finanzen?', icon: 'wallet' as const },
+    { text: 'Wie erstelle ich eine Erinnerung?', icon: 'bell' as const },
+    { text: 'Was kann ich mit der Einkaufsliste machen?', icon: 'shoppingCart' as const },
   ], []);
 
   return (
@@ -91,16 +142,29 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <MessageSquare className="w-5 h-5 text-primary" />
-              <DialogTitle>{t('common.aiAssistant', 'AI Assistent')}</DialogTitle>
+              <DialogTitle>Assistent</DialogTitle>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => onOpenChange(false)}
-              className="h-8 w-8"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              {hasUserMessages && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleNewConversation}
+                  className="h-8 text-gray-500 hover:text-gray-700"
+                >
+                  <RotateCcw className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">Neu</span>
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onOpenChange(false)}
+                className="h-8 w-8"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </DialogHeader>
         <div className="flex-1 overflow-hidden px-6 pb-6">
@@ -110,12 +174,11 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
             isLoading={chatMutation.isPending}
             placeholder={t('common.typeMessage', 'Nachricht eingeben...')}
             height="100%"
-            emptyStateMessage={t('common.startConversation', 'Beginne eine Unterhaltung mit dem AI Assistenten')}
-            suggestedPrompts={suggestedPrompts}
+            emptyStateMessage="Beginne eine Unterhaltung mit dem Assistenten"
+            suggestedPrompts={hasUserMessages ? [] : suggestedPrompts}
           />
         </div>
       </DialogContent>
     </Dialog>
   );
 }
-

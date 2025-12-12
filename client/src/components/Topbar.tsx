@@ -108,7 +108,7 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setAiChatOpen(true)}>
               <MessageSquare className="mr-2 h-4 w-4" />
-              <span>{t('common.aiAssistant', 'AI Assistent')}</span>
+              <span>Assistent</span>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => {
               // TODO: Open help/documentation

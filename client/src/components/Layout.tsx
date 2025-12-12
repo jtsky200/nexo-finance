@@ -13,8 +13,11 @@ interface LayoutProps {
 export default function Layout({ children, title }: LayoutProps) {
   // Sidebar should be open by default on large screens
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { user, loading } = useAuth();
+  
+  // Verstecke den Floating Chat Button auf der AI-Chat-Seite
+  const isAIChatPage = location === '/ai-chat';
 
   useEffect(() => {
     if (!loading && !user) {
@@ -61,8 +64,8 @@ export default function Layout({ children, title }: LayoutProps) {
         </main>
       </div>
 
-      {/* Floating AI Chat Button */}
-      <AIChatFloatingButton />
+      {/* Floating AI Chat Button - nur anzeigen wenn nicht auf AI-Chat-Seite */}
+      {!isAIChatPage && <AIChatFloatingButton />}
     </div>
   );
 }

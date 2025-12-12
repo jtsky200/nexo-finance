@@ -2,13 +2,20 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { Loader2, Send, Paperclip, Image, Globe, Mic, Tag, FileText, Zap, ArrowUp } from "lucide-react";
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { 
+  Loader2, Send, Paperclip, Image, Globe, Mic, Tag, FileText, Zap, ArrowUp, 
+  Receipt, Bell, Wallet, ShoppingCart, Calendar, ScanLine,
+  // Icons für AI-Antworten
+  LayoutDashboard, Users, Folder, Settings, Check, Plus, Search, Edit, Trash,
+  Clock, Euro, TrendingUp, TrendingDown, Info, AlertCircle, type LucideIcon
+} from "lucide-react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Streamdown } from "streamdown";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "wouter";
 
 /**
  * Message type matching server-side LLM Message interface
@@ -20,7 +27,7 @@ export type Message = {
 
 export type SuggestedPrompt = {
   text: string;
-  icon: 'tag' | 'fileText' | 'zap';
+  icon: 'tag' | 'fileText' | 'zap' | 'receipt' | 'bell' | 'wallet' | 'shoppingCart' | 'calendar' | 'scan';
 };
 
 export type AIChatBoxProps = {
@@ -68,12 +75,161 @@ export type AIChatBoxProps = {
   suggestedPrompts?: string[] | SuggestedPrompt[];
 };
 
-// Icon mapping
+// Icon mapping - passend zum Kontext (für Bubbles)
 const iconMap = {
   tag: Tag,
   fileText: FileText,
   zap: Zap,
+  receipt: Receipt,
+  bell: Bell,
+  wallet: Wallet,
+  shoppingCart: ShoppingCart,
+  calendar: Calendar,
+  scan: ScanLine,
 };
+
+// Icon mapping für AI-Antworten - [icon:name] Syntax
+const aiIconMap: Record<string, LucideIcon> = {
+  'layout-dashboard': LayoutDashboard,
+  'calendar': Calendar,
+  'bell': Bell,
+  'wallet': Wallet,
+  'users': Users,
+  'file-text': FileText,
+  'folder': Folder,
+  'shopping-cart': ShoppingCart,
+  'receipt': Receipt,
+  'settings': Settings,
+  'check': Check,
+  'plus': Plus,
+  'search': Search,
+  'edit': Edit,
+  'trash': Trash,
+  'clock': Clock,
+  'euro': Euro,
+  'trending-up': TrendingUp,
+  'trending-down': TrendingDown,
+  'info': Info,
+  'alert-circle': AlertCircle,
+};
+
+// Route Mapping für Navigation Links [nav:route|Label]
+const navRouteMap: Record<string, { path: string; icon: LucideIcon }> = {
+  'dashboard': { path: '/dashboard', icon: LayoutDashboard },
+  'calendar': { path: '/calendar', icon: Calendar },
+  'reminders': { path: '/reminders', icon: Bell },
+  'finances': { path: '/finance', icon: Wallet },
+  'finance': { path: '/finance', icon: Wallet },
+  'finanzen': { path: '/finance', icon: Wallet },
+  'people': { path: '/people', icon: Users },
+  'personen': { path: '/people', icon: Users },
+  'invoices': { path: '/bills', icon: Receipt },
+  'bills': { path: '/bills', icon: Receipt },
+  'rechnungen': { path: '/bills', icon: Receipt },
+  'documents': { path: '/documents', icon: Folder },
+  'dokumente': { path: '/documents', icon: Folder },
+  'shopping': { path: '/shopping', icon: ShoppingCart },
+  'einkaufsliste': { path: '/shopping', icon: ShoppingCart },
+  'settings': { path: '/settings', icon: Settings },
+  'einstellungen': { path: '/settings', icon: Settings },
+};
+
+// Komponente für AI-Nachrichten mit Navigation-Link-Support
+function AIMessageContent({ content, onNavigate }: { content: string; onNavigate?: (route: string) => void }) {
+  // Parse den Content und ersetze [nav:route|Label] durch anklickbare Links
+  const renderedContent = useMemo(() => {
+    const segments: React.ReactNode[] = [];
+    // Regex für [nav:route|Label] Syntax
+    const navRegex = /\[nav:([a-z-]+)\|([^\]]+)\]/g;
+    // Regex für [icon:name] Syntax (fallback für einfache Icons)
+    const iconRegex = /\[icon:([a-z-]+)\]/g;
+    
+    let lastIndex = 0;
+    let keyIndex = 0;
+    
+    // Kombinierte Regex für beide Syntaxen - mit flexibleren Zeichen
+    const combinedRegex = /\[nav:([a-zA-Z0-9_-]+)[|｜]([^\]]+)\]|\[icon:([a-zA-Z0-9_-]+)\]/g;
+    let match;
+
+    while ((match = combinedRegex.exec(content)) !== null) {
+      // Text vor dem Match
+      if (match.index > lastIndex) {
+        const textBefore = content.slice(lastIndex, match.index);
+        segments.push(<span key={`text-${keyIndex++}`} dangerouslySetInnerHTML={{ __html: formatMarkdown(textBefore) }} />);
+      }
+      
+      if (match[1] && match[2]) {
+        // [nav:route|Label] Syntax
+        const routeKey = match[1];
+        const label = match[2];
+        const navInfo = navRouteMap[routeKey];
+        
+        if (navInfo && onNavigate) {
+          const IconComponent = navInfo.icon;
+          segments.push(
+            <button
+              key={`nav-${keyIndex++}`}
+              onClick={() => onNavigate(navInfo.path)}
+              className="inline-flex items-center gap-1.5 px-2 py-1 mx-0.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary font-medium text-sm transition-all duration-200 cursor-pointer border border-primary/20 hover:border-primary/40 hover:shadow-sm"
+              title={`Zu ${label} navigieren`}
+            >
+              <IconComponent className="size-4" />
+              <span className="underline decoration-dotted underline-offset-2">{label}</span>
+            </button>
+          );
+        } else {
+          // Fallback wenn Route nicht gefunden
+          segments.push(<span key={`nav-text-${keyIndex++}`} className="font-medium text-primary">{label}</span>);
+        }
+      } else if (match[3]) {
+        // [icon:name] Syntax (einfaches Icon)
+        const iconName = match[3];
+        const IconComponent = aiIconMap[iconName];
+        
+        if (IconComponent) {
+          segments.push(
+            <IconComponent 
+              key={`icon-${keyIndex++}`} 
+              className="inline-block size-4 mx-0.5 align-text-bottom text-primary" 
+            />
+          );
+        } else {
+          segments.push(<span key={`unknown-${keyIndex++}`}>[{iconName}]</span>);
+        }
+      }
+      
+      lastIndex = combinedRegex.lastIndex;
+    }
+    
+    // Restlicher Text
+    if (lastIndex < content.length) {
+      const textAfter = content.slice(lastIndex);
+      segments.push(<span key={`text-${keyIndex++}`} dangerouslySetInnerHTML={{ __html: formatMarkdown(textAfter) }} />);
+    }
+    
+    return segments.length > 0 ? segments : [<span key="full" dangerouslySetInnerHTML={{ __html: formatMarkdown(content) }} />];
+  }, [content, onNavigate]);
+
+  return (
+    <div className="prose prose-sm max-w-none">
+      {renderedContent}
+    </div>
+  );
+}
+
+// Einfacher Markdown-Formatierer
+function formatMarkdown(text: string): string {
+  return text
+    // Bold: **text** oder __text__
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.+?)__/g, '<strong>$1</strong>')
+    // Italic: *text* oder _text_
+    .replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>')
+    // Inline code: `code`
+    .replace(/`(.+?)`/g, '<code class="bg-gray-100 px-1 rounded text-sm">$1</code>')
+    // Line breaks
+    .replace(/\n/g, '<br />');
+}
 
 /**
  * Modern AI chat box component matching the Cadillac EV design exactly.
@@ -94,10 +250,11 @@ export function AIChatBox({
   placeholder = "Nachricht eingeben...",
   className,
   height = "600px",
-  emptyStateMessage = "Beginne eine Unterhaltung mit dem AI Assistenten",
+  emptyStateMessage = "Beginne eine Unterhaltung mit dem Assistenten",
   suggestedPrompts,
 }: AIChatBoxProps) {
   const { t, i18n } = useTranslation();
+  const [, setLocation] = useLocation();
   const [input, setInput] = useState("");
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -107,6 +264,17 @@ export function AIChatBox({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+
+  // Navigation Handler - speichert Nachrichten und öffnet Popup nach Navigation
+  const handleNavigate = useCallback((route: string) => {
+    // Speichere aktuelle Nachrichten im localStorage für Popup-Kontinuität
+    localStorage.setItem('nexo_chat_messages', JSON.stringify(messages));
+    localStorage.setItem('nexo_chat_open_popup', 'true');
+    localStorage.setItem('nexo_chat_from_route', route);
+    
+    // Navigiere zur Zielseite
+    setLocation(route);
+  }, [messages, setLocation]);
 
   // Filter out system messages
   const displayMessages = useMemo(() => 
@@ -315,22 +483,22 @@ export function AIChatBox({
       )}
       style={{ height }}
     >
-      {/* Suggested Prompts Section - Always visible at top with icons */}
+      {/* Suggested Prompts Section - Nur anzeigen wenn noch keine Nachrichten */}
       {normalizedPrompts.length > 0 && (
-        <div className="px-6 pt-4 pb-3">
-          <div className="flex flex-wrap gap-2 justify-center">
+        <div className="px-6 pt-4 pb-3 animate-in fade-in duration-300">
+          <div className="grid grid-cols-2 gap-2 max-w-2xl mx-auto">
             {normalizedPrompts.map((prompt, index) => {
-              const IconComponent = iconMap[prompt.icon];
+              const IconComponent = iconMap[prompt.icon as keyof typeof iconMap];
               return (
                 <button
                   key={index}
                   onClick={() => handleSuggestedPromptClick(prompt.text)}
                   disabled={isLoading}
-                  className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 px-4 py-2 text-sm font-medium text-gray-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex items-center gap-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 hover:border-gray-300 px-4 py-3 text-sm font-medium text-gray-700 transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm hover:shadow"
                   type="button"
                 >
-                  {IconComponent && <IconComponent className="size-4" />}
-                  {prompt.text}
+                  {IconComponent && <IconComponent className="size-4 text-gray-500 flex-shrink-0" />}
+                  <span className="text-left">{prompt.text}</span>
                 </button>
               );
             })}
@@ -359,19 +527,17 @@ export function AIChatBox({
                 >
                   <div
                     className={cn(
-                      "max-w-[80%] rounded-lg px-4 py-3 select-text",
+                      "max-w-[85%] select-text",
                       message.role === "user"
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-100 text-gray-900"
+                        ? "bg-gray-900 text-white rounded-2xl px-4 py-3"
+                        : "text-gray-900"
                     )}
                     // Prevent any click events that might trigger errors
                     onClick={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()}
                   >
                     {message.role === "assistant" ? (
-                      <div className="prose prose-sm max-w-none">
-                        <Streamdown>{message.content}</Streamdown>
-                      </div>
+                      <AIMessageContent content={message.content} onNavigate={handleNavigate} />
                     ) : (
                       <p className="whitespace-pre-wrap text-sm">
                         {message.content}
@@ -393,7 +559,7 @@ export function AIChatBox({
         )}
       </div>
 
-      {/* Input Area with Icons INSIDE the input field */}
+      {/* Input Area - Dynamisches Eingabefeld mit professioneller Animation */}
       <form
         ref={inputAreaRef}
         onSubmit={handleSubmit}
@@ -423,78 +589,93 @@ export function AIChatBox({
           accept="image/*"
         />
 
-        <div className="relative flex items-center">
-          {/* Left Icons INSIDE input */}
-          <div className="absolute left-3 flex items-center gap-2 z-10">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
-              aria-label="Datei anhängen"
-              disabled={isLoading}
-            >
-              <Paperclip className="size-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => imageInputRef.current?.click()}
-              className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
-              aria-label="Bild hinzufügen"
-              disabled={isLoading}
-            >
-              <Image className="size-4" />
-            </button>
-          </div>
+        <div className="max-w-3xl mx-auto">
+          <div className="relative flex items-center rounded-2xl border-2 border-gray-200 bg-white shadow-sm transition-all duration-200 py-1 focus-within:border-gray-400">
+            {/* Left Icons */}
+            <div className="flex items-center gap-1 pl-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-150"
+                aria-label="Datei anhängen"
+                disabled={isLoading}
+              >
+                <Paperclip className="size-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-150"
+                aria-label="Bild hinzufügen"
+                disabled={isLoading}
+              >
+                <Image className="size-5" />
+              </button>
+            </div>
 
-          {/* Text Input with padding for icons */}
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            className="flex-1 max-h-32 resize-none min-h-[52px] rounded-lg border border-gray-300 bg-white px-20 py-3 pr-24 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            rows={1}
-            disabled={isLoading}
-          />
+            {/* Dynamisches Textarea */}
+            <Textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                // Auto-resize
+                if (textareaRef.current) {
+                  textareaRef.current.style.height = 'auto';
+                  textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 150) + 'px';
+                }
+              }}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              className="flex-1 resize-none border-0 bg-transparent py-2.5 px-2 text-sm text-gray-900 placeholder:text-gray-400 focus:ring-0 focus:outline-none min-h-[44px] max-h-[150px] transition-all duration-200"
+              rows={1}
+              disabled={isLoading}
+              style={{ height: 'auto' }}
+            />
 
-          {/* Right Icons INSIDE input */}
-          <div className="absolute right-3 flex items-center gap-1.5 z-10">
-            <button
-              type="button"
-              onClick={handleLanguageToggle}
-              className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
-              aria-label="Sprache"
-              disabled={isLoading}
-            >
-              <Globe className="size-4" />
-            </button>
-            <button
-              type="button"
-              onClick={handleVoiceRecording}
-              className={cn(
-                "p-1.5 transition-colors",
-                isRecording
-                  ? "text-red-500 hover:text-red-600"
-                  : "text-gray-400 hover:text-gray-600"
-              )}
-              aria-label="Spracheingabe"
-              disabled={isLoading}
-            >
-              <Mic className="size-4" />
-            </button>
-            <button
-              type="submit"
-              disabled={!input.trim() || isLoading}
-              className="p-1.5 text-gray-400 hover:text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              aria-label={isLoading ? "Wird gesendet..." : "Nachricht senden"}
-            >
-              {isLoading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <ArrowUp className="size-4" />
-              )}
-            </button>
+            {/* Right Icons */}
+            <div className="flex items-center gap-1 pr-2">
+              <button
+                type="button"
+                onClick={handleLanguageToggle}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-all duration-150"
+                aria-label="Sprache wechseln"
+                disabled={isLoading}
+              >
+                <Globe className="size-5" />
+              </button>
+              <button
+                type="button"
+                onClick={handleVoiceRecording}
+                className={cn(
+                  "p-2 rounded-lg transition-all duration-150",
+                  isRecording
+                    ? "text-red-500 bg-red-50 hover:bg-red-100"
+                    : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                )}
+                aria-label="Spracheingabe"
+                disabled={isLoading}
+              >
+                <Mic className="size-5" />
+              </button>
+              <button
+                type="submit"
+                disabled={!input.trim() || isLoading}
+                className={cn(
+                  "p-2 rounded-lg transition-all duration-200",
+                  input.trim() && !isLoading
+                    ? "bg-primary text-white hover:bg-primary/90 shadow-sm"
+                    : "text-gray-300 cursor-not-allowed"
+                )}
+                aria-label={isLoading ? "Wird gesendet..." : "Nachricht senden"}
+              >
+                {isLoading ? (
+                  <Loader2 className="size-5 animate-spin" />
+                ) : (
+                  <ArrowUp className="size-5" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </form>

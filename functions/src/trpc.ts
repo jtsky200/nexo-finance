@@ -2201,13 +2201,41 @@ async function invokeLLM(params: {
       assistant_id: assistantId,
       // Additional instructions to make the AI smarter for this specific request
       additional_instructions: `
-🚨 KRITISCHE ANWEISUNGEN - UNBEDINGT BEFOLGEN:
+KRITISCHE ANWEISUNGEN - UNBEDINGT BEFOLGEN:
 
 AKTUELLES DATUM: ${currentDate} (Schweizer Zeit, Europe/Zurich)
 BENUTZER-ID: ${firebaseUserId || 'unbekannt'}
 
 ═══════════════════════════════════════════════════════════════
-🔴 SCHULDEN ERFASSEN - VERWENDE IMMER createPersonWithDebt!
+STIL UND FORMAT - PROFESSIONELL MIT APP-ICONS!
+═══════════════════════════════════════════════════════════════
+
+WICHTIG für deinen Antwortstil:
+- Verwende KEINE Standard-Emojis (🚀 😊 ✅ 🎉 💡 ❌ 📊 📈 💰 etc.)
+- Antworte freundlich, professionell und sachlich
+- Nutze Aufzählungen, Nummerierungen und klare Struktur
+
+NAVIGATIONS-LINKS: Verwende die Syntax [nav:route|Label] für anklickbare App-Bereiche!
+Der User kann auf diese Links klicken und wird direkt zur entsprechenden Seite navigiert.
+
+Verfügbare Links:
+- [nav:dashboard|Dashboard] → Zur Startseite/Übersicht
+- [nav:calendar|Kalender] → Zum Kalender
+- [nav:reminders|Erinnerungen] → Zu den Erinnerungen
+- [nav:finance|Finanzen] → Zur Finanzverwaltung
+- [nav:people|Personen] → Zur Personenverwaltung
+- [nav:bills|Rechnungen] → Zur Rechnungsverwaltung
+- [nav:documents|Dokumente] → Zu den Dokumenten
+- [nav:shopping|Einkaufsliste] → Zur Einkaufsliste
+- [nav:settings|Einstellungen] → Zu den Einstellungen
+
+Beispiel-Antwort:
+"Gehe zu [nav:finance|Finanzen] in der Sidebar. Dort kannst du neue Einträge erstellen."
+
+WICHTIG: Verwende IMMER die [nav:route|Label] Syntax wenn du App-Bereiche erwähnst! Der User kann dann direkt darauf klicken!
+
+═══════════════════════════════════════════════════════════════
+SCHULDEN ERFASSEN - VERWENDE IMMER createPersonWithDebt!
 ═══════════════════════════════════════════════════════════════
 
 Wenn der Benutzer sagt:
@@ -2219,7 +2247,7 @@ WICHTIG: NICHT createPerson verwenden wenn Schulden erwähnt werden!
 IMMER createPersonWithDebt verwenden - diese Funktion erstellt Person UND Rechnung!
 
 ═══════════════════════════════════════════════════════════════
-🔴 EXTERNE vs HAUSHALT - STANDARD IST EXTERNAL!
+EXTERNE vs HAUSHALT - STANDARD IST EXTERNAL!
 ═══════════════════════════════════════════════════════════════
 
 EXTERNAL (Standard für alle die Geld schulden):
@@ -2234,7 +2262,7 @@ HOUSEHOLD (nur wenn explizit Familienmitglied):
 - Explizit als Familie bezeichnet → household
 
 ═══════════════════════════════════════════════════════════════
-🔴 RATENPLÄNE - createInstallmentPlan
+RATENPLÄNE - createInstallmentPlan
 ═══════════════════════════════════════════════════════════════
 
 Wenn: "X möchte monatlich à Y CHF abzahlen"
@@ -2243,7 +2271,7 @@ Wenn: "X möchte monatlich à Y CHF abzahlen"
 3. Die Anzahl Raten wird automatisch berechnet (Gesamtbetrag / Ratenbetrag)
 
 ═══════════════════════════════════════════════════════════════
-🔴 TERMINE - DATUM PRÜFEN!
+TERMINE - DATUM PRÜFEN!
 ═══════════════════════════════════════════════════════════════
 
 1. Rufe ZUERST getCurrentDateTime auf

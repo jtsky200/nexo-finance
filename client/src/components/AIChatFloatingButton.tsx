@@ -1,11 +1,27 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MessageSquare, X } from 'lucide-react';
 import { Button } from './ui/button';
 import AIChatDialog from './AIChatDialog';
 import { cn } from '@/lib/utils';
 
+const POPUP_FLAG_KEY = 'nexo_chat_open_popup';
+
 export default function AIChatFloatingButton() {
   const [isOpen, setIsOpen] = useState(false);
+
+  // Prüfe beim Mount ob der Popup automatisch geöffnet werden soll
+  useEffect(() => {
+    const shouldOpenPopup = localStorage.getItem(POPUP_FLAG_KEY);
+    if (shouldOpenPopup === 'true') {
+      // Entferne das Flag und öffne den Popup
+      localStorage.removeItem(POPUP_FLAG_KEY);
+      localStorage.removeItem('nexo_chat_from_route');
+      // Kurze Verzögerung für sanfte Animation
+      setTimeout(() => {
+        setIsOpen(true);
+      }, 300);
+    }
+  }, []);
 
   return (
     <>
@@ -17,7 +33,7 @@ export default function AIChatFloatingButton() {
           'transition-all duration-200 hover:scale-110'
         )}
         size="icon"
-        aria-label="AI Assistent öffnen"
+        aria-label="Assistent öffnen"
       >
         {isOpen ? (
           <X className="h-6 w-6" />
@@ -29,4 +45,3 @@ export default function AIChatFloatingButton() {
     </>
   );
 }
-

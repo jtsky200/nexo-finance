@@ -6425,9 +6425,21 @@ export const getWeather = onCall(
       fetchedAt: new Date().toISOString(),
     };
   } catch (error: any) {
-    // If API fails, return null instead of throwing (graceful degradation)
-    console.error('Error fetching weather from API:', error);
-    return null;
+    // Log detailed error for debugging
+    console.error('[getWeather] Error fetching weather from API:', {
+      error: error.message,
+      code: error.code,
+      location: validatedLocation,
+      date: dateStr,
+      userId
+    });
+    
+    // Return error details instead of null for better debugging
+    // In production, you might want to return null for graceful degradation
+    throw new HttpsError(
+      error.code || 'internal',
+      error.message || 'Fehler beim Abrufen der Wetterdaten von der API'
+    );
   }
   }
 );

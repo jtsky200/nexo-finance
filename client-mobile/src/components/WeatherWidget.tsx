@@ -7,10 +7,24 @@ interface WeatherWidgetProps {
 }
 
 export default function WeatherWidget({ selectedDate }: WeatherWidgetProps) {
-  const { settings } = useUserSettings();
+  const { settings, isLoading: settingsLoading } = useUserSettings();
   const location = settings?.weatherLocation || 'Zurich, CH';
   
   const { data: weather, isLoading, error } = useWeather(selectedDate, location);
+  
+  // Debug logging (only in development)
+  React.useEffect(() => {
+    if (process.env.NODE_ENV === 'development' || (globalThis as any).process?.env?.NODE_ENV === 'development') {
+      console.log('[WeatherWidget]', {
+        selectedDate,
+        location,
+        settingsLoading,
+        weather,
+        isLoading,
+        error: error?.message
+      });
+    }
+  }, [selectedDate, location, settingsLoading, weather, isLoading, error]);
 
   const getWeatherIcon = (icon: string) => {
     switch (icon) {
@@ -76,12 +90,30 @@ export default function WeatherWidget({ selectedDate }: WeatherWidgetProps) {
           )}
         </div>
       ) : error ? (
-        <div className="text-xs text-muted-foreground text-center py-2">
-          {error.message || 'Fehler beim Laden der Wetterdaten'}
+        <div className="space-y-1">
+          <div className="text-xs text-muted-foreground text-center py-2">
+            {error.message || 'Fehler beim Laden der Wetterdaten'}
+          </div>
+          {location && (
+            <div className="text-[10px] text-muted-foreground/70 text-center">
+              Standort: {location}
+            </div>
+          )}
+        </div>
+      ) : settingsLoading ? (
+        <div className="flex items-center justify-center py-4">
+          <div className="text-xs text-muted-foreground">Lädt Einstellungen...</div>
         </div>
       ) : (
-        <div className="text-xs text-muted-foreground text-center py-2">
-          Keine Wetterdaten verfügbar
+        <div className="space-y-1">
+          <div className="text-xs text-muted-foreground text-center py-2">
+            Keine Wetterdaten verfügbar
+          </div>
+          {location && (
+            <div className="text-[10px] text-muted-foreground/70 text-center">
+              Standort: {location}
+            </div>
+          )}
         </div>
       )}
     </div>

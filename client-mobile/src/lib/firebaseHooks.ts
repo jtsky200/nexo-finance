@@ -834,15 +834,34 @@ export function useWeather(date: Date | null, location?: string | null) {
       try {
         setIsLoading(true);
         setError(null);
+        
+        if (!location) {
+          throw new Error('Location ist erforderlich. Bitte in den Einstellungen einen Standort eingeben.');
+        }
+        
         const getWeatherFunc = httpsCallable(functions, 'getWeather');
         const result = await getWeatherFunc({ 
           date: date.toISOString(),
-          location: location || null
+          location: location
         });
+        
         const data = result.data as WeatherData | null;
-        setWeather(data);
-      } catch (err) {
-        setError(err as Error);
+        
+        // Debug logging
+        if (process.env.NODE_ENV === 'development' || (globalThis as any).process?.env?.NODE_ENV === 'development') {
+          console.log('[useWeather] API Response:', { data, location, date: date.toISOString() });
+        }
+        
+        if (!data) {
+          // No data returned - could be API error or no cache
+          setError(new Error('Keine Wetterdaten verfügbar. Bitte überprüfen Sie den Standort in den Einstellungen.'));
+        } else {
+          setWeather(data);
+        }
+      } catch (err: any) {
+        console.error('[useWeather] Error:', err);
+        const errorMessage = err?.message || err?.code || 'Unbekannter Fehler beim Laden der Wetterdaten';
+        setError(new Error(errorMessage));
         setWeather(null);
       } finally {
         setIsLoading(false);

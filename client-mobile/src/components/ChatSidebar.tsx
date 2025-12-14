@@ -19,6 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 // Chat-Historie entfernt - nimmt zu viel Platz ein
 import { cn } from '@/lib/utils';
 import { useGlassEffect } from '@/hooks/useGlassEffect';
+import SidebarCalendar from './SidebarCalendar';
 
 interface ChatSidebarProps {
   open: boolean;
@@ -148,7 +149,8 @@ export default function ChatSidebar({
               </nav>
             </div>
 
-            {/* Chat-Historie entfernt - nimmt zu viel Platz ein */}
+            {/* Calendar Widget */}
+            <SidebarCalendar />
           </div>
 
           {/* User Profile */}

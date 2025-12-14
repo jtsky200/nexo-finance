@@ -205,7 +205,7 @@ export default function SidebarCalendar() {
           </Button>
           
           <div className="flex-1 text-center px-1">
-            <h3 className="text-[10px] font-semibold leading-tight">
+            <h3 className="text-[11px] font-semibold leading-tight">
               {getStartOfWeek(currentDate).getDate()}.{getStartOfWeek(currentDate).getMonth() + 1}. - {weekDays[6].date.getDate()}.{weekDays[6].date.getMonth() + 1}.
             </h3>
           </div>
@@ -220,15 +220,15 @@ export default function SidebarCalendar() {
           </Button>
         </div>
 
-        {/* Day Headers and Dates - Kompakt und perfekt ausgerichtet */}
-        <div className="grid grid-cols-7 gap-0.5">
+        {/* Day Headers and Dates - Kompakt und perfekt ausgerichtet, enger zusammen */}
+        <div className="grid grid-cols-7 gap-0">
           {dayNames.map((day, i) => {
             const dayData = weekDays[i];
             const isTodayDate = dayData ? isToday(dayData.date) : false;
             return (
               <div key={i} className="flex flex-col items-center">
                 {/* Day Header */}
-                <div className="text-center text-[8px] font-medium text-muted-foreground mb-0.5 w-full">
+                <div className="text-center text-[10px] font-medium text-muted-foreground mb-1 w-full">
                   {day}
                 </div>
                 {/* Date Button */}
@@ -236,12 +236,12 @@ export default function SidebarCalendar() {
                   <button
                     onClick={() => handleDayClick(dayData.date)}
                     className={cn(
-                      "w-full aspect-square min-h-[24px] max-h-[26px] rounded-sm transition-colors flex flex-col items-center justify-center relative",
+                      "w-full aspect-square min-h-[28px] max-h-[30px] rounded-sm transition-colors flex flex-col items-center justify-center relative",
                       'text-foreground',
                       isTodayDate ? 'bg-primary text-primary-foreground font-semibold' : 'hover:bg-muted/50'
                     )}
                   >
-                    <span className="text-[10px] leading-none font-medium">{dayData.date.getDate()}</span>
+                    <span className="text-[12px] leading-none font-medium">{dayData.date.getDate()}</span>
                     {dayData.events.length > 0 && (
                       <div className="absolute bottom-0.5 left-0 right-0 flex gap-0.5 justify-center">
                         {dayData.events.slice(0, 2).map((event, j) => (
@@ -269,7 +269,7 @@ export default function SidebarCalendar() {
           variant="ghost"
           size="sm"
           onClick={goToToday}
-          className="w-full h-6 mt-1.5 text-[9px]"
+          className="w-full h-6 mt-1.5 text-[10px]"
         >
           Heute
         </Button>

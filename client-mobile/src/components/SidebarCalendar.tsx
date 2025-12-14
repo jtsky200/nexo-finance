@@ -115,65 +115,42 @@ export default function SidebarCalendar() {
     fetchEvents();
   }, [fetchEvents]);
 
-  const getDaysInMonth = (date: Date) => {
-    return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  // Get start of week (Monday)
+  const getStartOfWeek = (date: Date) => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - (day === 0 ? 6 : day - 1); // Adjust to Monday
+    return new Date(d.setDate(diff));
   };
 
-  const getFirstDayOfMonth = (date: Date) => {
-    const day = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-    return day === 0 ? 6 : day - 1;
-  };
-
-  const calendarDays = useMemo(() => {
-    const daysInMonth = getDaysInMonth(currentDate);
-    const firstDay = getFirstDayOfMonth(currentDate);
-    const days: { date: Date; isCurrentMonth: boolean; events: CalendarEvent[] }[] = [];
-
-    // Previous month days
-    const prevMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 0);
-    const daysInPrevMonth = prevMonth.getDate();
-    for (let i = firstDay - 1; i >= 0; i--) {
-      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, daysInPrevMonth - i);
+  // Get week days (Monday to Sunday)
+  const weekDays = useMemo(() => {
+    const startOfWeek = getStartOfWeek(currentDate);
+    const days: { date: Date; events: CalendarEvent[] }[] = [];
+    
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(startOfWeek);
+      date.setDate(startOfWeek.getDate() + i);
       const dateStr = date.toISOString().split('T')[0];
       days.push({
         date,
-        isCurrentMonth: false,
         events: events.filter(e => e.date === dateStr)
       });
     }
-
-    // Current month days
-    for (let i = 1; i <= daysInMonth; i++) {
-      const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), i);
-      const dateStr = date.toISOString().split('T')[0];
-      days.push({
-        date,
-        isCurrentMonth: true,
-        events: events.filter(e => e.date === dateStr)
-      });
-    }
-
-    // Next month days (fill to 42 = 6 weeks)
-    const remainingDays = 42 - days.length;
-    for (let i = 1; i <= remainingDays; i++) {
-      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, i);
-      const dateStr = date.toISOString().split('T')[0];
-      days.push({
-        date,
-        isCurrentMonth: false,
-        events: events.filter(e => e.date === dateStr)
-      });
-    }
-
+    
     return days;
   }, [currentDate, events]);
 
-  const goToPreviousMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  const goToPreviousWeek = () => {
+    const newDate = new Date(currentDate);
+    newDate.setDate(newDate.getDate() - 7);
+    setCurrentDate(newDate);
   };
 
-  const goToNextMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  const goToNextWeek = () => {
+    const newDate = new Date(currentDate);
+    newDate.setDate(newDate.getDate() + 7);
+    setCurrentDate(newDate);
   };
 
   const goToToday = () => {
@@ -216,12 +193,12 @@ export default function SidebarCalendar() {
   return (
     <>
       <div className="p-3 border-b border-border">
-        {/* Month Navigation - Kompakter */}
+        {/* Week Navigation - Kompakter */}
         <div className="flex items-center justify-between mb-2">
           <Button
             variant="ghost"
             size="sm"
-            onClick={goToPreviousMonth}
+            onClick={goToPreviousWeek}
             className="h-6 w-6 p-0 min-w-0"
           >
             <ChevronLeft className="w-3 h-3" />
@@ -229,14 +206,14 @@ export default function SidebarCalendar() {
           
           <div className="flex-1 text-center">
             <h3 className="text-xs font-semibold">
-              {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
+              Woche {getStartOfWeek(currentDate).getDate()}.{getStartOfWeek(currentDate).getMonth() + 1}. - {weekDays[6].date.getDate()}.{weekDays[6].date.getMonth() + 1}.
             </h3>
           </div>
           
           <Button
             variant="ghost"
             size="sm"
-            onClick={goToNextMonth}
+            onClick={goToNextWeek}
             className="h-6 w-6 p-0 min-w-0"
           >
             <ChevronRight className="w-3 h-3" />
@@ -244,7 +221,7 @@ export default function SidebarCalendar() {
         </div>
 
         {/* Day Headers - Kompakter */}
-        <div className="grid grid-cols-7 gap-0 mb-0.5">
+        <div className="grid grid-cols-7 gap-1 mb-1">
           {dayNames.map((day, i) => (
             <div key={i} className="text-center text-[9px] font-medium text-muted-foreground py-0.5">
               {day}
@@ -252,31 +229,31 @@ export default function SidebarCalendar() {
           ))}
         </div>
 
-        {/* Calendar Grid - Viel kompakter */}
-        <div className="grid grid-cols-7 gap-0.5">
-          {calendarDays.map((day, index) => {
+        {/* Week Grid - Kompakt */}
+        <div className="grid grid-cols-7 gap-1">
+          {weekDays.map((day, index) => {
             const isTodayDate = isToday(day.date);
             return (
               <button
                 key={index}
                 onClick={() => handleDayClick(day.date)}
                 className={cn(
-                  "aspect-square min-h-[20px] max-h-[24px] p-0 rounded-sm transition-colors flex flex-col items-center justify-center relative",
-                  !day.isCurrentMonth ? 'text-muted-foreground/20' : 'text-foreground',
+                  "aspect-square min-h-[28px] max-h-[32px] p-1 rounded-sm transition-colors flex flex-col items-center justify-center relative",
+                  'text-foreground',
                   isTodayDate ? 'bg-primary text-primary-foreground font-semibold' : 'hover:bg-muted/50'
                 )}
               >
-                <span className="text-[10px] leading-none">{day.date.getDate()}</span>
+                <span className="text-[11px] leading-none font-medium">{day.date.getDate()}</span>
                 {day.events.length > 0 && (
-                  <div className="absolute bottom-0.5 left-0 right-0 flex gap-0.5 justify-center">
-                    {day.events.slice(0, 2).map((event, i) => (
+                  <div className="absolute bottom-1 left-0 right-0 flex gap-0.5 justify-center">
+                    {day.events.slice(0, 3).map((event, i) => (
                       <div
                         key={i}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleEventClick(event);
                         }}
-                        className={cn("h-0.5 w-0.5 rounded-full", getEventColor(event.type))}
+                        className={cn("h-1 w-1 rounded-full", getEventColor(event.type))}
                         title={event.title}
                       />
                     ))}
@@ -292,7 +269,7 @@ export default function SidebarCalendar() {
           variant="ghost"
           size="sm"
           onClick={goToToday}
-          className="w-full h-7 mt-1.5 text-[10px]"
+          className="w-full h-7 mt-2 text-[10px]"
         >
           Heute
         </Button>

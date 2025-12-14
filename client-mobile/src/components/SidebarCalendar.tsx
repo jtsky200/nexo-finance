@@ -34,8 +34,8 @@ export default function SidebarCalendar() {
   const [showDayDialog, setShowDayDialog] = useState(false);
   const [showEventDialog, setShowEventDialog] = useState(false);
 
-  const monthNames = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 
-                      'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+  const monthNames = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 
+                      'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
   const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
   const fetchEvents = useCallback(async () => {
@@ -206,7 +206,7 @@ export default function SidebarCalendar() {
           
           <div className="flex-1 text-center px-1">
             <h3 className="text-[11px] font-semibold leading-tight">
-              {getStartOfWeek(currentDate).getDate()}.{getStartOfWeek(currentDate).getMonth() + 1}. - {weekDays[6].date.getDate()}.{weekDays[6].date.getMonth() + 1}.
+              {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
             </h3>
           </div>
           

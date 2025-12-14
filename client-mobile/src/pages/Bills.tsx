@@ -17,6 +17,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { formatErrorForDisplay } from '@/lib/errorHandler';
+import { hapticSuccess, hapticError, hapticSelection } from '@/lib/hapticFeedback';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function MobileBills() {
   const { t } = useTranslation();
@@ -68,9 +71,11 @@ export default function MobileBills() {
     try {
       await updateReminder(billId, { status: 'erledigt' as any });
       toast.success('Als bezahlt markiert');
+      hapticSuccess();
       await refetch();
-    } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+    } catch (error) {
+      toast.error(formatErrorForDisplay(error));
+      hapticError();
     }
   };
 
@@ -87,6 +92,7 @@ export default function MobileBills() {
   const handleAddBill = async () => {
     if (!newBill.title || !newBill.amount) {
       toast.error('Bitte Titel und Betrag eingeben');
+      hapticError();
       return;
     }
 
@@ -101,11 +107,13 @@ export default function MobileBills() {
       });
       
       toast.success('Rechnung hinzugefügt');
+      hapticSuccess();
       setShowAddDialog(false);
       setNewBill({ title: '', amount: '', dueDate: '', iban: '', reference: '' });
       await refetch();
-    } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+    } catch (error) {
+      toast.error(formatErrorForDisplay(error));
+      hapticError();
     }
   };
 
@@ -120,9 +128,13 @@ export default function MobileBills() {
         videoRef.current.srcObject = stream;
       }
       setShowCamera(true);
+      hapticSuccess();
     } catch (error) {
-      toast.error('Kamera konnte nicht gestartet werden');
-      console.error(error);
+      toast.error(formatErrorForDisplay(error));
+      hapticError();
+      if (process.env.NODE_ENV === 'development') {
+        console.error(error);
+      }
     }
   };
 
@@ -193,7 +205,9 @@ export default function MobileBills() {
         toast.error('QR-Code Erkennung nicht unterstützt');
       }
     } catch (error) {
-      console.error('QR scan error:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('QR scan error:', error);
+      }
       toast.error('Fehler beim Scannen');
     } finally {
       setIsScanning(false);
@@ -218,43 +232,57 @@ export default function MobileBills() {
         setShowAddDialog(true);
       }
     } catch (error) {
-      console.error('Parse error:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Parse error:', error);
+      }
     }
   };
 
   return (
-    <MobileLayout title={t('nav.bills', 'Rechnungen')}>
+    <MobileLayout title={t('nav.bills', 'Rechnungen')} showSidebar={true}>
       {/* Summary - Clean design */}
       <div className="mobile-card mb-4 bg-primary text-primary-foreground">
-        <div className="flex items-center gap-3 mb-2">
-          <FileText className="w-5 h-5 opacity-70" />
-          <p className="text-sm opacity-70">{t('bills.openAmount', 'Offene Rechnungen')}</p>
+        <div className="flex items-center gap-3 mb-3">
+          <FileText className="w-6 h-6 opacity-70" />
+          <p className="text-sm opacity-70 font-medium">{t('bills.openAmount', 'Offene Rechnungen')}</p>
         </div>
-        <p className="text-3xl font-semibold">CHF {totalOpen.toFixed(2)}</p>
-        <p className="text-sm opacity-60 mt-1">
+        <p className="text-3xl font-semibold mb-2">CHF {totalOpen.toFixed(2)}</p>
+        <p className="text-sm opacity-60">
           {openBills.length} {t('bills.bills', 'Rechnungen')}
         </p>
       </div>
 
       {/* Quick Actions - Clean buttons */}
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-3 mb-4">
         <button
-          onClick={() => setShowAddDialog(true)}
-          className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 active:opacity-80 transition-opacity"
+          onClick={() => {
+            hapticSelection();
+            setShowAddDialog(true);
+          }}
+          className="flex-1 mobile-card flex items-center justify-center gap-2 py-4 active:opacity-80 transition-opacity min-h-[56px]"
+          aria-label="Rechnung manuell hinzufügen"
         >
           <Plus className="w-5 h-5" />
           <span className="font-medium text-sm">Manuell</span>
         </button>
         <button
-          onClick={startCamera}
-          className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 active:opacity-80 transition-opacity"
+          onClick={() => {
+            hapticSelection();
+            startCamera();
+          }}
+          className="flex-1 mobile-card flex items-center justify-center gap-2 py-4 active:opacity-80 transition-opacity min-h-[56px]"
+          aria-label="QR-Code scannen"
         >
           <Camera className="w-5 h-5" />
           <span className="font-medium text-sm">Scannen</span>
         </button>
         <button
-          onClick={() => fileInputRef.current?.click()}
-          className="flex-1 mobile-card flex items-center justify-center gap-2 py-3 active:opacity-80 transition-opacity"
+          onClick={() => {
+            hapticSelection();
+            fileInputRef.current?.click();
+          }}
+          className="flex-1 mobile-card flex items-center justify-center gap-2 py-4 active:opacity-80 transition-opacity min-h-[56px]"
+          aria-label="Bild hochladen"
         >
           <Upload className="w-5 h-5" />
           <span className="font-medium text-sm">Bild</span>
@@ -270,8 +298,18 @@ export default function MobileBills() {
 
       {/* Open Bills */}
       {isLoading ? (
-        <div className="text-center py-8 text-muted-foreground">
-          {t('common.loading', 'Laden...')}
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="mobile-card p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+                <Skeleton className="h-8 w-20 ml-4" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : openBills.length === 0 ? (
         <div className="mobile-card text-center py-8">
@@ -279,18 +317,18 @@ export default function MobileBills() {
           <p className="text-muted-foreground">{t('bills.allPaid', 'Alle Rechnungen bezahlt')}</p>
         </div>
       ) : (
-        <div className="space-y-2 mb-4">
+        <div className="space-y-3 mb-4">
           {openBills.map((bill) => {
             const overdue = isOverdue(bill.dueDate);
             
             return (
               <div
                 key={bill.id}
-                className={`mobile-card flex items-center justify-between ${
+                className={`mobile-card flex items-center justify-between py-3 ${
                   overdue ? 'border-l-2 border-l-red-500' : ''
                 }`}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-4">
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
                     overdue ? 'bg-status-error' : 'bg-status-warning'
                   }`}>
@@ -312,8 +350,12 @@ export default function MobileBills() {
                     {formatAmount(bill.amount || 0)}
                   </p>
                   <button
-                    onClick={() => handleMarkAsPaid(bill.id)}
+                    onClick={() => {
+                      hapticSelection();
+                      handleMarkAsPaid(bill.id);
+                    }}
                     className="w-10 h-10 rounded-lg bg-status-success flex items-center justify-center status-success active:opacity-80 transition-opacity"
+                    aria-label={`${bill.title} als bezahlt markieren`}
                   >
                     <Check className="w-5 h-5" />
                   </button>
@@ -330,13 +372,13 @@ export default function MobileBills() {
           <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
             {t('bills.paid', 'Bezahlt')} ({paidBills.length})
           </p>
-          <div className="space-y-2 opacity-60">
+          <div className="space-y-3 opacity-60">
             {paidBills.slice(0, 5).map((bill) => (
               <div
                 key={bill.id}
-                className="mobile-card flex items-center justify-between"
+                className="mobile-card flex items-center justify-between py-3"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-lg bg-status-success flex items-center justify-center">
                     <Check className="w-5 h-5 status-success" />
                   </div>

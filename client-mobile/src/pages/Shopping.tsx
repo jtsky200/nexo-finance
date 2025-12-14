@@ -29,6 +29,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { functions } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
+import { hapticSuccess, hapticError, hapticSelection } from '@/lib/hapticFeedback';
+import { formatErrorForDisplay } from '@/lib/errorHandler';
 
 interface ReceiptItem {
   name: string;
@@ -143,29 +145,35 @@ export default function MobileShopping() {
       });
       
       toast.success('Artikel hinzugefügt');
+      hapticSuccess();
       setShowAddDialog(false);
       setNewItem({ name: '', quantity: '1', category: 'Lebensmittel', store: '' });
       await refetch();
-    } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+    } catch (error) {
+      toast.error('Fehler: ' + (error as any).message);
+      hapticError();
     }
   };
 
   const handleToggleBought = async (itemId: string, currentBought: boolean) => {
     try {
       await markShoppingItemAsBought(itemId, !currentBought);
+      hapticSelection();
       await refetch();
-    } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+    } catch (error) {
+      toast.error(formatErrorForDisplay(error));
+      hapticError();
     }
   };
 
   const handleDeleteItem = async (itemId: string) => {
     try {
       await deleteShoppingItem(itemId);
+      hapticSuccess();
       await refetch();
-    } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+    } catch (error) {
+      toast.error(formatErrorForDisplay(error));
+      hapticError();
     }
   };
 
@@ -175,9 +183,11 @@ export default function MobileShopping() {
         await deleteShoppingItem(item.id);
       }
       toast.success('Eingekaufte Artikel gelöscht');
+      hapticSuccess();
       await refetch();
-    } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+    } catch (error) {
+      toast.error(formatErrorForDisplay(error));
+      hapticError();
     }
   };
 
@@ -236,9 +246,13 @@ export default function MobileShopping() {
 
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
-        console.log('[Camera] High resolution stream started');
-      } catch (error: any) {
-        console.warn('[Camera] High resolution failed, trying fallback:', error);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[Camera] High resolution stream started');
+        }
+      } catch (error) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[Camera] High resolution failed, trying fallback:', error);
+        }
         // Fallback to Full HD
         constraints = {
           video: {
@@ -250,9 +264,13 @@ export default function MobileShopping() {
         };
         try {
           stream = await navigator.mediaDevices.getUserMedia(constraints);
-          console.log('[Camera] Fallback resolution stream started');
-        } catch (fallbackError: any) {
-          console.warn('[Camera] Fallback failed, using basic constraints:', fallbackError);
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[Camera] Fallback resolution stream started');
+          }
+        } catch (fallbackError) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[Camera] Fallback failed, using basic constraints:', fallbackError);
+          }
           // Last resort: basic constraints
           stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: 'environment' },
@@ -314,15 +332,19 @@ export default function MobileShopping() {
           await video.play();
           toast.success('Kamera aktiv');
           startEdgeDetection();
-        } catch (playError: any) {
-          console.error('Video play error:', playError);
+        } catch (playError) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Video play error:', playError);
+          }
           // Don't throw - video might still work
           toast.success('Kamera aktiv');
           startEdgeDetection();
         }
       }
-    } catch (error: any) {
-      console.error('Camera error:', error);
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Camera error:', error);
+      }
       
       // Stop any partial stream
       if (cameraStream) {
@@ -334,19 +356,20 @@ export default function MobileShopping() {
         videoRef.current.srcObject = null;
       }
       
+      const err = error as any;
       let errorMessage = 'Kamera-Fehler';
-      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
         errorMessage = 'Kamera-Berechtigung verweigert. Bitte in den Browser-Einstellungen erlauben.';
-      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
         errorMessage = 'Keine Kamera gefunden';
-      } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
         errorMessage = 'Kamera wird bereits verwendet';
-      } else if (error.name === 'OverconstrainedError' || error.name === 'ConstraintNotSatisfiedError') {
+      } else if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
         errorMessage = 'Kamera-Unterstützung nicht verfügbar';
-      } else if (error.message === 'Video-Timeout') {
+      } else if (err.message === 'Video-Timeout') {
         errorMessage = 'Kamera-Initialisierung zu langsam';
       } else {
-        errorMessage = `Kamera-Fehler: ${error.message || error.name}`;
+        errorMessage = `Kamera-Fehler: ${err.message || err.name}`;
       }
       
       toast.error(errorMessage);
@@ -406,7 +429,9 @@ export default function MobileShopping() {
       canvas.toBlob(async (blob) => {
         if (blob) {
           stopCamera();
-          console.log(`Photo size: ${blob.size} bytes`);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`Photo size: ${blob.size} bytes`);
+          }
           const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
           await analyzeShoppingList(file);
         }
@@ -578,7 +603,9 @@ export default function MobileShopping() {
           });
           
           const data = result.data as any;
-          console.log('OCR Result:', data);
+          if (process.env.NODE_ENV === 'development') {
+            console.log('OCR Result:', data);
+          }
           
           if (data.success && data.items && data.items.length > 0) {
             // Store full receipt data
@@ -603,26 +630,35 @@ export default function MobileShopping() {
               toast.error('Google Cloud Billing erforderlich', { duration: 5000 });
             } else if (data.rawText) {
               toast.error(`Text erkannt aber keine Artikel gefunden. Versuche bessere Bildqualität.`, { duration: 4000 });
-              console.log('Raw text:', data.rawText);
-            } else {
-              toast.error(data.error || 'Keine Artikel erkannt. Bitte bessere Bildqualität verwenden.', { duration: 4000 });
+              if (process.env.NODE_ENV === 'development') {
+                console.log('Raw text:', data.rawText);
+              }
+          } else {
+            toast.error(data.error || 'Keine Artikel erkannt. Bitte bessere Bildqualität verwenden.', { duration: 4000 });
             }
           }
-        } catch (innerError: any) {
-          console.error('Analysis error:', innerError);
-          toast.error('Analysefehler: ' + (innerError.message || 'Unbekannt'));
+        } catch (innerError) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Analysis error:', innerError);
+          }
+          toast.error(formatErrorForDisplay(innerError));
+          hapticError();
         }
         
         setIsScanning(false);
       };
       reader.onerror = () => {
         toast.error('Datei konnte nicht gelesen werden');
+        hapticError();
         setIsScanning(false);
       };
       reader.readAsDataURL(file);
-    } catch (error: any) {
-      console.error('File read error:', error);
-      toast.error('Fehler: ' + error.message);
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('File read error:', error);
+      }
+      toast.error(formatErrorForDisplay(error));
+      hapticError();
       setIsScanning(false);
     }
   };
@@ -683,11 +719,13 @@ export default function MobileShopping() {
           try {
             const reader = new FileReader();
             reader.onload = async () => {
-              try {
-                const base64 = (reader.result as string).split(',')[1];
-                
+              const base64 = (reader.result as string).split(',')[1];
+              
+              if (process.env.NODE_ENV === 'development') {
                 console.log(`[Live Scanner] Captured image: ${blob.size} bytes, Resolution: ${targetWidth}x${targetHeight}`);
-                
+              }
+              
+              try {
                 // Use full receipt analyzer for multiple items with high precision
                 const analyzeReceipt = httpsCallable(functions, 'analyzeReceipt');
                 const result = await analyzeReceipt({
@@ -697,12 +735,14 @@ export default function MobileShopping() {
                 });
                 
                 const data = result.data as any;
-                console.log('[Live Scanner] Full-screen scan result:', {
-                  success: data.success,
-                  itemsCount: data.items?.length || 0,
-                  hasError: !!data.error,
-                  rawTextLength: data.rawText?.length || 0
-                });
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('[Live Scanner] Full-screen scan result:', {
+                    success: data.success,
+                    itemsCount: data.items?.length || 0,
+                    hasError: !!data.error,
+                    rawTextLength: data.rawText?.length || 0
+                  });
+                }
                 
                 if (data.success && data.items && data.items.length > 0) {
                   // Create position-based IDs for each item
@@ -835,18 +875,24 @@ export default function MobileShopping() {
                     setScanError('Keine Artikel erkannt');
                   }
                 }
-              } catch (innerError: any) {
-                console.error('Frame scan error:', innerError);
-                if (!autoScanEnabled) {
-                  const msg = innerError.message?.includes('INTERNAL') ? 'Server-Fehler' : 'Scan-Fehler';
-                  setScanError(msg);
+              } catch (innerError) {
+                if (process.env.NODE_ENV === 'development') {
+                  console.error('Frame scan error:', innerError);
                 }
+                if (!autoScanEnabled) {
+                  const errorMsg = formatErrorForDisplay(innerError);
+                  setScanError(errorMsg);
+                }
+                hapticError();
               }
               setIsScanning(false);
             };
             reader.readAsDataURL(blob);
-          } catch (error: any) {
-            console.error('Blob read error:', error);
+          } catch (error) {
+            if (process.env.NODE_ENV === 'development') {
+              console.error('Blob read error:', error);
+            }
+            hapticError();
             setIsScanning(false);
           }
         }
@@ -926,7 +972,9 @@ export default function MobileShopping() {
                 });
                 
                 const data = result.data as any;
-                console.log('Single item result:', data);
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('Single item result:', data);
+                }
                 
                 if (data.success && data.item) {
                   // Set as pending for user confirmation
@@ -942,29 +990,30 @@ export default function MobileShopping() {
                   setPendingItem(newItem);
                   setPendingQuantity(1);
                   
-                  // Vibration feedback
-                  if (navigator.vibrate) {
-                    navigator.vibrate(100);
-                  }
+                  hapticSuccess();
                 } else {
                   const errorMsg = data.error || 'Artikel nicht erkannt';
                   setScanError(errorMsg);
                   toast.error(errorMsg, { duration: 2000 });
-                  if (navigator.vibrate) {
-                    navigator.vibrate([50, 50, 50]);
-                  }
+                  hapticError();
                 }
-              } catch (innerError: any) {
-                console.error('Single scan error:', innerError);
-                const msg = innerError.message?.includes('INTERNAL') ? 'Server-Fehler, nochmal versuchen' : 'Scan-Fehler';
-                setScanError(msg);
-                toast.error(msg, { duration: 2000 });
+              } catch (innerError) {
+                if (process.env.NODE_ENV === 'development') {
+                  console.error('Single scan error:', innerError);
+                }
+                const errorMsg = formatErrorForDisplay(innerError);
+                setScanError(errorMsg);
+                toast.error(errorMsg, { duration: 2000 });
+                hapticError();
               }
               setIsScanning(false);
             };
             reader.readAsDataURL(blob);
-          } catch (error: any) {
-            console.error('Blob read error:', error);
+          } catch (error) {
+            if (process.env.NODE_ENV === 'development') {
+              console.error('Blob read error:', error);
+            }
+            hapticError();
             setIsScanning(false);
           }
         }
@@ -987,6 +1036,7 @@ export default function MobileShopping() {
     setPendingItem(null);
     setPendingQuantity(1);
     toast.success(`${itemToAdd.name} (${pendingQuantity}x) hinzugefügt`);
+    hapticSuccess();
   };
 
   // Cancel pending item
@@ -1050,8 +1100,8 @@ export default function MobileShopping() {
       setLiveTotal(0);
       closeScanner();
       await refetch();
-    } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+    } catch (error) {
+      toast.error('Fehler: ' + (error as any).message);
     }
   };
 
@@ -1076,8 +1126,8 @@ export default function MobileShopping() {
       toast.success(`${selected.length} Artikel hinzugefügt!`);
       closeScanner();
       await refetch();
-    } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+    } catch (error) {
+      toast.error('Fehler: ' + (error as any).message);
     }
   };
 
@@ -1093,8 +1143,8 @@ export default function MobileShopping() {
       });
 
       toast.success('Quittung gespeichert!');
-    } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+    } catch (error) {
+      toast.error('Fehler: ' + (error as any).message);
     }
   };
 
@@ -1114,9 +1164,11 @@ export default function MobileShopping() {
       });
 
       toast.success('Zu Finanzen hinzugefügt!');
+      hapticSuccess();
       closeScanner();
-    } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+    } catch (error) {
+      toast.error(formatErrorForDisplay(error));
+      hapticError();
     }
   };
 
@@ -1168,15 +1220,15 @@ export default function MobileShopping() {
   };
 
   return (
-    <MobileLayout title={t('nav.shopping', 'Einkaufsliste')}>
+    <MobileLayout title={t('nav.shopping', 'Einkaufsliste')} showSidebar={true}>
       {/* Summary - Clean design */}
       <div className="mobile-card mb-4 bg-primary text-primary-foreground">
-        <div className="flex items-center gap-3 mb-2">
-          <ShoppingCart className="w-5 h-5 opacity-70" />
-          <p className="text-sm opacity-70">{t('shopping.list', 'Einkaufsliste')}</p>
+        <div className="flex items-center gap-3 mb-3">
+          <ShoppingCart className="w-6 h-6 opacity-70" />
+          <p className="text-sm opacity-70 font-medium">{t('shopping.list', 'Einkaufsliste')}</p>
         </div>
-        <p className="text-3xl font-semibold">{openItems.length}</p>
-        <p className="text-sm opacity-60 mt-1">
+        <p className="text-3xl font-semibold mb-2">{openItems.length}</p>
+        <p className="text-sm opacity-60">
           {t('shopping.itemsOpen', 'Artikel offen')}
         </p>
       </div>
@@ -1192,11 +1244,11 @@ export default function MobileShopping() {
           <p className="text-muted-foreground">{t('shopping.empty', 'Liste ist leer')}</p>
         </div>
       ) : (
-        <div className="space-y-2 mb-4">
+        <div className="space-y-3 mb-4">
           {openItems.map((item) => (
             <div
               key={item.id}
-              className="mobile-card flex items-center gap-3"
+              className="mobile-card flex items-center gap-4 py-3"
             >
               <button
                 onClick={() => handleToggleBought(item.id, item.bought)}
@@ -1237,11 +1289,11 @@ export default function MobileShopping() {
               {t('shopping.clearBought', 'Löschen')}
             </button>
           </div>
-          <div className="space-y-2 opacity-60">
+          <div className="space-y-3 opacity-60">
             {boughtItems.map((item) => (
               <div
                 key={item.id}
-                className="mobile-card flex items-center gap-3"
+                className="mobile-card flex items-center gap-4 py-3"
               >
                 <button
                   onClick={() => handleToggleBought(item.id, item.bought)}

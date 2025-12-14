@@ -609,12 +609,12 @@ export default function AIChat() {
       
       {/* Reminder Modal */}
       <Dialog open={showReminderModal} onOpenChange={setShowReminderModal}>
-        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-[80vh] !rounded-3xl !m-0 overflow-y-auto !shadow-2xl">
+        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-lg font-semibold">Erinnerung erstellen</DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-3 px-5 pb-4">
+          <div className="space-y-3 px-5 pb-2">
             <div>
               <Label className="text-sm font-medium">Titel *</Label>
               <Input
@@ -706,7 +706,7 @@ export default function AIChat() {
             </div>
           </div>
           
-          <DialogFooter className="px-5 pb-5 pt-3 gap-2.5">
+          <DialogFooter className="px-5 pb-3 pt-2 gap-2.5">
             <Button variant="outline" onClick={() => setShowReminderModal(false)} className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium">
               Abbrechen
             </Button>
@@ -856,12 +856,12 @@ export default function AIChat() {
           });
         }
       }}>
-        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-[80vh] !rounded-3xl !m-0 overflow-y-auto !shadow-2xl">
+        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-lg font-semibold">Einnahme / Ausgabe</DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-3 px-5 pb-4">
+          <div className="space-y-3 px-5 pb-2">
             <div>
               <Label className="text-sm font-medium">Typ *</Label>
               <Select
@@ -948,7 +948,7 @@ export default function AIChat() {
             </div>
           </div>
           
-          <DialogFooter className="px-5 pb-5 pt-3 gap-2.5">
+          <DialogFooter className="px-5 pb-3 pt-2 gap-2.5">
             <Button variant="outline" onClick={() => setShowFinanceModal(false)} className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium">
               Abbrechen
             </Button>
@@ -975,12 +975,12 @@ export default function AIChat() {
           });
         }
       }}>
-        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-[80vh] !rounded-3xl !m-0 overflow-y-auto !shadow-2xl">
+        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-lg font-semibold">Artikel zur Einkaufsliste hinzufügen</DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-3 px-5 pb-4">
+          <div className="space-y-3 px-5 pb-2">
             <div>
               <Label className="text-sm font-medium">Artikelname *</Label>
               <Input
@@ -1031,7 +1031,7 @@ export default function AIChat() {
             </div>
           </div>
           
-          <DialogFooter className="px-5 pb-5 pt-3 gap-2.5">
+          <DialogFooter className="px-5 pb-3 pt-2 gap-2.5">
             <Button variant="outline" onClick={() => setShowShoppingModal(false)} className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium">
               Abbrechen
             </Button>

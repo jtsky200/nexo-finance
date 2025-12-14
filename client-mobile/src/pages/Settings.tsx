@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
   User,
@@ -11,17 +11,266 @@ import {
   Shield,
   HelpCircle,
   Monitor,
-  Check
+  Check,
+  X
 } from 'lucide-react';
 import MobileLayout from '@/components/MobileLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import { toast } from 'sonner';
+import { 
+  requestNotificationPermission, 
+  getNotificationPermission,
+  isNotificationSupported,
+  registerServiceWorker
+} from '@/lib/notifications';
+import { hapticSuccess, hapticError, hapticSelection } from '@/lib/hapticFeedback';
+import { 
+  isBiometricSupported, 
+  isBiometricAvailable, 
+  registerBiometric,
+  hasBiometricEnabled,
+  enableBiometric,
+  disableBiometric
+} from '@/lib/biometricAuth';
+import { Fingerprint } from 'lucide-react';
+import { useGlassEffect } from '@/hooks/useGlassEffect';
+import { Sparkles } from 'lucide-react';
+
+function NotificationsSettings() {
+  const { t } = useTranslation();
+  const [permission, setPermission] = useState<NotificationPermission>('default');
+  const [isSupported, setIsSupported] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    setIsSupported(isNotificationSupported());
+    setPermission(getNotificationPermission());
+  }, []);
+
+  const handleEnableNotifications = async () => {
+    setIsLoading(true);
+    try {
+      hapticSelection();
+      
+      // Register service worker first
+      await registerServiceWorker();
+      
+      // Request permission
+      const newPermission = await requestNotificationPermission();
+      setPermission(newPermission);
+      
+      if (newPermission === 'granted') {
+        toast.success('Benachrichtigungen aktiviert');
+        hapticSuccess();
+      } else if (newPermission === 'denied') {
+        toast.error('Benachrichtigungen wurden blockiert. Bitte in den Browser-Einstellungen aktivieren.');
+        hapticError();
+      } else {
+        toast.info('Berechtigung erforderlich');
+      }
+    } catch (error) {
+      toast.error('Fehler beim Aktivieren der Benachrichtigungen');
+      hapticError();
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!isSupported) {
+    return (
+      <div className="mobile-card w-full flex items-center justify-between py-4 opacity-50">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+            <Bell className="w-5 h-5 text-foreground" />
+          </div>
+          <div className="text-left">
+            <p className="font-medium">{t('settings.notifications', 'Benachrichtigungen')}</p>
+            <p className="text-xs text-muted-foreground">Nicht unterstützt</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const isEnabled = permission === 'granted';
+  const isBlocked = permission === 'denied';
+
+  return (
+    <div className="mobile-card w-full py-4">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+            <Bell className="w-5 h-5 text-foreground" />
+          </div>
+          <div className="text-left">
+            <p className="font-medium">{t('settings.notifications', 'Benachrichtigungen')}</p>
+            <p className="text-xs text-muted-foreground">
+              {isEnabled ? 'Aktiviert' : isBlocked ? 'Blockiert' : 'Nicht aktiviert'}
+            </p>
+          </div>
+        </div>
+        {isEnabled ? (
+          <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+            <Check className="w-4 h-4 text-white" />
+          </div>
+        ) : (
+          <div className="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center">
+            <X className="w-4 h-4 text-white" />
+          </div>
+        )}
+      </div>
+      
+      {!isEnabled && (
+        <button
+          onClick={handleEnableNotifications}
+          disabled={isLoading || isBlocked}
+          className="w-full py-2 px-4 rounded-lg bg-primary text-primary-foreground font-medium active:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+        >
+          {isLoading ? 'Aktiviere...' : isBlocked ? 'In Browser-Einstellungen aktivieren' : 'Benachrichtigungen aktivieren'}
+        </button>
+      )}
+      
+      {isBlocked && (
+        <p className="text-xs text-muted-foreground mt-2">
+          Bitte öffnen Sie die Browser-Einstellungen und erlauben Sie Benachrichtigungen für diese Website.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function BiometricSettings() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const [isSupported, setIsSupported] = useState(false);
+  const [isAvailable, setIsAvailable] = useState(false);
+  const [isEnabled, setIsEnabled] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  useEffect(() => {
+    const checkBiometric = async () => {
+      const supported = isBiometricSupported();
+      setIsSupported(supported);
+      
+      if (supported) {
+        const available = await isBiometricAvailable();
+        setIsAvailable(available);
+      }
+      
+      setIsEnabled(hasBiometricEnabled());
+    };
+    
+    checkBiometric();
+  }, []);
+
+  const handleToggleBiometric = async () => {
+    if (isEnabled) {
+      disableBiometric();
+      setIsEnabled(false);
+      toast.success('Biometrische Authentifizierung deaktiviert');
+      hapticSuccess();
+      return;
+    }
+
+    if (!isAvailable) {
+      toast.error('Biometrische Authentifizierung ist auf diesem Gerät nicht verfügbar');
+      hapticError();
+      return;
+    }
+
+    setIsRegistering(true);
+    try {
+      hapticSelection();
+      
+      if (!user) {
+        toast.error('Bitte melden Sie sich zuerst an');
+        hapticError();
+        return;
+      }
+
+      const result = await registerBiometric(
+        user.uid,
+        user.displayName || user.email || 'User'
+      );
+
+      if (result.success) {
+        enableBiometric();
+        setIsEnabled(true);
+        toast.success('Biometrische Authentifizierung aktiviert');
+        hapticSuccess();
+      } else {
+        toast.error(result.error || 'Aktivierung fehlgeschlagen');
+        hapticError();
+      }
+    } catch (error) {
+      toast.error('Fehler beim Aktivieren der biometrischen Authentifizierung');
+      hapticError();
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  if (!isSupported) {
+    return null; // Don't show if not supported
+  }
+
+  return (
+    <div className="mobile-card w-full py-4">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+            <Fingerprint className="w-5 h-5 text-foreground" />
+          </div>
+          <div className="text-left">
+            <p className="font-medium">Biometrische Authentifizierung</p>
+            <p className="text-xs text-muted-foreground">
+              {isEnabled ? 'Aktiviert' : isAvailable ? 'Verfügbar' : 'Nicht verfügbar'}
+            </p>
+          </div>
+        </div>
+        {isEnabled ? (
+          <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+            <Check className="w-4 h-4 text-white" />
+          </div>
+        ) : (
+          <div className="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center">
+            <X className="w-4 h-4 text-white" />
+          </div>
+        )}
+      </div>
+      
+      {isAvailable && (
+        <button
+          onClick={handleToggleBiometric}
+          disabled={isRegistering || isLoading}
+          className="w-full py-2 px-4 rounded-lg bg-primary text-primary-foreground font-medium active:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+        >
+          {isRegistering 
+            ? 'Registriere...' 
+            : isLoading 
+            ? 'Lädt...' 
+            : isEnabled 
+            ? 'Biometrische Authentifizierung deaktivieren' 
+            : 'Biometrische Authentifizierung aktivieren'}
+        </button>
+      )}
+      
+      {!isAvailable && isSupported && (
+        <p className="text-xs text-muted-foreground">
+          Kein biometrischer Sensor auf diesem Gerät gefunden.
+        </p>
+      )}
+    </div>
+  );
+}
 
 export default function MobileSettings() {
   const { t, i18n } = useTranslation();
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { isEnabled: glassEffectEnabled, toggle: toggleGlassEffect } = useGlassEffect();
   
   const [showLanguageDialog, setShowLanguageDialog] = useState(false);
   const [showThemeDialog, setShowThemeDialog] = useState(false);
@@ -49,7 +298,9 @@ export default function MobileSettings() {
       toast.success('Abgemeldet');
       window.location.href = '/login';
     } catch (error) {
-      console.error('Logout error:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Logout error:', error);
+      }
       toast.error('Fehler beim Abmelden');
     }
   };
@@ -60,7 +311,7 @@ export default function MobileSettings() {
   };
 
   return (
-    <MobileLayout title={t('nav.settings', 'Einstellungen')}>
+    <MobileLayout title={t('nav.settings', 'Einstellungen')} showSidebar={true}>
       {/* Profile Section */}
       <div className="mobile-card mb-4 flex items-center gap-4">
         <div className="w-14 h-14 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
@@ -77,13 +328,13 @@ export default function MobileSettings() {
       </div>
 
       {/* Settings List */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         {/* Language */}
         <button
           onClick={() => setShowLanguageDialog(true)}
-          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity"
+          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity py-4"
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
               <Globe className="w-5 h-5 text-foreground" />
             </div>
@@ -100,9 +351,9 @@ export default function MobileSettings() {
         {/* Theme */}
         <button
           onClick={() => setShowThemeDialog(true)}
-          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity"
+          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity py-4"
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
               {theme === 'dark' ? (
                 <Moon className="w-5 h-5 text-foreground" />
@@ -123,9 +374,9 @@ export default function MobileSettings() {
         {/* Desktop Version */}
         <button
           onClick={handleDesktopSwitch}
-          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity"
+          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity py-4"
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
               <Monitor className="w-5 h-5 text-foreground" />
             </div>
@@ -138,28 +389,54 @@ export default function MobileSettings() {
         </button>
 
         {/* Notifications */}
-        <button
-          onClick={() => toast.info('Kommt in einer zukünftigen Version')}
-          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity"
-        >
-          <div className="flex items-center gap-3">
+        <NotificationsSettings />
+
+        {/* Biometric Authentication */}
+        <BiometricSettings />
+
+        {/* Glass Effect */}
+        <div className="mobile-card w-full py-4">
+          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-              <Bell className="w-5 h-5 text-foreground" />
+                <Sparkles className="w-5 h-5 text-foreground" />
             </div>
             <div className="text-left">
-              <p className="font-medium">{t('settings.notifications', 'Benachrichtigungen')}</p>
-              <p className="text-xs text-muted-foreground">{t('settings.enabled', 'Aktiviert')}</p>
+                <p className="font-medium">Glass-Effekt</p>
+                <p className="text-xs text-muted-foreground">
+                  {glassEffectEnabled ? 'Aktiviert' : 'Deaktiviert'}
+                </p>
             </div>
           </div>
-          <ChevronRight className="w-5 h-5 text-muted-foreground" />
+            {glassEffectEnabled ? (
+              <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                <Check className="w-4 h-4 text-white" />
+              </div>
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center">
+                <X className="w-4 h-4 text-white" />
+              </div>
+            )}
+          </div>
+          
+          <button
+            onClick={() => {
+              toggleGlassEffect();
+              hapticSelection();
+              toast.success(glassEffectEnabled ? 'Glass-Effekt deaktiviert' : 'Glass-Effekt aktiviert');
+            }}
+            className="w-full py-2 px-4 rounded-lg bg-primary text-primary-foreground font-medium active:opacity-80 transition-opacity min-h-[44px]"
+          >
+            {glassEffectEnabled ? 'Glass-Effekt deaktivieren' : 'Glass-Effekt aktivieren'}
         </button>
+        </div>
 
         {/* Privacy */}
         <button
           onClick={() => toast.info('Kommt in einer zukünftigen Version')}
-          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity"
+          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity py-4"
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
               <Shield className="w-5 h-5 text-foreground" />
             </div>
@@ -173,9 +450,9 @@ export default function MobileSettings() {
         {/* Help */}
         <button
           onClick={() => toast.info('Kommt in einer zukünftigen Version')}
-          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity"
+          className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity py-4"
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
               <HelpCircle className="w-5 h-5 text-foreground" />
             </div>

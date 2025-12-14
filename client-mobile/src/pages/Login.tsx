@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { validateEmail, validatePassword } from '@/lib/validation';
 
 export default function MobileLogin() {
   const [, setLocation] = useLocation();
@@ -11,7 +12,9 @@ export default function MobileLogin() {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
-    console.log('Google login clicked');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Google login clicked');
+    }
     if (isLoading) return;
     
     setIsLoading(true);
@@ -19,7 +22,9 @@ export default function MobileLogin() {
       await loginWithGoogle();
       setLocation('/');
     } catch (error: any) {
-      console.error('Google login error:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Google login error:', error);
+      }
       toast.error(error.message || 'Login fehlgeschlagen');
     } finally {
       setIsLoading(false);
@@ -28,10 +33,21 @@ export default function MobileLogin() {
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Email login clicked');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Email login clicked');
+    }
     
-    if (!email || !password) {
-      toast.error('Bitte E-Mail und Passwort eingeben');
+    // Validate email
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid) {
+      toast.error(emailValidation.error || 'Ungültige E-Mail-Adresse');
+      return;
+    }
+    
+    // Validate password
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      toast.error(passwordValidation.error || 'Ungültiges Passwort');
       return;
     }
     
@@ -42,7 +58,9 @@ export default function MobileLogin() {
       await loginWithEmail(email, password);
       setLocation('/');
     } catch (error: any) {
-      console.error('Email login error:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Email login error:', error);
+      }
       toast.error(error.message || 'Login fehlgeschlagen');
     } finally {
       setIsLoading(false);

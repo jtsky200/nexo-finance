@@ -5773,6 +5773,7 @@ export const scheduledDailyBackup = onSchedule({
 import { defineSecret } from 'firebase-functions/params';
 
 const openaiApiKeySecret = defineSecret('OPENAI_API_KEY');
+const openWeatherMapApiKey = defineSecret('OPENWEATHERMAP_API_KEY');
 
 // Chat function - AI Chat with OpenAI
 export const chat = onCall({ secrets: [openaiApiKeySecret] }, async (request) => {
@@ -6261,10 +6262,7 @@ function mapWeatherCondition(condition: string): string {
 }
 
 // Helper function to fetch weather from OpenWeatherMap API
-async function fetchWeatherFromAPI(location: string, date: Date): Promise<any> {
-  // Try to get API key from environment (for local testing) or from Firebase Secrets
-  const apiKey = process.env.OPENWEATHERMAP_API_KEY;
-  
+async function fetchWeatherFromAPI(location: string, date: Date, apiKey: string): Promise<any> {
   if (!apiKey) {
     throw new HttpsError('failed-precondition', 'OpenWeatherMap API key not configured. Please set OPENWEATHERMAP_API_KEY secret in Firebase.');
   }
@@ -6339,7 +6337,11 @@ async function fetchWeatherFromAPI(location: string, date: Date): Promise<any> {
   }
 }
 
-export const getWeather = onCall(async (request) => {
+export const getWeather = onCall(
+  {
+    secrets: [openWeatherMapApiKey],
+  },
+  async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'User must be authenticated');
   }
@@ -6386,7 +6388,8 @@ export const getWeather = onCall(async (request) => {
 
   // No cached data found - fetch from API
   try {
-    const apiWeather = await fetchWeatherFromAPI(validatedLocation, dateObj);
+    const apiKey = openWeatherMapApiKey.value();
+    const apiWeather = await fetchWeatherFromAPI(validatedLocation, dateObj, apiKey);
     
     if (!apiWeather) {
       return null;
@@ -6426,7 +6429,8 @@ export const getWeather = onCall(async (request) => {
     console.error('Error fetching weather from API:', error);
     return null;
   }
-});
+  }
+);
 
 export const saveWeather = onCall(async (request) => {
   if (!request.auth) {

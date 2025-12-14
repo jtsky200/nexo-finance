@@ -89,21 +89,15 @@ export default function ChatSidebar({
           "fixed top-0 left-0 h-full w-full max-w-sm z-50 transform transition-transform duration-300 ease-in-out shadow-xl",
           open ? "translate-x-0" : "-translate-x-full",
           glassEffectEnabled 
-            ? "bg-background/2 backdrop-blur-none"
+            ? "bg-background/95 backdrop-blur-md"
             : "bg-background"
         )}
         aria-label="Hauptnavigation"
         aria-hidden={!open}
       >
-        <div className={cn(
-          "flex flex-col h-full",
-          glassEffectEnabled ? "bg-transparent" : ""
-        )}>
+        <div className="flex flex-col h-full">
           {/* Header with Search */}
-          <div className={cn(
-            "p-4 border-b",
-            glassEffectEnabled ? "border-border/30 bg-transparent" : "border-border"
-          )}>
+          <div className="p-4 border-b border-border">
             <div className="flex items-center gap-3 mb-3">
               <button
                 onClick={onClose}
@@ -158,10 +152,7 @@ export default function ChatSidebar({
           </div>
 
           {/* User Profile */}
-          <div className={cn(
-            "p-4 border-t",
-            glassEffectEnabled ? "border-border/30 bg-transparent" : "border-border"
-          )}>
+          <div className="p-4 border-t border-border">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 text-sm font-medium">
                 {user?.photoURL ? (

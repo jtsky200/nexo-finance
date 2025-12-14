@@ -8,6 +8,7 @@ import { httpsCallable } from 'firebase/functions';
 import { toast } from 'sonner';
 import { useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
+import WeatherWidget from './WeatherWidget';
 
 interface CalendarEvent {
   id: string;
@@ -33,6 +34,13 @@ export default function SidebarCalendar() {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [showDayDialog, setShowDayDialog] = useState(false);
   const [showEventDialog, setShowEventDialog] = useState(false);
+  
+  // Set today as default selected date
+  useEffect(() => {
+    if (!selectedDate) {
+      setSelectedDate(new Date());
+    }
+  }, []);
 
   const monthNames = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 
                       'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
@@ -167,6 +175,11 @@ export default function SidebarCalendar() {
     setShowDayDialog(true);
   };
 
+  // Update selected date when clicking on a day (without opening dialog)
+  const handleDaySelect = (date: Date) => {
+    setSelectedDate(date);
+  };
+
   const handleEventClick = (event: CalendarEvent) => {
     setSelectedEvent(event);
     setShowEventDialog(true);
@@ -234,11 +247,18 @@ export default function SidebarCalendar() {
                 {/* Date Button */}
                 {dayData && (
                   <button
-                    onClick={() => handleDayClick(dayData.date)}
+                    onClick={() => {
+                      handleDaySelect(dayData.date);
+                      handleDayClick(dayData.date);
+                    }}
                     className={cn(
                       "w-full aspect-square min-h-[28px] max-h-[30px] rounded-sm transition-colors flex flex-col items-center justify-center relative",
                       'text-foreground',
-                      isTodayDate ? 'bg-primary text-primary-foreground font-semibold' : 'hover:bg-muted/50'
+                      selectedDate && dayData.date.toDateString() === selectedDate.toDateString() 
+                        ? 'bg-primary/20 ring-1 ring-primary' 
+                        : isTodayDate 
+                        ? 'bg-primary text-primary-foreground font-semibold' 
+                        : 'hover:bg-muted/50'
                     )}
                   >
                     <span className="text-[12px] leading-none font-medium">{dayData.date.getDate()}</span>
@@ -274,6 +294,9 @@ export default function SidebarCalendar() {
           Heute
         </Button>
       </div>
+
+      {/* Weather Widget - Zeigt Wetter für ausgewählten Tag */}
+      <WeatherWidget selectedDate={selectedDate} />
 
       {/* Day Events Dialog */}
       <Dialog open={showDayDialog} onOpenChange={setShowDayDialog}>

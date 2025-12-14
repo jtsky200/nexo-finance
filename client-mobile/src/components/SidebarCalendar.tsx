@@ -192,21 +192,21 @@ export default function SidebarCalendar() {
 
   return (
     <>
-      <div className="p-3 border-b border-border">
+      <div className="p-2 border-b border-border">
         {/* Week Navigation - Kompakter */}
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-1.5">
           <Button
             variant="ghost"
             size="sm"
             onClick={goToPreviousWeek}
-            className="h-6 w-6 p-0 min-w-0"
+            className="h-5 w-5 p-0 min-w-0"
           >
             <ChevronLeft className="w-3 h-3" />
           </Button>
           
-          <div className="flex-1 text-center">
-            <h3 className="text-xs font-semibold">
-              Woche {getStartOfWeek(currentDate).getDate()}.{getStartOfWeek(currentDate).getMonth() + 1}. - {weekDays[6].date.getDate()}.{weekDays[6].date.getMonth() + 1}.
+          <div className="flex-1 text-center px-1">
+            <h3 className="text-[10px] font-semibold leading-tight">
+              {getStartOfWeek(currentDate).getDate()}.{getStartOfWeek(currentDate).getMonth() + 1}. - {weekDays[6].date.getDate()}.{weekDays[6].date.getMonth() + 1}.
             </h3>
           </div>
           
@@ -214,52 +214,52 @@ export default function SidebarCalendar() {
             variant="ghost"
             size="sm"
             onClick={goToNextWeek}
-            className="h-6 w-6 p-0 min-w-0"
+            className="h-5 w-5 p-0 min-w-0"
           >
             <ChevronRight className="w-3 h-3" />
           </Button>
         </div>
 
-        {/* Day Headers - Kompakter */}
-        <div className="grid grid-cols-7 gap-1 mb-1">
-          {dayNames.map((day, i) => (
-            <div key={i} className="text-center text-[9px] font-medium text-muted-foreground py-0.5">
-              {day}
-            </div>
-          ))}
-        </div>
-
-        {/* Week Grid - Kompakt */}
-        <div className="grid grid-cols-7 gap-1">
-          {weekDays.map((day, index) => {
-            const isTodayDate = isToday(day.date);
+        {/* Day Headers and Dates - Kompakt und perfekt ausgerichtet */}
+        <div className="grid grid-cols-7 gap-0.5">
+          {dayNames.map((day, i) => {
+            const dayData = weekDays[i];
+            const isTodayDate = dayData ? isToday(dayData.date) : false;
             return (
-              <button
-                key={index}
-                onClick={() => handleDayClick(day.date)}
-                className={cn(
-                  "aspect-square min-h-[28px] max-h-[32px] p-1 rounded-sm transition-colors flex flex-col items-center justify-center relative",
-                  'text-foreground',
-                  isTodayDate ? 'bg-primary text-primary-foreground font-semibold' : 'hover:bg-muted/50'
+              <div key={i} className="flex flex-col items-center">
+                {/* Day Header */}
+                <div className="text-center text-[8px] font-medium text-muted-foreground mb-0.5 w-full">
+                  {day}
+                </div>
+                {/* Date Button */}
+                {dayData && (
+                  <button
+                    onClick={() => handleDayClick(dayData.date)}
+                    className={cn(
+                      "w-full aspect-square min-h-[24px] max-h-[26px] rounded-sm transition-colors flex flex-col items-center justify-center relative",
+                      'text-foreground',
+                      isTodayDate ? 'bg-primary text-primary-foreground font-semibold' : 'hover:bg-muted/50'
+                    )}
+                  >
+                    <span className="text-[10px] leading-none font-medium">{dayData.date.getDate()}</span>
+                    {dayData.events.length > 0 && (
+                      <div className="absolute bottom-0.5 left-0 right-0 flex gap-0.5 justify-center">
+                        {dayData.events.slice(0, 2).map((event, j) => (
+                          <div
+                            key={j}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEventClick(event);
+                            }}
+                            className={cn("h-0.5 w-0.5 rounded-full", getEventColor(event.type))}
+                            title={event.title}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </button>
                 )}
-              >
-                <span className="text-[11px] leading-none font-medium">{day.date.getDate()}</span>
-                {day.events.length > 0 && (
-                  <div className="absolute bottom-1 left-0 right-0 flex gap-0.5 justify-center">
-                    {day.events.slice(0, 3).map((event, i) => (
-                      <div
-                        key={i}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEventClick(event);
-                        }}
-                        className={cn("h-1 w-1 rounded-full", getEventColor(event.type))}
-                        title={event.title}
-                      />
-                    ))}
-                  </div>
-                )}
-              </button>
+              </div>
             );
           })}
         </div>
@@ -269,7 +269,7 @@ export default function SidebarCalendar() {
           variant="ghost"
           size="sm"
           onClick={goToToday}
-          className="w-full h-7 mt-2 text-[10px]"
+          className="w-full h-6 mt-1.5 text-[9px]"
         >
           Heute
         </Button>

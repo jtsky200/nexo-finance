@@ -729,12 +729,12 @@ export default function AIChat() {
           setScannedImage(null);
         }
       }}>
-        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-[80vh] !rounded-3xl !m-0 overflow-y-auto !shadow-2xl">
+        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-lg font-semibold">Rechnung scannen</DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-3 px-5 pb-4">
+          <div className="space-y-3 px-5 pb-2">
             {!showCamera && !scannedImage && (
               <div className="space-y-2.5">
                 <Button
@@ -826,7 +826,7 @@ export default function AIChat() {
             )}
           </div>
           
-          <DialogFooter className="px-5 pb-5 pt-3">
+          <DialogFooter className="px-5 pb-3 pt-2">
             <Button
               variant="outline"
               onClick={() => {

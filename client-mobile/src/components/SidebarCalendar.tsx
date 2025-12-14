@@ -215,20 +215,20 @@ export default function SidebarCalendar() {
 
   return (
     <>
-      <div className="p-4 border-b border-border">
-        {/* Month Navigation */}
-        <div className="flex items-center justify-between mb-3">
+      <div className="p-3 border-b border-border">
+        {/* Month Navigation - Kompakter */}
+        <div className="flex items-center justify-between mb-2">
           <Button
             variant="ghost"
             size="sm"
             onClick={goToPreviousMonth}
-            className="h-8 w-8 p-0"
+            className="h-6 w-6 p-0 min-w-0"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="w-3 h-3" />
           </Button>
           
           <div className="flex-1 text-center">
-            <h3 className="text-sm font-semibold">
+            <h3 className="text-xs font-semibold">
               {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
             </h3>
           </div>
@@ -237,22 +237,22 @@ export default function SidebarCalendar() {
             variant="ghost"
             size="sm"
             onClick={goToNextMonth}
-            className="h-8 w-8 p-0"
+            className="h-6 w-6 p-0 min-w-0"
           >
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="w-3 h-3" />
           </Button>
         </div>
 
-        {/* Day Headers */}
-        <div className="grid grid-cols-7 gap-0.5 mb-1">
+        {/* Day Headers - Kompakter */}
+        <div className="grid grid-cols-7 gap-0 mb-0.5">
           {dayNames.map((day, i) => (
-            <div key={i} className="text-center text-[10px] font-medium text-muted-foreground py-1">
+            <div key={i} className="text-center text-[9px] font-medium text-muted-foreground py-0.5">
               {day}
             </div>
           ))}
         </div>
 
-        {/* Calendar Grid */}
+        {/* Calendar Grid - Viel kompakter */}
         <div className="grid grid-cols-7 gap-0.5">
           {calendarDays.map((day, index) => {
             const isTodayDate = isToday(day.date);
@@ -261,22 +261,22 @@ export default function SidebarCalendar() {
                 key={index}
                 onClick={() => handleDayClick(day.date)}
                 className={cn(
-                  "aspect-square min-h-[32px] p-0.5 rounded text-[10px] transition-colors flex flex-col items-center justify-start",
-                  !day.isCurrentMonth ? 'text-muted-foreground/30' : 'text-foreground',
-                  isTodayDate ? 'bg-primary text-primary-foreground font-bold' : 'hover:bg-muted'
+                  "aspect-square min-h-[20px] max-h-[24px] p-0 rounded-sm transition-colors flex flex-col items-center justify-center relative",
+                  !day.isCurrentMonth ? 'text-muted-foreground/20' : 'text-foreground',
+                  isTodayDate ? 'bg-primary text-primary-foreground font-semibold' : 'hover:bg-muted/50'
                 )}
               >
-                <span className="text-[11px] font-medium">{day.date.getDate()}</span>
+                <span className="text-[10px] leading-none">{day.date.getDate()}</span>
                 {day.events.length > 0 && (
-                  <div className="flex gap-0.5 mt-0.5 w-full justify-center">
-                    {day.events.slice(0, 3).map((event, i) => (
+                  <div className="absolute bottom-0.5 left-0 right-0 flex gap-0.5 justify-center">
+                    {day.events.slice(0, 2).map((event, i) => (
                       <div
                         key={i}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleEventClick(event);
                         }}
-                        className={cn("h-1 w-1 rounded-full", getEventColor(event.type))}
+                        className={cn("h-0.5 w-0.5 rounded-full", getEventColor(event.type))}
                         title={event.title}
                       />
                     ))}
@@ -287,12 +287,12 @@ export default function SidebarCalendar() {
           })}
         </div>
 
-        {/* Today Button */}
+        {/* Today Button - Kompakter */}
         <Button
           variant="ghost"
           size="sm"
           onClick={goToToday}
-          className="w-full h-8 mt-2 text-xs"
+          className="w-full h-7 mt-1.5 text-[10px]"
         >
           Heute
         </Button>

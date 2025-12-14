@@ -848,13 +848,24 @@ export function useWeather(date: Date | null, location?: string | null) {
         const data = result.data as WeatherData | null;
         
         // Debug logging
-        if (process.env.NODE_ENV === 'development' || (globalThis as any).process?.env?.NODE_ENV === 'development') {
+        const isDev = (globalThis as any).process?.env?.NODE_ENV === 'development';
+        if (isDev) {
           console.log('[useWeather] API Response:', { data, location, date: date.toISOString() });
         }
         
         if (!data) {
           // No data returned - could be API error or no cache
-          setError(new Error('Keine Wetterdaten verfügbar. Bitte überprüfen Sie den Standort in den Einstellungen.'));
+          // Check if it's a past date (historical data not available)
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const requestDate = new Date(date);
+          requestDate.setHours(0, 0, 0, 0);
+          
+          if (requestDate < today) {
+            setError(new Error('Historische Wetterdaten sind nur aus dem Cache verfügbar.'));
+          } else {
+            setError(new Error('Keine Wetterdaten verfügbar. Bitte überprüfen Sie den Standort in den Einstellungen.'));
+          }
         } else {
           setWeather(data);
         }

@@ -6308,7 +6308,8 @@ async function fetchWeatherFromAPI(location: string, date: Date, apiKey: string)
     } else if (isPast) {
       // Historical data requires paid plan or we can return cached data only
       // For now, return null - historical data should be cached when it was current
-      throw new HttpsError('unavailable', 'Historical weather data is only available from cache. Historical API requires paid subscription.');
+      // Don't throw error, just return null so client can show appropriate message
+      return null;
     }
 
     return null;
@@ -6431,14 +6432,19 @@ export const getWeather = onCall(
       code: error.code,
       location: validatedLocation,
       date: dateStr,
-      userId
+      userId,
+      stack: error.stack
     });
     
-    // Return error details instead of null for better debugging
-    // In production, you might want to return null for graceful degradation
+    // If it's already an HttpsError, re-throw it
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    
+    // Otherwise, wrap it in an HttpsError
     throw new HttpsError(
       error.code || 'internal',
-      error.message || 'Fehler beim Abrufen der Wetterdaten von der API'
+      error.message || 'Fehler beim Abrufen der Wetterdaten. Bitte überprüfen Sie den Standort in den Einstellungen.'
     );
   }
   }

@@ -10,9 +10,10 @@ interface WeatherWidgetProps {
 export default function WeatherWidget({ selectedDate }: WeatherWidgetProps) {
   const { user } = useAuth();
   // TODO: Phase 4 - Location aus Settings holen
-  const location = null; // Wird in Phase 4 implementiert
+  // Für jetzt: Standard-Location verwenden, falls keine gesetzt ist
+  const location = 'Zurich, CH'; // Wird in Phase 4 aus Settings geladen
   
-  const { data: weather, isLoading } = useWeather(selectedDate, location);
+  const { data: weather, isLoading, error } = useWeather(selectedDate, location);
 
   const getWeatherIcon = (icon: string) => {
     switch (icon) {
@@ -76,6 +77,10 @@ export default function WeatherWidget({ selectedDate }: WeatherWidgetProps) {
               </div>
             </div>
           )}
+        </div>
+      ) : error ? (
+        <div className="text-xs text-muted-foreground text-center py-2">
+          {error.message || 'Fehler beim Laden der Wetterdaten'}
         </div>
       ) : (
         <div className="text-xs text-muted-foreground text-center py-2">

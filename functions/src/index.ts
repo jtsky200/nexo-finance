@@ -1,7 +1,8 @@
-﻿import {onCall, HttpsError} from 'firebase-functions/v2/https';
+import {onCall, HttpsError} from 'firebase-functions/v2/https';
 import {onSchedule} from 'firebase-functions/v2/scheduler';
 
 import * as admin from 'firebase-admin';
+import axios from 'axios';
 
 admin.initializeApp();
 
@@ -6207,7 +6208,134 @@ export const deleteChatConversation = onCall(async (request) => {
   return { success: true };
 });
 
-// ========== Weather Functions (Phase 2) ==========
+// ========== Weather Functions (Phase 3: API Integration) ==========
+
+// Helper function to map OpenWeatherMap icon codes to our icon names
+function mapWeatherIcon(iconCode: string): string {
+  // OpenWeatherMap icon codes: https://openweathermap.org/weather-conditions
+  const iconMap: { [key: string]: string } = {
+    '01d': 'sun',        // clear sky day
+    '01n': 'sun',        // clear sky night
+    '02d': 'cloud-sun',  // few clouds day
+    '02n': 'cloud-sun',  // few clouds night
+    '03d': 'cloud',      // scattered clouds
+    '03n': 'cloud',
+    '04d': 'cloud',      // broken clouds
+    '04n': 'cloud',
+    '09d': 'rain',       // shower rain
+    '09n': 'rain',
+    '10d': 'rain',       // rain day
+    '10n': 'rain',       // rain night
+    '11d': 'rain',       // thunderstorm
+    '11n': 'rain',
+    '13d': 'snow',       // snow
+    '13n': 'snow',
+    '50d': 'cloud',      // mist
+    '50n': 'cloud',
+  };
+  return iconMap[iconCode] || 'cloud';
+}
+
+// Helper function to map OpenWeatherMap weather condition to German
+function mapWeatherCondition(condition: string): string {
+  const conditionMap: { [key: string]: string } = {
+    'clear sky': 'Klar',
+    'few clouds': 'Wenig bewölkt',
+    'scattered clouds': 'Bewölkt',
+    'broken clouds': 'Stark bewölkt',
+    'shower rain': 'Regenschauer',
+    'rain': 'Regen',
+    'thunderstorm': 'Gewitter',
+    'snow': 'Schnee',
+    'mist': 'Nebel',
+    'fog': 'Nebel',
+    'haze': 'Dunst',
+    'dust': 'Staub',
+    'sand': 'Sand',
+    'ash': 'Asche',
+    'squall': 'Böen',
+    'tornado': 'Tornado',
+  };
+  return conditionMap[condition.toLowerCase()] || condition;
+}
+
+// Helper function to fetch weather from OpenWeatherMap API
+async function fetchWeatherFromAPI(location: string, date: Date): Promise<any> {
+  const apiKey = process.env.OPENWEATHERMAP_API_KEY;
+  
+  if (!apiKey) {
+    throw new HttpsError('failed-precondition', 'OpenWeatherMap API key not configured. Please set OPENWEATHERMAP_API_KEY environment variable.');
+  }
+
+  try {
+    // For current weather (today and future dates)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const requestDate = new Date(date);
+    requestDate.setHours(0, 0, 0, 0);
+    
+    // Check if date is in the future (forecast) or past (historical)
+    const isFuture = requestDate > today;
+    const isPast = requestDate < today;
+    const isToday = requestDate.getTime() === today.getTime();
+
+    if (isToday || isFuture) {
+      // Use current weather API for today, or forecast API for future dates
+      // For simplicity, we'll use current weather API (free tier limitation)
+      // For production, consider using forecast API for future dates
+      const url = `https://api.openweathermap.org/data/2.5/weather`;
+      const params: any = {
+        q: location,
+        appid: apiKey,
+        units: 'metric',
+        lang: 'de',
+      };
+
+      const response = await axios.get(url, { params, timeout: 10000 });
+      const data = response.data;
+
+      if (!data || !data.main || !data.weather || data.weather.length === 0) {
+        throw new Error('Invalid API response');
+      }
+
+      return {
+        temperature: Math.round(data.main.temp),
+        condition: mapWeatherCondition(data.weather[0].description),
+        icon: mapWeatherIcon(data.weather[0].icon),
+        humidity: data.main.humidity || null,
+        windSpeed: data.wind?.speed ? Math.round(data.wind.speed * 3.6) : null, // Convert m/s to km/h
+      };
+    } else if (isPast) {
+      // Historical data requires paid plan or we can return cached data only
+      // For now, return null - historical data should be cached when it was current
+      throw new HttpsError('unavailable', 'Historical weather data is only available from cache. Historical API requires paid subscription.');
+    }
+
+    return null;
+  } catch (error: any) {
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    
+    // Handle API errors
+    if (error.response) {
+      const status = error.response.status;
+      if (status === 401) {
+        throw new HttpsError('failed-precondition', 'Invalid OpenWeatherMap API key');
+      } else if (status === 404) {
+        throw new HttpsError('not-found', `Location "${location}" not found`);
+      } else if (status === 429) {
+        throw new HttpsError('resource-exhausted', 'OpenWeatherMap API rate limit exceeded');
+      } else {
+        throw new HttpsError('internal', `Weather API error: ${error.response.data?.message || 'Unknown error'}`);
+      }
+    } else if (error.request) {
+      throw new HttpsError('deadline-exceeded', 'Weather API request timeout');
+    } else {
+      throw new HttpsError('internal', `Failed to fetch weather: ${error.message}`);
+    }
+  }
+}
 
 export const getWeather = onCall(async (request) => {
   if (!request.auth) {
@@ -6221,20 +6349,19 @@ export const getWeather = onCall(async (request) => {
     throw new HttpsError('invalid-argument', 'date is required');
   }
 
+  if (!location) {
+    throw new HttpsError('invalid-argument', 'location is required');
+  }
+
   const dateObj = validateDate(date, 'date', true);
   const dateStr = dateObj.toISOString().split('T')[0];
+  const validatedLocation = validateString(location, 'location', 200, true);
 
   // Check if weather data exists in cache
   const weatherQuery = db.collection('weatherData')
     .where('userId', '==', userId)
-    .where('date', '==', dateStr);
-  
-  if (location) {
-    const validatedLocation = validateString(location, 'location', 200, false);
-    if (validatedLocation) {
-      weatherQuery.where('location', '==', validatedLocation);
-    }
-  }
+    .where('date', '==', dateStr)
+    .where('location', '==', validatedLocation);
 
   const snapshot = await weatherQuery.limit(1).get();
 
@@ -6255,8 +6382,48 @@ export const getWeather = onCall(async (request) => {
     };
   }
 
-  // No cached data found - will be fetched by API in Phase 3
-  return null;
+  // No cached data found - fetch from API
+  try {
+    const apiWeather = await fetchWeatherFromAPI(validatedLocation, dateObj);
+    
+    if (!apiWeather) {
+      return null;
+    }
+
+    // Save to cache
+    const weatherData: any = {
+      userId,
+      date: dateStr,
+      location: validatedLocation,
+      temperature: apiWeather.temperature,
+      condition: apiWeather.condition,
+      icon: apiWeather.icon,
+      humidity: apiWeather.humidity,
+      windSpeed: apiWeather.windSpeed,
+      fetchedAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    const docRef = await db.collection('weatherData').add(weatherData);
+
+    return {
+      id: docRef.id,
+      date: dateStr,
+      location: validatedLocation,
+      temperature: apiWeather.temperature,
+      condition: apiWeather.condition,
+      icon: apiWeather.icon,
+      humidity: apiWeather.humidity,
+      windSpeed: apiWeather.windSpeed,
+      cached: false,
+      fetchedAt: new Date().toISOString(),
+    };
+  } catch (error: any) {
+    // If API fails, return null instead of throwing (graceful degradation)
+    console.error('Error fetching weather from API:', error);
+    return null;
+  }
 });
 
 export const saveWeather = onCall(async (request) => {

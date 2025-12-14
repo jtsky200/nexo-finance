@@ -14,6 +14,11 @@ import {
 } from 'firebase/firestore';
 import { db, functions } from './firebase';
 import { httpsCallable } from 'firebase/functions';
+import { callWithRetry } from './apiRetry';
+
+// Retry options for critical operations
+const CRITICAL_RETRY_OPTIONS = { maxRetries: 3, initialDelay: 1000 };
+const STANDARD_RETRY_OPTIONS = { maxRetries: 2, initialDelay: 500 };
 
 // ========== Reminders Hooks ==========
 
@@ -73,18 +78,17 @@ export function useReminders(filters?: { startDate?: Date; endDate?: Date; statu
 
 export async function createReminder(data: Omit<Reminder, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'status'>) {
   const createReminderFunc = httpsCallable(functions, 'createReminder');
-  const result = await createReminderFunc(data);
-  return result.data;
+  return callWithRetry(createReminderFunc, data, CRITICAL_RETRY_OPTIONS);
 }
 
 export async function updateReminder(id: string, data: Partial<Reminder>) {
   const updateReminderFunc = httpsCallable(functions, 'updateReminder');
-  await updateReminderFunc({ id, ...data });
+  await callWithRetry(updateReminderFunc, { id, ...data }, STANDARD_RETRY_OPTIONS);
 }
 
 export async function deleteReminder(id: string) {
   const deleteReminderFunc = httpsCallable(functions, 'deleteReminder');
-  await deleteReminderFunc({ id });
+  await callWithRetry(deleteReminderFunc, { id }, STANDARD_RETRY_OPTIONS);
 }
 
 // ========== Finance Hooks ==========
@@ -147,18 +151,17 @@ export function useFinanceEntries(filters?: { startDate?: Date; endDate?: Date; 
 
 export async function createFinanceEntry(data: Omit<FinanceEntry, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) {
   const createEntryFunc = httpsCallable(functions, 'createFinanceEntry');
-  const result = await createEntryFunc(data);
-  return result.data;
+  return callWithRetry(createEntryFunc, data, CRITICAL_RETRY_OPTIONS);
 }
 
 export async function updateFinanceEntry(id: string, data: Partial<FinanceEntry>) {
   const updateEntryFunc = httpsCallable(functions, 'updateFinanceEntry');
-  await updateEntryFunc({ id, ...data });
+  await callWithRetry(updateEntryFunc, { id, ...data }, STANDARD_RETRY_OPTIONS);
 }
 
 export async function deleteFinanceEntry(id: string) {
   const deleteEntryFunc = httpsCallable(functions, 'deleteFinanceEntry');
-  await deleteEntryFunc({ id });
+  await callWithRetry(deleteEntryFunc, { id }, STANDARD_RETRY_OPTIONS);
 }
 
 // ========== Tax Profile Hooks ==========
@@ -294,18 +297,17 @@ export function usePeople() {
 
 export async function createPerson(data: Omit<Person, 'id' | 'userId' | 'totalOwed' | 'createdAt' | 'updatedAt'>) {
   const createPersonFunc = httpsCallable(functions, 'createPerson');
-  const result = await createPersonFunc(data);
-  return result.data;
+  return callWithRetry(createPersonFunc, data, CRITICAL_RETRY_OPTIONS);
 }
 
 export async function updatePerson(personId: string, data: Partial<Person>) {
   const updatePersonFunc = httpsCallable(functions, 'updatePerson');
-  await updatePersonFunc({ personId, ...data });
+  await callWithRetry(updatePersonFunc, { personId, ...data }, STANDARD_RETRY_OPTIONS);
 }
 
 export async function deletePerson(personId: string) {
   const deletePersonFunc = httpsCallable(functions, 'deletePerson');
-  await deletePersonFunc({ personId });
+  await callWithRetry(deletePersonFunc, { personId }, STANDARD_RETRY_OPTIONS);
 }
 
 export function usePersonDebts(personId: string) {
@@ -495,7 +497,9 @@ export function usePersonInvoices(personId: string) {
           
           return mapped;
         } catch (err) {
-          console.error('Error mapping invoice:', inv, err);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Error mapping invoice:', inv, err);
+          }
           // Return invoice with safe defaults
           return {
             ...inv,
@@ -595,4 +599,290 @@ export async function updateInstallmentPlan(personId: string, invoiceId: string,
   const updatePlanFunc = httpsCallable(functions, 'updateInstallmentPlan');
   const result = await updatePlanFunc({ personId, invoiceId, ...data });
   return result.data;
+}
+
+// ========== Chat Reminders Hooks ==========
+
+export interface ChatReminder {
+  id: string;
+  userId: string;
+  reminderId: string;
+  notificationType: '1day' | '1hour';
+  message: string;
+  reminderTitle: string;
+  reminderType: string;
+  dueDate: Date | string;
+  isRead: boolean;
+  shouldOpenDialog: boolean;
+  askForFollowUp?: boolean;
+  createdAt: Date | string;
+  readAt?: Date | string;
+}
+
+export async function createQuickReminder(title: string, minutesFromNow: number = 5) {
+  const createQuickFunc = httpsCallable(functions, 'createQuickReminder');
+  await createQuickFunc({ title, minutesFromNow });
+}
+
+export async function createFollowUpReminder(originalReminderId: string, minutesFromNow: number = 15) {
+  const createFollowUpFunc = httpsCallable(functions, 'createFollowUpReminder');
+  await createFollowUpFunc({ originalReminderId, minutesFromNow });
+}
+
+export function useChatReminders(unreadOnly: boolean = true) {
+  const [reminders, setReminders] = useState<ChatReminder[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let debounceTimeout: number | null = null;
+    let lastRefreshTime = 0;
+    const MIN_REFRESH_INTERVAL = 2000;
+
+    const setupEventListeners = async () => {
+      const { eventBus, Events } = await import('./eventBus');
+      
+      const debouncedRefresh = () => {
+        const now = Date.now();
+        if (now - lastRefreshTime < MIN_REFRESH_INTERVAL) {
+          if (debounceTimeout) {
+            clearTimeout(debounceTimeout);
+          }
+          debounceTimeout = window.setTimeout(() => {
+            setRefreshKey(prev => prev + 1);
+            lastRefreshTime = Date.now();
+          }, MIN_REFRESH_INTERVAL);
+        } else {
+          setRefreshKey(prev => prev + 1);
+          lastRefreshTime = now;
+        }
+      };
+
+      const unsubscribeSync = eventBus.on(Events.DATA_SYNC_START, (data: { type?: string }) => {
+        if (!data?.type || data.type === 'all' || data.type === 'chatReminders') {
+          debouncedRefresh();
+        }
+      });
+
+      const unsubscribeReminder = eventBus.on(Events.CHAT_REMINDER_RECEIVED, debouncedRefresh);
+
+      return () => {
+        if (debounceTimeout) {
+          clearTimeout(debounceTimeout);
+        }
+        if (unsubscribeSync) unsubscribeSync();
+        if (unsubscribeReminder) unsubscribeReminder();
+      };
+    };
+
+    const cleanup = setupEventListeners();
+    
+    return () => {
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout);
+      }
+      cleanup.then(unsubscribe => {
+        if (unsubscribe) unsubscribe();
+      });
+    };
+  }, []);
+
+  const fetchReminders = async () => {
+    try {
+      setIsLoading(true);
+      const getChatRemindersFunc = httpsCallable(functions, 'getChatReminders');
+      const result = await getChatRemindersFunc({ unreadOnly });
+      const data = result.data as { reminders: any[] };
+      
+      const mappedReminders = data.reminders.map((r: any) => ({
+        ...r,
+        createdAt: r.createdAt ? (typeof r.createdAt === 'string' ? new Date(r.createdAt) : r.createdAt) : new Date(),
+        dueDate: r.dueDate ? (typeof r.dueDate === 'string' ? new Date(r.dueDate) : r.dueDate) : new Date(),
+        readAt: r.readAt ? (typeof r.readAt === 'string' ? new Date(r.readAt) : r.readAt) : undefined,
+      }));
+      
+      setReminders(mappedReminders);
+      setError(null);
+    } catch (err) {
+      setError(err as Error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReminders();
+    const interval = setInterval(fetchReminders, 30000);
+    return () => clearInterval(interval);
+  }, [refreshKey, unreadOnly]);
+
+  const refetch = () => {
+    setRefreshKey(prev => prev + 1);
+  };
+
+  return { data: reminders, isLoading, error, refetch };
+}
+
+export async function markChatReminderAsRead(reminderId: string) {
+  const markReadFunc = httpsCallable(functions, 'markChatReminderAsRead');
+  await markReadFunc({ reminderId });
+}
+
+// ========== Chat Conversations Hooks ==========
+
+export interface ChatConversation {
+  id: string;
+  userId: string;
+  title: string;
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+export function useChatConversations() {
+  const [conversations, setConversations] = useState<ChatConversation[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const fetchConversations = async () => {
+      try {
+        setIsLoading(true);
+        const getChatConversationsFunc = httpsCallable(functions, 'getChatConversations');
+        const result = await getChatConversationsFunc({});
+        const data = result.data as { conversations: any[] };
+        
+        const mappedConversations = data.conversations.map((c: any) => {
+          let createdAt: Date | string = new Date();
+          if (c.createdAt) {
+            if (typeof c.createdAt === 'string') {
+              createdAt = c.createdAt;
+            } else {
+              createdAt = new Date(c.createdAt).toISOString();
+            }
+          }
+          
+          let updatedAt: Date | string = new Date();
+          if (c.updatedAt) {
+            if (typeof c.updatedAt === 'string') {
+              updatedAt = c.updatedAt;
+            } else {
+              updatedAt = new Date(c.updatedAt).toISOString();
+            }
+          }
+          
+          return {
+            ...c,
+            createdAt,
+            updatedAt,
+          };
+        });
+        
+        // Sort by updatedAt descending (most recent first)
+        mappedConversations.sort((a, b) => {
+          const aTime = typeof a.updatedAt === 'string' ? new Date(a.updatedAt).getTime() : a.updatedAt.getTime();
+          const bTime = typeof b.updatedAt === 'string' ? new Date(b.updatedAt).getTime() : b.updatedAt.getTime();
+          return bTime - aTime;
+        });
+        
+        setConversations(mappedConversations);
+        setError(null);
+      } catch (err) {
+        setError(err as Error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchConversations();
+  }, [refreshKey]);
+
+  const refetch = () => setRefreshKey(prev => prev + 1);
+
+  return { data: conversations, isLoading, error, refetch };
+}
+
+// ========== Weather Hooks (Phase 2) ==========
+
+export interface WeatherData {
+  id?: string;
+  date: string;
+  location?: string | null;
+  temperature: number;
+  condition: string;
+  icon: string;
+  humidity?: number | null;
+  windSpeed?: number | null;
+  cached?: boolean;
+  fetchedAt?: string;
+}
+
+export function useWeather(date: Date | null, location?: string | null) {
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    if (!date) {
+      setWeather(null);
+      return;
+    }
+
+    const fetchWeather = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const getWeatherFunc = httpsCallable(functions, 'getWeather');
+        const result = await getWeatherFunc({ 
+          date: date.toISOString(),
+          location: location || null
+        });
+        const data = result.data as WeatherData | null;
+        setWeather(data);
+      } catch (err) {
+        setError(err as Error);
+        setWeather(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchWeather();
+  }, [date, location]);
+
+  return { data: weather, isLoading, error };
+}
+
+export async function saveWeatherData(data: Omit<WeatherData, 'id' | 'cached' | 'fetchedAt'>) {
+  const saveWeatherFunc = httpsCallable(functions, 'saveWeather');
+  return callWithRetry(saveWeatherFunc, data, STANDARD_RETRY_OPTIONS);
+}
+
+export async function getWeatherHistory(startDate?: Date, endDate?: Date, location?: string, limit?: number) {
+  const getHistoryFunc = httpsCallable(functions, 'getWeatherHistory');
+  const result = await getHistoryFunc({
+    startDate: startDate?.toISOString(),
+    endDate: endDate?.toISOString(),
+    location: location || null,
+    limit: limit || 30
+  });
+  return result.data as { weatherHistory: WeatherData[] };
+}
+
+export async function createChatConversation(data: Omit<ChatConversation, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) {
+  const createFunc = httpsCallable(functions, 'createChatConversation');
+  const result = await createFunc(data);
+  return result.data as { id: string; createdAt: string; updatedAt: string };
+}
+
+export async function updateChatConversation(id: string, data: Partial<Pick<ChatConversation, 'title' | 'messages'>>) {
+  const updateFunc = httpsCallable(functions, 'updateChatConversation');
+  await updateFunc({ id, ...data });
+}
+
+export async function deleteChatConversation(id: string) {
+  const deleteFunc = httpsCallable(functions, 'deleteChatConversation');
+  await deleteFunc({ id });
 }

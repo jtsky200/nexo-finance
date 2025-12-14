@@ -1,58 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Cloud, CloudRain, Sun, CloudSun, Wind } from 'lucide-react';
-import { cn } from '@/lib/utils';
-
-interface WeatherData {
-  date: string;
-  temperature: number;
-  condition: string;
-  icon: string;
-  humidity?: number;
-  windSpeed?: number;
-}
+import { useWeather } from '@/lib/firebaseHooks';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface WeatherWidgetProps {
   selectedDate: Date | null;
 }
 
 export default function WeatherWidget({ selectedDate }: WeatherWidgetProps) {
-  const [weather, setWeather] = useState<WeatherData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    if (selectedDate) {
-      fetchWeather(selectedDate);
-    } else {
-      setWeather(null);
-    }
-  }, [selectedDate]);
-
-  const fetchWeather = async (date: Date) => {
-    setIsLoading(true);
-    try {
-      // TODO: Phase 3 - Wetter-API Integration
-      // Für jetzt: Placeholder-Daten
-      const dateStr = date.toISOString().split('T')[0];
-      
-      // Simuliere API-Call
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Placeholder-Wetterdaten
-      setWeather({
-        date: dateStr,
-        temperature: 15,
-        condition: 'Bewölkt',
-        icon: 'cloud',
-        humidity: 65,
-        windSpeed: 12
-      });
-    } catch (error) {
-      console.error('Error fetching weather:', error);
-      setWeather(null);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const { user } = useAuth();
+  // TODO: Phase 4 - Location aus Settings holen
+  const location = null; // Wird in Phase 4 implementiert
+  
+  const { data: weather, isLoading } = useWeather(selectedDate, location);
 
   const getWeatherIcon = (icon: string) => {
     switch (icon) {

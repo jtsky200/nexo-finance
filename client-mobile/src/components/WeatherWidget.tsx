@@ -1,17 +1,14 @@
 import React from 'react';
 import { Cloud, CloudRain, Sun, CloudSun, Wind } from 'lucide-react';
-import { useWeather } from '@/lib/firebaseHooks';
-import { useAuth } from '@/contexts/AuthContext';
+import { useWeather, useUserSettings } from '@/lib/firebaseHooks';
 
 interface WeatherWidgetProps {
   selectedDate: Date | null;
 }
 
 export default function WeatherWidget({ selectedDate }: WeatherWidgetProps) {
-  const { user } = useAuth();
-  // TODO: Phase 4 - Location aus Settings holen
-  // Für jetzt: Standard-Location verwenden, falls keine gesetzt ist
-  const location = 'Zurich, CH'; // Wird in Phase 4 aus Settings geladen
+  const { settings } = useUserSettings();
+  const location = settings?.weatherLocation || 'Zurich, CH';
   
   const { data: weather, isLoading, error } = useWeather(selectedDate, location);
 

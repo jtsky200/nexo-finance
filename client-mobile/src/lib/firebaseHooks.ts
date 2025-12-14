@@ -871,6 +871,59 @@ export async function getWeatherHistory(startDate?: Date, endDate?: Date, locati
   return result.data as { weatherHistory: WeatherData[] };
 }
 
+// ========== User Settings Hooks (Phase 4) ==========
+
+export interface UserSettings {
+  ocrProvider?: string;
+  openaiApiKey?: string | null;
+  autoConfirmDocuments?: boolean;
+  defaultFolder?: string;
+  language?: string;
+  theme?: string;
+  weatherLocation?: string;
+}
+
+export function useUserSettings() {
+  const [settings, setSettings] = useState<UserSettings | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const getSettingsFunc = httpsCallable(functions, 'getUserSettings');
+        const result = await getSettingsFunc({});
+        const data = result.data as UserSettings;
+        setSettings(data);
+      } catch (err) {
+        setError(err as Error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchSettings();
+  }, []);
+
+  const updateSettings = useCallback(async (newSettings: Partial<UserSettings>) => {
+    try {
+      const updateSettingsFunc = httpsCallable(functions, 'updateUserSettings');
+      await updateSettingsFunc(newSettings);
+      
+      // Update local state
+      setSettings(prev => prev ? { ...prev, ...newSettings } : newSettings as UserSettings);
+      return { success: true };
+    } catch (err) {
+      setError(err as Error);
+      throw err;
+    }
+  }, []);
+
+  return { settings, isLoading, error, updateSettings };
+}
+
 export async function createChatConversation(data: Omit<ChatConversation, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) {
   const createFunc = httpsCallable(functions, 'createChatConversation');
   const result = await createFunc(data);

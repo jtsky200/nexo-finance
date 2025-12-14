@@ -35,7 +35,8 @@ import {
 } from '@/lib/biometricAuth';
 import { Fingerprint } from 'lucide-react';
 import { useGlassEffect } from '@/hooks/useGlassEffect';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, MapPin } from 'lucide-react';
+import { useUserSettings } from '@/lib/firebaseHooks';
 
 function NotificationsSettings() {
   const { t } = useTranslation();
@@ -266,6 +267,107 @@ function BiometricSettings() {
   );
 }
 
+function WeatherLocationSettings() {
+  const { settings, updateSettings, isLoading } = useUserSettings();
+  const [showLocationDialog, setShowLocationDialog] = useState(false);
+  const [locationInput, setLocationInput] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (settings?.weatherLocation) {
+      setLocationInput(settings.weatherLocation);
+    }
+  }, [settings]);
+
+  const handleSaveLocation = async () => {
+    if (!locationInput.trim()) {
+      toast.error('Bitte geben Sie einen Ort ein');
+      hapticError();
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      hapticSelection();
+      await updateSettings({ weatherLocation: locationInput.trim() });
+      setShowLocationDialog(false);
+      toast.success('Standort gespeichert');
+      hapticSuccess();
+    } catch (error) {
+      toast.error('Fehler beim Speichern des Standorts');
+      hapticError();
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        onClick={() => setShowLocationDialog(true)}
+        className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity py-4"
+      >
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+            <MapPin className="w-5 h-5 text-foreground" />
+          </div>
+          <div className="text-left">
+            <p className="font-medium">Wetter-Standort</p>
+            <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+              {settings?.weatherLocation || 'Zurich, CH'}
+            </p>
+          </div>
+        </div>
+        <ChevronRight className="w-5 h-5 text-muted-foreground" />
+      </button>
+
+      {showLocationDialog && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-end" onClick={() => setShowLocationDialog(false)}>
+          <div 
+            className="bg-background w-full rounded-t-2xl p-6 safe-bottom animate-in slide-in-from-bottom"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-semibold mb-4">Wetter-Standort</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Ort (z.B. "Zurich, CH" oder "Berlin, DE")</label>
+                <input
+                  type="text"
+                  value={locationInput}
+                  onChange={(e) => setLocationInput(e.target.value)}
+                  placeholder="Zurich, CH"
+                  className="w-full px-4 py-3 rounded-lg bg-muted border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+                  disabled={isSaving || isLoading}
+                />
+                <p className="text-xs text-muted-foreground mt-2">
+                  Format: Stadt, Ländercode (z.B. "Zurich, CH", "Berlin, DE", "New York, US")
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleSaveLocation}
+                  disabled={isSaving || isLoading || !locationInput.trim()}
+                  className="flex-1 py-3 rounded-lg bg-primary text-primary-foreground font-medium active:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+                >
+                  {isSaving ? 'Speichere...' : 'Speichern'}
+                </button>
+                <button
+                  onClick={() => setShowLocationDialog(false)}
+                  className="px-6 py-3 rounded-lg bg-muted text-foreground font-medium active:opacity-80 transition-opacity min-h-[44px]"
+                >
+                  Abbrechen
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function MobileSettings() {
   const { t, i18n } = useTranslation();
   const { user, logout } = useAuth();
@@ -393,6 +495,9 @@ export default function MobileSettings() {
 
         {/* Biometric Authentication */}
         <BiometricSettings />
+
+        {/* Weather Location */}
+        <WeatherLocationSettings />
 
         {/* Glass Effect */}
         <div className="mobile-card w-full py-4">

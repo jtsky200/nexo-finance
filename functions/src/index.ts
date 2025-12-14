@@ -2948,6 +2948,7 @@ export const getUserSettings = onCall(async (request) => {
       defaultFolder: 'Sonstiges',
       language: 'de',
       theme: 'system',
+      weatherLocation: 'Zurich, CH', // Default weather location
     };
   }
   
@@ -6261,10 +6262,11 @@ function mapWeatherCondition(condition: string): string {
 
 // Helper function to fetch weather from OpenWeatherMap API
 async function fetchWeatherFromAPI(location: string, date: Date): Promise<any> {
+  // Try to get API key from environment (for local testing) or from Firebase Secrets
   const apiKey = process.env.OPENWEATHERMAP_API_KEY;
   
   if (!apiKey) {
-    throw new HttpsError('failed-precondition', 'OpenWeatherMap API key not configured. Please set OPENWEATHERMAP_API_KEY environment variable.');
+    throw new HttpsError('failed-precondition', 'OpenWeatherMap API key not configured. Please set OPENWEATHERMAP_API_KEY secret in Firebase.');
   }
 
   try {

@@ -108,18 +108,134 @@ export function useReminders(filters?: { startDate?: Date; endDate?: Date; statu
   const [error, setError] = useState<Error | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // Listen to data sync events with debouncing to prevent infinite loops
+  useEffect(() => {
+    let debounceTimeout: number | null = null;
+    let lastRefreshTime = 0;
+    const MIN_REFRESH_INTERVAL = 2000; // Minimum 2 seconds between refreshes
+
+    const setupEventListeners = async () => {
+      const { eventBus, Events } = await import('./eventBus');
+      
+      // Debounced refresh function
+      const debouncedRefresh = () => {
+        const now = Date.now();
+        if (now - lastRefreshTime < MIN_REFRESH_INTERVAL) {
+          if (debounceTimeout) {
+            clearTimeout(debounceTimeout);
+          }
+          debounceTimeout = window.setTimeout(() => {
+            setRefreshKey(prev => prev + 1);
+            lastRefreshTime = Date.now();
+          }, MIN_REFRESH_INTERVAL);
+        } else {
+          setRefreshKey(prev => prev + 1);
+          lastRefreshTime = now;
+        }
+      };
+
+      // Listen to data sync events with debouncing
+      const unsubscribeSync = eventBus.on(Events.DATA_SYNC_START, (data: { type?: string }) => {
+        if (!data?.type || data.type === 'all' || data.type === 'reminders') {
+          debouncedRefresh();
+        }
+      });
+
+      // Listen to reminder events with debouncing
+      const unsubscribeCreated = eventBus.on(Events.REMINDER_CREATED, debouncedRefresh);
+      const unsubscribeUpdated = eventBus.on(Events.REMINDER_UPDATED, debouncedRefresh);
+      const unsubscribeDeleted = eventBus.on(Events.REMINDER_DELETED, debouncedRefresh);
+
+      return () => {
+        if (debounceTimeout) {
+          clearTimeout(debounceTimeout);
+        }
+        if (unsubscribeSync) unsubscribeSync();
+        if (unsubscribeCreated) unsubscribeCreated();
+        if (unsubscribeUpdated) unsubscribeUpdated();
+        if (unsubscribeDeleted) unsubscribeDeleted();
+      };
+    };
+
+    let isMounted = true;
+    const cleanup = setupEventListeners();
+    
+    return () => {
+      isMounted = false;
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout);
+        debounceTimeout = null;
+      }
+      cleanup.then(unsubscribe => {
+        if (unsubscribe) unsubscribe();
+      }).catch(() => {
+        // Ignore cleanup errors
+      });
+    };
+  }, []);
+
   useEffect(() => {
     const fetchReminders = async () => {
       try {
         setIsLoading(true);
         const data = await callFunctionWithTimeout<{ reminders: any[] }>('getReminders', filters || {});
         
-        const mappedReminders = data.reminders.map((r: any) => ({
-          ...r,
-          dueDate: r.dueDate?.toDate ? r.dueDate.toDate() : new Date(r.dueDate),
-          createdAt: r.createdAt?.toDate ? r.createdAt.toDate() : new Date(r.createdAt),
-          updatedAt: r.updatedAt?.toDate ? r.updatedAt.toDate() : new Date(r.updatedAt),
-        }));
+        const mappedReminders = (data.reminders || []).map((r: any) => {
+          // Handle Firestore Timestamps and ISO strings from backend
+          // Backend now returns ISO strings, so we need to convert them to Date objects
+          let dueDate: Date | null = null;
+          if (r.dueDate) {
+            if (r.dueDate.toDate && typeof r.dueDate.toDate === 'function') {
+              // Firestore Timestamp object (shouldn't happen with new backend, but handle it)
+              dueDate = r.dueDate.toDate();
+            } else if (r.dueDate instanceof Date) {
+              dueDate = r.dueDate;
+            } else if (typeof r.dueDate === 'string') {
+              // ISO string from backend - convert to Date
+              dueDate = new Date(r.dueDate);
+              // Validate the date
+              if (isNaN(dueDate.getTime())) {
+                console.error('[useReminders] Invalid dueDate:', r.dueDate);
+                dueDate = null;
+              }
+            }
+          }
+          
+          let createdAt: Date | null = null;
+          if (r.createdAt) {
+            if (r.createdAt.toDate && typeof r.createdAt.toDate === 'function') {
+              createdAt = r.createdAt.toDate();
+            } else if (r.createdAt instanceof Date) {
+              createdAt = r.createdAt;
+            } else if (typeof r.createdAt === 'string') {
+              createdAt = new Date(r.createdAt);
+              if (isNaN(createdAt.getTime())) {
+                createdAt = null;
+              }
+            }
+          }
+          
+          let updatedAt: Date | null = null;
+          if (r.updatedAt) {
+            if (r.updatedAt.toDate && typeof r.updatedAt.toDate === 'function') {
+              updatedAt = r.updatedAt.toDate();
+            } else if (r.updatedAt instanceof Date) {
+              updatedAt = r.updatedAt;
+            } else if (typeof r.updatedAt === 'string') {
+              updatedAt = new Date(r.updatedAt);
+              if (isNaN(updatedAt.getTime())) {
+                updatedAt = null;
+              }
+            }
+          }
+          
+          return {
+            ...r,
+            dueDate: dueDate,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+          };
+        });
         
         setReminders(mappedReminders);
         setError(null);
@@ -145,7 +261,7 @@ export function usePersonReminders(personId: string | undefined) {
   const [error, setError] = useState<Error | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const fetchReminders = async () => {
+  const fetchReminders = useCallback(async () => {
     if (!personId) {
       setReminders([]);
       setIsLoading(false);
@@ -156,11 +272,11 @@ export function usePersonReminders(personId: string | undefined) {
       setIsLoading(true);
       const data = await callFunctionWithTimeout<{ reminders: any[] }>('getReminders', { personId });
       
-      const mappedReminders = data.reminders.map((r: any) => ({
+      const mappedReminders = (data.reminders || []).map((r: any) => ({
         ...r,
-        dueDate: r.dueDate?.toDate ? r.dueDate.toDate() : new Date(r.dueDate),
-        createdAt: r.createdAt?.toDate ? r.createdAt.toDate() : new Date(r.createdAt),
-        updatedAt: r.updatedAt?.toDate ? r.updatedAt.toDate() : new Date(r.updatedAt),
+        dueDate: r.dueDate?.toDate ? r.dueDate.toDate() : (r.dueDate ? new Date(r.dueDate) : new Date()),
+        createdAt: r.createdAt?.toDate ? r.createdAt.toDate() : (r.createdAt ? new Date(r.createdAt) : new Date()),
+        updatedAt: r.updatedAt?.toDate ? r.updatedAt.toDate() : (r.updatedAt ? new Date(r.updatedAt) : new Date()),
       }));
       
       setReminders(mappedReminders);
@@ -170,11 +286,11 @@ export function usePersonReminders(personId: string | undefined) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [personId]);
 
   useEffect(() => {
     fetchReminders();
-  }, [personId, refreshKey]);
+  }, [fetchReminders, refreshKey]);
 
   const refetch = async () => {
     await fetchReminders();
@@ -233,7 +349,7 @@ export function useAllBills() {
         setIsLoading(true);
         const data = await callFunctionWithTimeout<{ bills: any[]; stats: BillStats }>('getAllBills', {});
         
-        const mappedBills = data.bills.map((b: any) => ({
+        const mappedBills = (data.bills || []).map((b: any) => ({
           ...b,
           dueDate: b.dueDate ? new Date(b.dueDate) : null,
           reminderDate: b.reminderDate ? new Date(b.reminderDate) : null,
@@ -260,15 +376,29 @@ export function useAllBills() {
 }
 
 export async function createReminder(data: Omit<Reminder, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'status'>) {
-  return await callFunctionWithTimeout('createReminder', data);
+  // Ensure dueDate is a Date object (not ISO string) for proper timezone handling
+  const normalizedData = {
+    ...data,
+    dueDate: data.dueDate instanceof Date ? data.dueDate : (data.dueDate ? new Date(data.dueDate) : new Date()),
+  };
+  return await callFunctionWithTimeout('createReminder', normalizedData);
 }
 
 export async function updateReminder(id: string, data: Partial<Reminder>) {
-  return await callFunctionWithTimeout('updateReminder', { id, ...data });
+  // Ensure dueDate is a Date object (not ISO string) for proper timezone handling
+  const normalizedData: any = { id, ...data };
+  if (data.dueDate !== undefined) {
+    normalizedData.dueDate = data.dueDate instanceof Date ? data.dueDate : (data.dueDate ? new Date(data.dueDate) : new Date());
+  }
+  return await callFunctionWithTimeout('updateReminder', normalizedData);
 }
 
 export async function deleteReminder(id: string) {
   return await callFunctionWithTimeout('deleteReminder', { id });
+}
+
+export async function fixReminderTimes() {
+  return await callFunctionWithTimeout('fixReminderTimes', {});
 }
 
 // ========== Finance Hooks ==========
@@ -297,15 +427,15 @@ export function useFinanceEntries(filters?: { startDate?: Date; endDate?: Date; 
   const [error, setError] = useState<Error | null>(null);
 
   const fetchEntries = useCallback(async () => {
-      try {
-        setIsLoading(true);
-        const data = await callFunctionWithTimeout<{ entries: any[] }>('getFinanceEntries', filters || {});
+    try {
+      setIsLoading(true);
+      const data = await callFunctionWithTimeout<{ entries: any[] }>('getFinanceEntries', filters || {});
       
-      const mappedEntries = data.entries.map((e: any) => ({
+      const mappedEntries = (data.entries || []).map((e: any) => ({
         ...e,
-        date: e.date?.toDate ? e.date.toDate() : new Date(e.date),
-        createdAt: e.createdAt?.toDate ? e.createdAt.toDate() : new Date(e.createdAt),
-        updatedAt: e.updatedAt?.toDate ? e.updatedAt.toDate() : new Date(e.updatedAt),
+        date: e.date?.toDate ? e.date.toDate() : (e.date ? new Date(e.date) : new Date()),
+        createdAt: e.createdAt?.toDate ? e.createdAt.toDate() : (e.createdAt ? new Date(e.createdAt) : new Date()),
+        updatedAt: e.updatedAt?.toDate ? e.updatedAt.toDate() : (e.updatedAt ? new Date(e.updatedAt) : new Date()),
       }));
       
       setEntries(mappedEntries);
@@ -372,10 +502,10 @@ export function useTaxProfiles(refreshKey?: number) {
       const result = await getProfilesFunc({});
       const data = result.data as { profiles: any[] };
       
-      const mappedProfiles = data.profiles.map((p: any) => ({
+      const mappedProfiles = (data.profiles || []).map((p: any) => ({
         ...p,
-        createdAt: p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.createdAt),
-        updatedAt: p.updatedAt?.toDate ? p.updatedAt.toDate() : new Date(p.updatedAt),
+        createdAt: p.createdAt?.toDate ? p.createdAt.toDate() : (p.createdAt ? new Date(p.createdAt) : new Date()),
+        updatedAt: p.updatedAt?.toDate ? p.updatedAt.toDate() : (p.updatedAt ? new Date(p.updatedAt) : new Date()),
       }));
       
       setProfiles(mappedProfiles);
@@ -392,8 +522,6 @@ export function useTaxProfiles(refreshKey?: number) {
   }, [fetchProfiles, refreshKey]);
 
   return { data: profiles, isLoading, error, refetch: fetchProfiles };
-
-  return { data: profiles, isLoading, error };
 }
 
 export async function getTaxProfileByYear(year: number) {
@@ -405,8 +533,8 @@ export async function getTaxProfileByYear(year: number) {
   
   return {
     ...data.profile,
-    createdAt: data.profile.createdAt?.toDate ? data.profile.createdAt.toDate() : new Date(data.profile.createdAt),
-    updatedAt: data.profile.updatedAt?.toDate ? data.profile.updatedAt.toDate() : new Date(data.profile.updatedAt),
+    createdAt: data.profile.createdAt?.toDate ? data.profile.createdAt.toDate() : (data.profile.createdAt ? new Date(data.profile.createdAt) : new Date()),
+    updatedAt: data.profile.updatedAt?.toDate ? data.profile.updatedAt.toDate() : (data.profile.updatedAt ? new Date(data.profile.updatedAt) : new Date()),
   };
 }
 
@@ -450,17 +578,17 @@ export function usePeople() {
   const [error, setError] = useState<Error | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const fetchPeople = async () => {
+  const fetchPeople = useCallback(async () => {
     try {
       setIsLoading(true);
       const getPeopleFunc = httpsCallable(functions, 'getPeople');
       const result = await getPeopleFunc({});
       const data = result.data as { people: any[] };
       
-      const mappedPeople = data.people.map((p: any) => ({
+      const mappedPeople = (data.people || []).map((p: any) => ({
         ...p,
-        createdAt: p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.createdAt),
-        updatedAt: p.updatedAt?.toDate ? p.updatedAt.toDate() : new Date(p.updatedAt),
+        createdAt: p.createdAt?.toDate ? p.createdAt.toDate() : (p.createdAt ? new Date(p.createdAt) : new Date()),
+        updatedAt: p.updatedAt?.toDate ? p.updatedAt.toDate() : (p.updatedAt ? new Date(p.updatedAt) : new Date()),
       }));
       
       setPeople(mappedPeople);
@@ -470,11 +598,11 @@ export function usePeople() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchPeople();
-  }, [refreshKey]);
+  }, [fetchPeople, refreshKey]);
 
   const refetch = () => {
     setRefreshKey(prev => prev + 1);
@@ -497,6 +625,146 @@ export async function updatePerson(personId: string, data: Partial<Person>) {
 export async function deletePerson(personId: string) {
   const deletePersonFunc = httpsCallable(functions, 'deletePerson');
   await deletePersonFunc({ personId });
+}
+
+// ========== Chat Reminders Hooks ==========
+
+export interface ChatReminder {
+  id: string;
+  userId: string;
+  reminderId: string;
+  notificationType: '1day' | '1hour';
+  message: string;
+  reminderTitle: string;
+  reminderType: string;
+  dueDate: Date | string;
+  isRead: boolean;
+  shouldOpenDialog: boolean;
+  askForFollowUp?: boolean;
+  createdAt: Date | string;
+  readAt?: Date | string;
+}
+
+export async function createFollowUpReminder(originalReminderId: string, minutesFromNow: number = 15) {
+  const createFollowUpFunc = httpsCallable(functions, 'createFollowUpReminder');
+  await createFollowUpFunc({ originalReminderId, minutesFromNow });
+}
+
+export function useChatReminders(unreadOnly: boolean = true) {
+  const [reminders, setReminders] = useState<ChatReminder[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Listen to data sync events and workflow events with debouncing
+  useEffect(() => {
+    let debounceTimeout: number | null = null;
+    let lastRefreshTime = 0;
+    let isMounted = true;
+    const MIN_REFRESH_INTERVAL = 2000; // Minimum 2 seconds between refreshes
+
+    const setupEventListeners = async () => {
+      const { eventBus, Events } = await import('./eventBus');
+      
+      // Debounced refresh function
+      const debouncedRefresh = () => {
+        if (!isMounted) return;
+        const now = Date.now();
+        if (now - lastRefreshTime < MIN_REFRESH_INTERVAL) {
+          if (debounceTimeout) {
+            clearTimeout(debounceTimeout);
+          }
+          debounceTimeout = window.setTimeout(() => {
+            if (isMounted) {
+              setRefreshKey(prev => prev + 1);
+              lastRefreshTime = Date.now();
+            }
+          }, MIN_REFRESH_INTERVAL);
+        } else {
+          if (isMounted) {
+            setRefreshKey(prev => prev + 1);
+            lastRefreshTime = now;
+          }
+        }
+      };
+
+      // Listen to data sync events with debouncing
+      const unsubscribeSync = eventBus.on(Events.DATA_SYNC_START, (data: { type?: string }) => {
+        if (!data?.type || data.type === 'all' || data.type === 'chatReminders') {
+          debouncedRefresh();
+        }
+      });
+
+      // Listen to chat reminder received events with debouncing
+      const unsubscribeReminder = eventBus.on(Events.CHAT_REMINDER_RECEIVED, debouncedRefresh);
+
+      return () => {
+        if (debounceTimeout) {
+          clearTimeout(debounceTimeout);
+          debounceTimeout = null;
+        }
+        if (unsubscribeSync) unsubscribeSync();
+        if (unsubscribeReminder) unsubscribeReminder();
+      };
+    };
+
+    const cleanup = setupEventListeners();
+    
+    return () => {
+      isMounted = false;
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout);
+        debounceTimeout = null;
+      }
+      cleanup.then(unsubscribe => {
+        if (unsubscribe) unsubscribe();
+      }).catch(() => {
+        // Ignore cleanup errors
+      });
+    };
+  }, []);
+
+  const fetchReminders = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const getChatRemindersFunc = httpsCallable(functions, 'getChatReminders');
+      const result = await getChatRemindersFunc({ unreadOnly });
+      const data = result.data as { reminders: any[] };
+      
+      const mappedReminders = (data.reminders || []).map((r: any) => ({
+        ...r,
+        createdAt: r.createdAt ? (typeof r.createdAt === 'string' ? new Date(r.createdAt) : r.createdAt) : new Date(),
+        dueDate: r.dueDate ? (typeof r.dueDate === 'string' ? new Date(r.dueDate) : r.dueDate) : new Date(),
+        readAt: r.readAt ? (typeof r.readAt === 'string' ? new Date(r.readAt) : r.readAt) : undefined,
+      }));
+      
+      setReminders(mappedReminders);
+      setError(null);
+    } catch (err) {
+      setError(err as Error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [unreadOnly]);
+
+  useEffect(() => {
+    fetchReminders();
+    // Poll every 30 seconds for new reminders
+    // Using polling instead of real-time listeners to avoid Firestore internal errors
+    const interval = setInterval(fetchReminders, 30000);
+    return () => clearInterval(interval);
+  }, [fetchReminders, refreshKey]);
+
+  const refetch = () => {
+    setRefreshKey(prev => prev + 1);
+  };
+
+  return { data: reminders, isLoading, error, refetch };
+}
+
+export async function markChatReminderAsRead(reminderId: string) {
+  const markReadFunc = httpsCallable(functions, 'markChatReminderAsRead');
+  await markReadFunc({ reminderId });
 }
 
 // ========== Backup Functions ==========
@@ -549,11 +817,11 @@ export function usePersonDebts(personId: string) {
         const result = await getDebtsFunc({ personId });
         const data = result.data as { debts: any[] };
         
-        const mappedDebts = data.debts.map((d: any) => ({
+        const mappedDebts = (data.debts || []).map((d: any) => ({
           ...d,
-          date: d.date?.toDate ? d.date.toDate() : new Date(d.date),
-          createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : new Date(d.createdAt),
-          updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate() : new Date(d.updatedAt),
+          date: d.date?.toDate ? d.date.toDate() : (d.date ? new Date(d.date) : new Date()),
+          createdAt: d.createdAt?.toDate ? d.createdAt.toDate() : (d.createdAt ? new Date(d.createdAt) : new Date()),
+          updatedAt: d.updatedAt?.toDate ? d.updatedAt.toDate() : (d.updatedAt ? new Date(d.updatedAt) : new Date()),
         }));
         
         setDebts(mappedDebts);
@@ -605,11 +873,11 @@ export function useShoppingList(status?: string) {
         const result = await getItemsFunc({ status });
         const data = result.data as { items: any[] };
         
-        const mappedItems = data.items.map((i: any) => ({
+        const mappedItems = (data.items || []).map((i: any) => ({
           ...i,
           boughtAt: i.boughtAt?.toDate ? i.boughtAt.toDate() : (i.boughtAt ? new Date(i.boughtAt) : null),
-          createdAt: i.createdAt?.toDate ? i.createdAt.toDate() : new Date(i.createdAt),
-          updatedAt: i.updatedAt?.toDate ? i.updatedAt.toDate() : new Date(i.updatedAt),
+          createdAt: i.createdAt?.toDate ? i.createdAt.toDate() : (i.createdAt ? new Date(i.createdAt) : new Date()),
+          updatedAt: i.updatedAt?.toDate ? i.updatedAt.toDate() : (i.updatedAt ? new Date(i.updatedAt) : new Date()),
         }));
         
         setItems(mappedItems);
@@ -675,7 +943,7 @@ export function usePersonInvoices(personId: string | undefined) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const fetchInvoices = async () => {
+  const fetchInvoices = useCallback(async () => {
     if (!personId) {
       setInvoices([]);
       setIsLoading(false);
@@ -688,7 +956,7 @@ export function usePersonInvoices(personId: string | undefined) {
       const result = await getInvoicesFunc({ personId });
       const data = result.data as { invoices: any[] };
       
-      const mappedInvoices = data.invoices.map((inv: any) => {
+      const mappedInvoices = (data.invoices || []).map((inv: any) => {
         try {
           const mapped: any = {
             ...inv,
@@ -729,11 +997,11 @@ export function usePersonInvoices(personId: string | undefined) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [personId]);
 
   useEffect(() => {
     fetchInvoices();
-  }, [personId]);
+  }, [fetchInvoices]);
 
   const refetch = async () => {
     await fetchInvoices();
@@ -935,4 +1203,90 @@ export function useReceipts(limit?: number, storeId?: string) {
   }, [fetchReceipts]);
 
   return { data, isLoading, error, refetch: fetchReceipts };
+}
+
+// ========== Chat Conversations Hooks ==========
+
+export interface ChatConversation {
+  id: string;
+  userId: string;
+  title: string;
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+}
+
+export function useChatConversations() {
+  const [conversations, setConversations] = useState<ChatConversation[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const fetchConversations = async () => {
+      try {
+        setIsLoading(true);
+        const data = await callFunctionWithTimeout<{ conversations: any[] }>('getChatConversations', {});
+        
+        const mappedConversations = (data.conversations || []).map((c: any) => {
+          let createdAt: Date | string = new Date();
+          if (c.createdAt) {
+            if (typeof c.createdAt === 'string') {
+              createdAt = c.createdAt;
+            } else {
+              createdAt = new Date(c.createdAt).toISOString();
+            }
+          }
+          
+          let updatedAt: Date | string = new Date();
+          if (c.updatedAt) {
+            if (typeof c.updatedAt === 'string') {
+              updatedAt = c.updatedAt;
+            } else {
+              updatedAt = new Date(c.updatedAt).toISOString();
+            }
+          }
+          
+          return {
+            ...c,
+            createdAt,
+            updatedAt,
+          };
+        });
+        
+        // Sort by updatedAt descending (most recent first)
+        mappedConversations.sort((a, b) => {
+          const aTime = typeof a.updatedAt === 'string' ? new Date(a.updatedAt).getTime() : a.updatedAt.getTime();
+          const bTime = typeof b.updatedAt === 'string' ? new Date(b.updatedAt).getTime() : b.updatedAt.getTime();
+          return bTime - aTime;
+        });
+        
+        setConversations(mappedConversations);
+        setError(null);
+      } catch (err) {
+        setError(err as Error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchConversations();
+  }, [refreshKey]);
+
+  const refetch = () => setRefreshKey(prev => prev + 1);
+
+  return { data: conversations, isLoading, error, refetch };
+}
+
+export async function createChatConversation(data: Omit<ChatConversation, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) {
+  const result = await callFunctionWithTimeout<{ id: string; createdAt: string; updatedAt: string }>('createChatConversation', data);
+  return result;
+}
+
+export async function updateChatConversation(id: string, data: Partial<Pick<ChatConversation, 'title' | 'messages'>>) {
+  await callFunctionWithTimeout('updateChatConversation', { id, ...data });
+}
+
+export async function deleteChatConversation(id: string) {
+  await callFunctionWithTimeout('deleteChatConversation', { id });
 }

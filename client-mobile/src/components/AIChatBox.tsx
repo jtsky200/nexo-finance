@@ -5,9 +5,8 @@ import { cn } from "@/lib/utils";
 import { 
   Loader2, Send, Paperclip, Image, Globe, Mic, Tag, FileText, Zap, ArrowUp, 
   ClipboardList, Bell, Wallet, ShoppingCart, Calendar, ScanLine,
-  // Icons für AI-Antworten
   LayoutDashboard, Users, Settings, Check, Plus, Search, Edit, Trash,
-  Clock, Euro, TrendingUp, TrendingDown, Info, AlertCircle, type LucideIcon
+  Clock, Euro, TrendingUp, TrendingDown, Info, AlertCircle, X, type LucideIcon
 } from "lucide-react";
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Streamdown } from "streamdown";
@@ -27,55 +26,22 @@ export type Message = {
 
 export type SuggestedPrompt = {
   text: string;
-  icon: 'tag' | 'fileText' | 'zap' | 'receipt' | 'bell' | 'wallet' | 'shoppingCart' | 'calendar' | 'scan';
+  subtitle?: string; // Optional subtitle for ChatGPT-style cards
+  icon?: 'tag' | 'fileText' | 'zap' | 'receipt' | 'bell' | 'wallet' | 'shoppingCart' | 'calendar' | 'scan';
 };
 
 export type AIChatBoxProps = {
-  /**
-   * Messages array to display in the chat.
-   * Should match the format used by invokeLLM on the server.
-   */
   messages: Message[];
-
-  /**
-   * Callback when user sends a message.
-   * Typically you'll call a tRPC mutation here to invoke the LLM.
-   */
   onSendMessage: (content: string) => void;
-
-  /**
-   * Whether the AI is currently generating a response
-   */
   isLoading?: boolean;
-
-  /**
-   * Placeholder text for the input field
-   */
   placeholder?: string;
-
-  /**
-   * Custom className for the container
-   */
   className?: string;
-
-  /**
-   * Height of the chat box (default: 600px)
-   */
   height?: string | number;
-
-  /**
-   * Empty state message to display when no messages
-   */
   emptyStateMessage?: string;
-
-  /**
-   * Suggested prompts to display (always visible at top)
-   * Can be array of strings or objects with text and icon
-   */
   suggestedPrompts?: string[] | SuggestedPrompt[];
 };
 
-// Icon mapping - passend zum Kontext (für Bubbles)
+// Icon mapping
 const iconMap = {
   tag: Tag,
   fileText: FileText,
@@ -88,7 +54,7 @@ const iconMap = {
   scan: ScanLine,
 };
 
-// Icon mapping für AI-Antworten - [icon:name] Syntax
+// Icon mapping für AI-Antworten
 const aiIconMap: Record<string, LucideIcon> = {
   'layout-dashboard': LayoutDashboard,
   'calendar': Calendar,
@@ -138,23 +104,17 @@ const navRouteMap: Record<string, { path: string; icon: LucideIcon }> = {
 
 // Komponente für AI-Nachrichten mit Navigation-Link-Support
 function AIMessageContent({ content, onNavigate }: { content: string; onNavigate?: (route: string) => void }) {
-  // Parse den Content und ersetze [nav:route|Label] durch anklickbare Links
   const renderedContent = useMemo(() => {
     const segments: React.ReactNode[] = [];
-    
-    // Sicherheitscheck: Maximal 10000 Zeichen verarbeiten
     const safeContent = content.length > 10000 ? content.substring(0, 10000) + '...' : content;
     
     let lastIndex = 0;
     let keyIndex = 0;
     
-    // Verbesserte Regex für beide Syntaxen - robuster gegen verschachtelte Brackets
-    // Unterstützt sowohl | als auch ｜ (Unicode pipe)
     const combinedRegex = /\[(nav|icon):([a-zA-Z0-9_-]+)(?:[|｜]([^\]]+))?\]/g;
     let match;
     const matches: Array<{ index: number; type: string; key: string; label?: string; endIndex: number }> = [];
     
-    // Sammle alle Matches zuerst
     while ((match = combinedRegex.exec(safeContent)) !== null) {
       matches.push({
         index: match.index,
@@ -165,16 +125,13 @@ function AIMessageContent({ content, onNavigate }: { content: string; onNavigate
       });
     }
 
-    // Verarbeite Matches in Reihenfolge
     for (const matchInfo of matches) {
-      // Text vor dem Match
       if (matchInfo.index > lastIndex) {
         const textBefore = safeContent.slice(lastIndex, matchInfo.index);
         segments.push(<span key={`text-${keyIndex++}`} dangerouslySetInnerHTML={{ __html: formatMarkdown(textBefore) }} />);
       }
       
       if (matchInfo.type === 'nav' && matchInfo.label) {
-        // [nav:route|Label] Syntax
         const routeKey = matchInfo.key;
         const label = matchInfo.label;
         const navInfo = navRouteMap[routeKey];
@@ -190,7 +147,9 @@ function AIMessageContent({ content, onNavigate }: { content: string; onNavigate
                 try {
                   onNavigate(navInfo.path);
                 } catch (error) {
-                  console.error('Navigation error:', error);
+                  if (process.env.NODE_ENV === 'development') {
+                    console.error('Navigation error:', error);
+                  }
                 }
               }}
               className="inline-flex items-center gap-1.5 px-2 py-1 mx-0.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary font-medium text-sm transition-all duration-200 cursor-pointer border border-primary/20 hover:border-primary/40 hover:shadow-sm"
@@ -201,11 +160,9 @@ function AIMessageContent({ content, onNavigate }: { content: string; onNavigate
             </button>
           );
         } else {
-          // Fallback wenn Route nicht gefunden
           segments.push(<span key={`nav-text-${keyIndex++}`} className="font-medium text-primary">{escapeHtml(label)}</span>);
         }
       } else if (matchInfo.type === 'icon') {
-        // [icon:name] Syntax (einfaches Icon)
         const iconName = matchInfo.key;
         const IconComponent = aiIconMap[iconName];
         
@@ -224,7 +181,6 @@ function AIMessageContent({ content, onNavigate }: { content: string; onNavigate
       lastIndex = matchInfo.endIndex;
     }
     
-    // Restlicher Text
     if (lastIndex < safeContent.length) {
       const textAfter = safeContent.slice(lastIndex);
       segments.push(<span key={`text-${keyIndex++}`} dangerouslySetInnerHTML={{ __html: formatMarkdown(textAfter) }} />);
@@ -240,47 +196,25 @@ function AIMessageContent({ content, onNavigate }: { content: string; onNavigate
   );
 }
 
-// HTML-Escape-Funktion für Sicherheit
 function escapeHtml(text: string): string {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }
 
-// Einfacher Markdown-Formatierer mit XSS-Schutz
 function formatMarkdown(text: string): string {
-  // Zuerst HTML escapen für Sicherheit
   let escaped = escapeHtml(text);
-  
-  // Dann Markdown-Formatierungen anwenden (nach dem Escaping)
-  // Bold: **text** oder __text__
   escaped = escaped
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/__(.+?)__/g, '<strong>$1</strong>');
-  
-  // Italic: *text* oder _text_ (nur wenn nicht Teil von **)
   escaped = escaped.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
-  
-  // Inline code: `code`
   escaped = escaped.replace(/`(.+?)`/g, '<code class="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">$1</code>');
-  
-  // Line breaks
   escaped = escaped.replace(/\n/g, '<br />');
-  
   return escaped;
 }
 
 /**
- * Modern AI chat box component matching the Cadillac EV design exactly.
- * Features:
- * - Suggested prompts with icons at top (Tag, FileText, Zap)
- * - Icons INSIDE the input field (left: Paperclip, Image; right: Globe, Mic, ArrowUp)
- * - Clean, minimal white background design
- * - Markdown rendering with Streamdown
- * - Auto-scrolls to latest message
- * - Loading states
- * - Non-clickable message bubbles (prevents accidental logout)
- * - Functional icons: File upload, Image upload, Voice transcription, Language selection
+ * Mobile-optimized AI chat box component
  */
 export function AIChatBox({
   messages,
@@ -288,7 +222,7 @@ export function AIChatBox({
   isLoading = false,
   placeholder = "Nachricht eingeben...",
   className,
-  height = "600px",
+  height = "100%",
   emptyStateMessage = "Beginne eine Unterhaltung mit dem Assistenten",
   suggestedPrompts,
 }: AIChatBoxProps) {
@@ -303,30 +237,21 @@ export function AIChatBox({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false);
+  const plusMenuRef = useRef<HTMLDivElement>(null);
 
-  // Navigation Handler - speichert Nachrichten und öffnet Popup nach Navigation
-  const handleNavigate = useCallback((route: string, tutorialSteps?: Array<{ selector: string; title: string; description: string }>) => {
-    // Speichere aktuelle Nachrichten im localStorage für Popup-Kontinuität
+  const handleNavigate = useCallback((route: string) => {
     localStorage.setItem('nexo_chat_messages', JSON.stringify(messages));
     localStorage.setItem('nexo_chat_open_popup', 'true');
     localStorage.setItem('nexo_chat_from_route', route);
-    
-    // Optional: Tutorial-Schritte speichern
-    if (tutorialSteps && tutorialSteps.length > 0) {
-      localStorage.setItem('nexo_tutorial_highlight', JSON.stringify(tutorialSteps));
-    }
-    
-    // Navigiere zur Zielseite
     setLocation(route);
   }, [messages, setLocation]);
 
-  // Filter out system messages
   const displayMessages = useMemo(() => 
     messages.filter((msg) => msg.role !== "system"), 
     [messages]
   );
 
-  // Normalize suggested prompts
   const normalizedPrompts = useMemo(() => {
     if (!suggestedPrompts) return [];
     return suggestedPrompts.map(prompt => 
@@ -336,7 +261,6 @@ export function AIChatBox({
     );
   }, [suggestedPrompts]);
 
-  // Scroll to bottom helper function with smooth animation
   const scrollToBottom = useCallback(() => {
     const viewport = scrollAreaRef.current?.querySelector(
       '[data-radix-scroll-area-viewport]'
@@ -352,18 +276,30 @@ export function AIChatBox({
     }
   }, []);
 
-  // Auto-scroll when new messages arrive
   useEffect(() => {
     if (displayMessages.length > 0) {
       scrollToBottom();
     }
   }, [displayMessages.length, scrollToBottom]);
 
+  // Close plus menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (plusMenuRef.current && !plusMenuRef.current.contains(event.target as Node)) {
+        setPlusMenuOpen(false);
+      }
+    };
+
+    if (plusMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [plusMenuOpen]);
+
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     const trimmedInput = input.trim();
     
-    // Validierung: Maximal 10000 Zeichen
     if (!trimmedInput || isLoading) return;
     
     if (trimmedInput.length > 10000) {
@@ -371,7 +307,6 @@ export function AIChatBox({
       return;
     }
     
-    // Verhindere zu schnelle aufeinanderfolgende Anfragen
     if (isLoading) {
       toast.info('Bitte warte auf die Antwort...');
       return;
@@ -381,13 +316,12 @@ export function AIChatBox({
       onSendMessage(trimmedInput);
       setInput("");
 
-      // Scroll immediately after sending
       scrollToBottom();
-
-      // Keep focus on input
       textareaRef.current?.focus();
     } catch (error) {
-      console.error('Error sending message:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error sending message:', error);
+      }
       toast.error('Fehler beim Senden der Nachricht. Bitte versuche es erneut.');
     }
   }, [input, isLoading, onSendMessage, scrollToBottom]);
@@ -405,16 +339,13 @@ export function AIChatBox({
     scrollToBottom();
   }, [isLoading, onSendMessage, scrollToBottom]);
 
-  // File upload handler
   const handleFileUpload = useCallback(async (file: File) => {
-    // Validierung: Maximal 10MB
-    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
     if (file.size > MAX_FILE_SIZE) {
       toast.error(`Datei ist zu groß. Maximal ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(0)}MB erlaubt.`);
       return;
     }
     
-    // Validierung: Dateiname
     if (!file.name || file.name.length > 255) {
       toast.error('Ungültiger Dateiname.');
       return;
@@ -423,7 +354,6 @@ export function AIChatBox({
     const loadingToast = toast.loading('Datei wird hochgeladen...');
     
     try {
-      // Timeout für FileReader (30 Sekunden)
       const base64 = await Promise.race<string>([
         new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -439,13 +369,12 @@ export function AIChatBox({
           reader.readAsDataURL(file);
         }),
         new Promise<string>((_, reject) => 
-          setTimeout(() => reject(new Error('Upload-Timeout: Die Datei ist zu groß oder die Verbindung zu langsam.')), 30000)
+          setTimeout(() => reject(new Error('Upload-Timeout')), 30000)
         ),
       ]);
 
       const uploadAIChatFile = httpsCallable(functions, 'uploadAIChatFile');
       
-      // Timeout für Upload (60 Sekunden)
       const result = await Promise.race([
         uploadAIChatFile({
           fileName: file.name,
@@ -453,7 +382,7 @@ export function AIChatBox({
           fileType: file.type,
         }),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Upload-Timeout: Die Verbindung ist zu langsam.')), 60000)
+          setTimeout(() => reject(new Error('Upload-Timeout')), 60000)
         ),
       ]) as any;
 
@@ -472,27 +401,25 @@ export function AIChatBox({
     } catch (error: any) {
       toast.dismiss(loadingToast);
       const errorMsg = error.message || 'Unbekannter Fehler';
-      console.error('File upload error:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('File upload error:', error);
+      }
       toast.error(`Fehler beim Hochladen: ${errorMsg}`);
     }
   }, [onSendMessage]);
 
-  // Image upload handler
   const handleImageUpload = useCallback(async (file: File) => {
-    // Validierung: Nur Bilder
     if (!file.type.startsWith('image/')) {
       toast.error('Bitte wähle ein Bild aus (JPG, PNG, GIF, etc.)');
       return;
     }
     
-    // Validierung: Maximal 5MB für Bilder
-    const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
+    const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
     if (file.size > MAX_IMAGE_SIZE) {
       toast.error(`Bild ist zu groß. Maximal ${(MAX_IMAGE_SIZE / 1024 / 1024).toFixed(0)}MB erlaubt.`);
       return;
     }
     
-    // Validierung: Dateiname
     if (!file.name || file.name.length > 255) {
       toast.error('Ungültiger Dateiname.');
       return;
@@ -501,7 +428,6 @@ export function AIChatBox({
     const loadingToast = toast.loading('Bild wird hochgeladen...');
 
     try {
-      // Timeout für FileReader (30 Sekunden)
       const base64 = await Promise.race<string>([
         new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -517,13 +443,12 @@ export function AIChatBox({
           reader.readAsDataURL(file);
         }),
         new Promise<string>((_, reject) => 
-          setTimeout(() => reject(new Error('Upload-Timeout: Das Bild ist zu groß oder die Verbindung zu langsam.')), 30000)
+          setTimeout(() => reject(new Error('Upload-Timeout')), 30000)
         ),
       ]);
 
       const uploadAIChatImage = httpsCallable(functions, 'uploadAIChatImage');
       
-      // Timeout für Upload (60 Sekunden)
       const result = await Promise.race([
         uploadAIChatImage({
           fileName: file.name,
@@ -531,7 +456,7 @@ export function AIChatBox({
           fileType: file.type,
         }),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Upload-Timeout: Die Verbindung ist zu langsam.')), 60000)
+          setTimeout(() => reject(new Error('Upload-Timeout')), 60000)
         ),
       ]) as any;
 
@@ -550,21 +475,23 @@ export function AIChatBox({
     } catch (error: any) {
       toast.dismiss(loadingToast);
       const errorMsg = error.message || 'Unbekannter Fehler';
-      console.error('Image upload error:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Image upload error:', error);
+      }
       toast.error(`Fehler beim Hochladen: ${errorMsg}`);
     }
   }, [onSendMessage]);
 
-  // Voice recording handler
   const handleVoiceRecording = useCallback(async () => {
     if (isRecording && mediaRecorder) {
-      // Stop recording
       try {
         mediaRecorder.stop();
         setIsRecording(false);
         toast.info('Aufnahme wird verarbeitet...');
       } catch (error) {
-        console.error('Error stopping recording:', error);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Error stopping recording:', error);
+        }
         setIsRecording(false);
         toast.error('Fehler beim Stoppen der Aufnahme');
       }
@@ -572,7 +499,6 @@ export function AIChatBox({
     }
 
     try {
-      // Prüfe ob Mikrofon verfügbar ist
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         toast.error('Mikrofon-Zugriff wird von diesem Browser nicht unterstützt.');
         return;
@@ -587,7 +513,7 @@ export function AIChatBox({
 
       const recorder = new MediaRecorder(stream);
       const chunks: Blob[] = [];
-      let recordingTimeout: NodeJS.Timeout | null = null;
+      let recordingTimeout: ReturnType<typeof setTimeout> | null = null;
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
@@ -602,8 +528,7 @@ export function AIChatBox({
 
         const blob = new Blob(chunks, { type: 'audio/webm' });
         
-        // Validierung: Maximal 10MB Audio
-        const MAX_AUDIO_SIZE = 10 * 1024 * 1024; // 10MB
+        const MAX_AUDIO_SIZE = 10 * 1024 * 1024;
         if (blob.size > MAX_AUDIO_SIZE) {
           toast.error('Audio-Aufnahme ist zu groß. Bitte kürze die Aufnahme.');
           stream.getTracks().forEach(track => track.stop());
@@ -634,14 +559,13 @@ export function AIChatBox({
 
           const transcribeAudio = httpsCallable(functions, 'transcribeAIChatAudio');
           
-          // Timeout für Transkription (60 Sekunden)
           const result = await Promise.race([
             transcribeAudio({
               audioData: base64,
               mimeType: 'audio/webm',
             }),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Transkription-Timeout: Die Verbindung ist zu langsam.')), 60000)
+              setTimeout(() => reject(new Error('Transkription-Timeout')), 60000)
             ),
           ]) as any;
 
@@ -661,7 +585,9 @@ export function AIChatBox({
         } catch (error: any) {
           toast.dismiss(loadingToast);
           const errorMsg = error.message || 'Unbekannter Fehler';
-          console.error('Transcription error:', error);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Transcription error:', error);
+          }
           toast.error(`Fehler bei der Transkription: ${errorMsg}`);
         } finally {
           stream.getTracks().forEach(track => track.stop());
@@ -669,13 +595,14 @@ export function AIChatBox({
       };
 
       recorder.onerror = (event: any) => {
-        console.error('MediaRecorder error:', event);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('MediaRecorder error:', event);
+        }
         toast.error('Fehler bei der Aufnahme');
         setIsRecording(false);
         stream.getTracks().forEach(track => track.stop());
       };
 
-      // Maximal 5 Minuten Aufnahme
       recordingTimeout = setTimeout(() => {
         if (recorder.state === 'recording') {
           recorder.stop();
@@ -690,7 +617,9 @@ export function AIChatBox({
     } catch (error: any) {
       setIsRecording(false);
       const errorMsg = error.message || 'Unbekannter Fehler';
-      console.error('Microphone access error:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Microphone access error:', error);
+      }
       
       if (errorMsg.includes('permission') || errorMsg.includes('denied')) {
         toast.error('Mikrofon-Zugriff wurde verweigert. Bitte erlaube den Zugriff in den Browser-Einstellungen.');
@@ -702,7 +631,6 @@ export function AIChatBox({
     }
   }, [isRecording, mediaRecorder]);
 
-  // Language selection handler
   const handleLanguageToggle = useCallback(() => {
     const currentLang = i18n.language;
     const newLang = currentLang === 'de' ? 'en' : 'de';
@@ -711,14 +639,12 @@ export function AIChatBox({
     toast.success(newLang === 'de' ? 'Sprache auf Deutsch geändert' : 'Language changed to English');
   }, [i18n]);
 
-  // Render input form - wird in beiden Zuständen verwendet
   const renderInputForm = () => (
     <form
       ref={inputAreaRef}
       onSubmit={handleSubmit}
       className="w-full"
     >
-      {/* Hidden file inputs */}
       <input
         ref={fileInputRef}
         type="file"
@@ -736,99 +662,123 @@ export function AIChatBox({
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) handleImageUpload(file);
+          if (file) {
+            handleImageUpload(file);
+            setPlusMenuOpen(false);
+          }
           e.target.value = '';
         }}
         accept="image/*"
       />
 
-      <div className="max-w-3xl mx-auto">
-        <div className="relative flex items-center rounded-2xl border-2 border-border bg-card shadow-sm transition-all duration-200 py-1 focus-within:border-primary/50">
-          {/* Left Icons */}
-          <div className="flex items-center gap-1 pl-2">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-all duration-150"
-              aria-label="Datei anhängen"
-              disabled={isLoading}
-            >
-              <Paperclip className="size-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => imageInputRef.current?.click()}
-              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-all duration-150"
-              aria-label="Bild hinzufügen"
-              disabled={isLoading}
-            >
-              <Image className="size-5" />
-            </button>
+      <div className="w-full max-w-full mx-auto">
+        {/* ChatGPT-style Input Bar */}
+        <div className="flex items-center gap-2 px-2" style={{ alignItems: 'center' }}>
+          {/* Plus Menu Dropdown - positioned relative to input */}
+          <div className="relative" ref={plusMenuRef}>
+            {/* Plus Menu Dropdown */}
+            {plusMenuOpen && (
+              <div className="absolute bottom-full left-2 mb-2 bg-background border border-border rounded-lg shadow-lg z-50 min-w-[200px] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => {
+                    fileInputRef.current?.click();
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors text-left"
+                >
+                  <Paperclip className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-sm">Datei anhängen</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    imageInputRef.current?.click();
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors text-left"
+                >
+                  <Image className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-sm">Bild hinzufügen</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleLanguageToggle();
+                    setPlusMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors text-left"
+                >
+                  <Globe className="w-5 h-5 text-muted-foreground" />
+                  <span className="text-sm">Sprache wechseln</span>
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Dynamisches Textarea */}
-          <Textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              // Auto-resize
-              if (textareaRef.current) {
-                textareaRef.current.style.height = 'auto';
-                textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 150) + 'px';
-              }
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            className="flex-1 resize-none border-0 bg-transparent py-2.5 px-2 text-sm text-foreground placeholder:text-muted-foreground focus:ring-0 focus:outline-none min-h-[44px] max-h-[150px] transition-all duration-200"
-            rows={1}
-            disabled={isLoading}
-            style={{ height: 'auto' }}
-          />
-
-          {/* Right Icons */}
-          <div className="flex items-center gap-1 pr-2">
+          {/* Position 6: Input Field - ChatGPT Style with Plus Button inside */}
+          <div className="flex-1 relative">
+            {/* Plus Button inside input (left side) */}
             <button
               type="button"
-              onClick={handleLanguageToggle}
-              className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-all duration-150"
-              aria-label="Sprache wechseln"
+              onClick={() => setPlusMenuOpen(!plusMenuOpen)}
+              className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-transparent hover:bg-muted/50 transition-colors flex items-center justify-center active:scale-95 z-10"
+              aria-label="Mehr Optionen"
               disabled={isLoading}
             >
-              <Globe className="size-5" />
+              <Plus className="w-4 h-4 text-muted-foreground" />
             </button>
+            
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              rows={1}
+              className="w-full pl-10 pr-4 py-3 rounded-2xl bg-muted border-0 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none overflow-y-auto min-h-[44px] max-h-[120px] leading-relaxed"
+              style={{
+                height: 'auto',
+                minHeight: '44px',
+              }}
+              disabled={isLoading}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.style.height = 'auto';
+                target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+              }}
+            />
+          </div>
+
+          {/* Voice/Submit Button - Right */}
+          {input.trim() ? (
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-10 h-10 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center active:scale-95 shadow-md self-center"
+              aria-label={isLoading ? "Wird gesendet..." : "Nachricht senden"}
+            >
+              {isLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <ArrowUp className="w-5 h-5" />
+              )}
+            </button>
+          ) : (
             <button
               type="button"
               onClick={handleVoiceRecording}
               className={cn(
-                "p-2 rounded-lg transition-all duration-150",
-                isRecording
-                  ? "text-red-500 bg-red-500/10 hover:bg-red-500/20"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                "transition-colors flex items-center justify-center active:scale-95 self-center p-2",
+                isRecording ? "text-red-500 hover:text-red-600" : "text-foreground hover:text-foreground/80"
               )}
               aria-label="Spracheingabe"
               disabled={isLoading}
             >
-              <Mic className="size-5" />
+              <Mic className={cn(
+                "w-7 h-7",
+                isRecording ? "text-red-500" : "text-foreground"
+              )} />
             </button>
-            <button
-              type="submit"
-              disabled={!input.trim() || isLoading}
-              className={cn(
-                "p-2 rounded-lg transition-all duration-200",
-                input.trim() && !isLoading
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
-                  : "text-muted-foreground/50 cursor-not-allowed"
-              )}
-              aria-label={isLoading ? "Wird gesendet..." : "Nachricht senden"}
-            >
-              {isLoading ? (
-                <Loader2 className="size-5 animate-spin" />
-              ) : (
-                <ArrowUp className="size-5" />
-              )}
-            </button>
-          </div>
+          )}
         </div>
       </div>
     </form>
@@ -844,49 +794,64 @@ export function AIChatBox({
       style={{ height }}
     >
       {displayMessages.length === 0 ? (
-        /* Empty State - Alles kompakt zusammen oben */
-        <div className="flex flex-col p-4 animate-in fade-in duration-300">
-          {/* Suggested Prompts */}
+        <div className="flex flex-col h-full animate-in fade-in duration-300 pb-20">
+          {/* Main Content Area - Empty */}
+          <div className="flex-1 flex items-center justify-center px-4">
+            <div className="w-full max-w-2xl">
+              {/* Empty space - messages would go here */}
+            </div>
+          </div>
+
+          {/* Suggested Prompts - Fixed above Input (like ChatGPT) */}
           {normalizedPrompts.length > 0 && (
-            <div className="w-full max-w-2xl mx-auto mb-4">
-              <p className="text-sm text-muted-foreground text-center mb-4">{emptyStateMessage}</p>
-              <div className="grid grid-cols-2 gap-2.5">
-                {normalizedPrompts.map((prompt, index) => {
-                  const IconComponent = iconMap[prompt.icon as keyof typeof iconMap];
-                  return (
-                    <button
-                      key={index}
-                      onClick={() => handleSuggestedPromptClick(prompt.text)}
-                      disabled={isLoading}
-                      className="flex items-center gap-2 rounded-xl border border-border bg-card hover:bg-muted hover:border-border px-3 py-2.5 text-sm text-foreground transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm hover:shadow text-left"
-                      type="button"
-                    >
-                      {IconComponent && <IconComponent className="size-4 text-muted-foreground flex-shrink-0" />}
-                      <span>{prompt.text}</span>
-                    </button>
-                  );
-                })}
+            <div className="fixed bottom-24 left-0 right-0 px-4 pb-2 z-20 pointer-events-none">
+              <div className="w-full max-w-2xl mx-auto">
+                <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 pointer-events-auto">
+                  <div className="flex gap-3" style={{ width: 'max-content' }}>
+                    {normalizedPrompts.map((prompt, index) => {
+                      const hasSubtitle = prompt.subtitle && prompt.subtitle.trim().length > 0;
+                      return (
+                        <button
+                          key={index}
+                          onClick={() => handleSuggestedPromptClick(prompt.text)}
+                          disabled={isLoading}
+                          className="flex-shrink-0 w-[calc(40vw-1rem)] min-w-[140px] max-w-[160px] rounded-xl bg-muted hover:bg-muted/80 active:bg-muted/70 px-2.5 py-2 text-left transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm"
+                          type="button"
+                        >
+                          <p className="font-medium text-xs text-foreground mb-0.5 line-clamp-2 leading-tight">
+                            {prompt.text}
+                          </p>
+                          {hasSubtitle && (
+                            <p className="text-[10px] text-muted-foreground line-clamp-2 leading-tight">
+                              {prompt.subtitle}
+                            </p>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
           )}
           
-          {/* Input direkt unter den Prompts */}
-          <div className="w-full max-w-2xl mx-auto px-0">
-            {renderInputForm()}
+          {/* Input Form - Fixed at bottom */}
+          <div className="fixed bottom-0 left-0 right-0 w-full bg-background px-4 py-3 safe-bottom" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+            <div className="w-full max-w-2xl mx-auto">
+              {renderInputForm()}
+            </div>
           </div>
         </div>
       ) : (
-        /* Chat Mode - Messages und Input getrennt */
         <>
-          {/* Messages Area */}
-          <div ref={scrollAreaRef} className="flex-1 overflow-hidden">
+          <div ref={scrollAreaRef} className="flex-1 overflow-hidden pb-32">
             <ScrollArea className="h-full [&>div>div]:!overflow-y-auto [&>div>div]:[-ms-overflow-style:none] [&>div>div]:[scrollbar-width:none] [&>div>div::-webkit-scrollbar]:hidden">
-              <div className="flex flex-col p-4 space-y-4">
+              <div className="flex flex-col p-4 space-y-4 pb-6">
                 {displayMessages.map((message, index) => (
                   <div
                     key={index}
                     className={cn(
-                      "flex gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300",
+                      "flex gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300",
                       message.role === "user"
                         ? "justify-end"
                         : "justify-start"
@@ -896,8 +861,8 @@ export function AIChatBox({
                       className={cn(
                         "max-w-[85%] select-text",
                         message.role === "user"
-                          ? "bg-primary text-primary-foreground rounded-2xl px-4 py-3"
-                          : "text-foreground"
+                          ? "bg-primary text-primary-foreground rounded-2xl px-4 py-3 text-base"
+                          : "text-foreground text-base"
                       )}
                       onClick={(e) => {
                         // Allow clicks on buttons and links to work
@@ -919,7 +884,7 @@ export function AIChatBox({
                       {message.role === "assistant" ? (
                         <AIMessageContent content={message.content} onNavigate={handleNavigate} />
                       ) : (
-                        <p className="whitespace-pre-wrap text-sm">
+                        <p className="whitespace-pre-wrap leading-relaxed">
                           {message.content}
                         </p>
                       )}
@@ -938,12 +903,48 @@ export function AIChatBox({
             </ScrollArea>
           </div>
 
-          {/* Input Area - Am unteren Rand */}
-          <div className="px-4 py-3 bg-background border-t border-border">
-            {renderInputForm()}
+          {/* Suggested Prompts - Fixed above Input when messages exist (like ChatGPT) */}
+          {normalizedPrompts.length > 0 && (
+            <div className="fixed bottom-24 left-0 right-0 px-4 pb-2 z-20 pointer-events-none">
+              <div className="w-full max-w-2xl mx-auto">
+                <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 pointer-events-auto">
+                  <div className="flex gap-3" style={{ width: 'max-content' }}>
+                    {normalizedPrompts.map((prompt, index) => {
+                      const hasSubtitle = prompt.subtitle && prompt.subtitle.trim().length > 0;
+                      return (
+                        <button
+                          key={index}
+                          onClick={() => handleSuggestedPromptClick(prompt.text)}
+                          disabled={isLoading}
+                          className="flex-shrink-0 w-[calc(40vw-1rem)] min-w-[140px] max-w-[160px] rounded-xl bg-muted hover:bg-muted/80 active:bg-muted/70 px-2.5 py-2 text-left transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 shadow-sm"
+                          type="button"
+                        >
+                          <p className="font-medium text-xs text-foreground mb-0.5 line-clamp-2 leading-tight">
+                            {prompt.text}
+                          </p>
+                          {hasSubtitle && (
+                            <p className="text-[10px] text-muted-foreground line-clamp-2 leading-tight">
+                              {prompt.subtitle}
+                            </p>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Input Form - Fixed at bottom */}
+          <div className="fixed bottom-0 left-0 right-0 w-full bg-background/95 backdrop-blur-sm px-4 py-3 safe-bottom flex-shrink-0 z-30" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+            <div className="w-full max-w-2xl mx-auto">
+              {renderInputForm()}
+            </div>
           </div>
         </>
       )}
     </div>
   );
 }
+

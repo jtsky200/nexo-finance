@@ -1,5 +1,7 @@
 import { ReactNode } from 'react';
+import { useLocation } from 'wouter';
 import PageHeader from './PageHeader';
+import QuickActions from './QuickActions';
 
 interface MobileLayoutProps {
   children: ReactNode;
@@ -15,6 +17,7 @@ interface MobileLayoutProps {
   currentChatId?: string;
   onSelectChat?: (chatId: string) => void;
   onNewChat?: () => void;
+  hideQuickActions?: boolean;
 }
 
 export default function MobileLayout({ 
@@ -25,8 +28,10 @@ export default function MobileLayout({
   quickActions = [],
   currentChatId,
   onSelectChat,
-  onNewChat
+  onNewChat,
+  hideQuickActions = false
 }: MobileLayoutProps) {
+  const [location] = useLocation();
   // Bottom Navigation entfernt - alle Funktionen sind im Hamburger-Menü verfügbar
 
   return (
@@ -42,8 +47,11 @@ export default function MobileLayout({
         onNewChat={onNewChat}
       />
 
-      {/* Main Content - Add padding-top to account for fixed header */}
-      <main className="flex-1 overflow-y-auto pt-14" style={{ touchAction: 'pan-y' }}>
+      {/* Quick Actions - Always visible on all pages unless explicitly hidden */}
+      {!hideQuickActions && <QuickActions currentPath={location} />}
+
+      {/* Main Content - Add padding-top to account for fixed header and quick actions */}
+      <main className="flex-1 overflow-y-auto" style={{ paddingTop: hideQuickActions ? '3.5rem' : '7rem', touchAction: 'pan-y' }}>
         <div className="mobile-container py-4">
           {children}
         </div>

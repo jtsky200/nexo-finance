@@ -852,25 +852,26 @@ exports.createInvoice = (0, https_1.onCall)(async (request) => {
                     installmentDate.setFullYear(installmentDate.getFullYear() + i);
                     break;
             }
-            // Round each installment amount to 5 Rappen
-            const roundedAmount = Math.round(installmentAmount * 20) / 20;
+            // Round each installment amount to 5 Rappen and convert to cents (Rappen)
+            // installmentAmount is in CHF, convert to cents for storage
+            const roundedAmountChf = Math.round(installmentAmount * 20) / 20;
+            const roundedAmountCents = Math.round(roundedAmountChf * 100);
             installments.push({
                 number: i + 1,
-                amount: roundedAmount,
+                amount: roundedAmountCents, // Store in cents (Rappen) like invoice amount
                 dueDate: admin.firestore.Timestamp.fromDate(installmentDate),
                 status: 'pending',
                 paidDate: null,
-                paidAmount: 0,
+                paidAmount: 0, // Also in cents
                 notes: ((_b = request.data.installmentNotes) === null || _b === void 0 ? void 0 : _b[i]) || '', // Add notes field per installment
             });
         }
         // Adjust last installment to account for rounding
-        // Note: totalInstallmentAmount and amountInChf are both in CHF
-        const amountInChf = amount / 100;
-        const totalInstallmentAmount = installments.reduce((sum, inst) => sum + inst.amount, 0);
-        if (Math.abs(totalInstallmentAmount - amountInChf) > 0.01) {
+        // All amounts are in cents (Rappen)
+        const totalInstallmentAmountCents = installments.reduce((sum, inst) => sum + inst.amount, 0);
+        if (Math.abs(totalInstallmentAmountCents - amount) > 1) { // 1 cent tolerance
             // Adjust last installment so total matches exactly
-            installments[installments.length - 1].amount = parseFloat((amountInChf - (totalInstallmentAmount - installments[installments.length - 1].amount)).toFixed(2));
+            installments[installments.length - 1].amount = amount - (totalInstallmentAmountCents - installments[installments.length - 1].amount);
         }
         invoiceData.isInstallmentPlan = true;
         invoiceData.installmentCount = installmentCount;
@@ -1143,17 +1144,33 @@ exports.recordInstallmentPayment = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('not-found', 'Installment not found');
     }
     // Update installment
+    // paidAmount from frontend might be in CHF, convert to cents if needed
+    // Check if paidAmount is in CHF (small number) or cents (large number)
+    let paidAmountCents;
+    if (paidAmount < 1000) {
+        // Likely in CHF, convert to cents
+        paidAmountCents = Math.round(parseFloat(paidAmount.toString()) * 100);
+    }
+    else {
+        // Likely already in cents
+        paidAmountCents = Math.round(parseFloat(paidAmount.toString()));
+    }
     const installment = installments[installmentIndex];
-    const newPaidAmount = (installment.paidAmount || 0) + parseFloat(paidAmount);
-    const isFullyPaid = newPaidAmount >= installment.amount;
-    installments[installmentIndex] = Object.assign(Object.assign({}, installment), { paidAmount: parseFloat(newPaidAmount.toFixed(2)), status: isFullyPaid ? 'paid' : 'partial', paidDate: isFullyPaid ? admin.firestore.Timestamp.fromDate(new Date(paidDate || new Date())) : installment.paidDate });
-    // Calculate total paid
-    const totalPaid = installments.reduce((sum, inst) => sum + (inst.paidAmount || 0), 0);
+    const currentPaidAmountCents = Math.round((installment.paidAmount || 0) * (installment.paidAmount < 1000 ? 100 : 1)); // Convert if in CHF
+    const newPaidAmountCents = currentPaidAmountCents + paidAmountCents;
+    const installmentAmountCents = Math.round(installment.amount * (installment.amount < 1000 ? 100 : 1)); // Convert if in CHF
+    const isFullyPaid = newPaidAmountCents >= installmentAmountCents;
+    installments[installmentIndex] = Object.assign(Object.assign({}, installment), { paidAmount: newPaidAmountCents, status: isFullyPaid ? 'paid' : 'partial', paidDate: isFullyPaid ? admin.firestore.Timestamp.fromDate(new Date(paidDate || new Date())) : installment.paidDate });
+    // Calculate total paid (all amounts are now in cents)
+    const totalPaidCents = installments.reduce((sum, inst) => {
+        const paidAmountCents = Math.round((inst.paidAmount || 0) * (inst.paidAmount < 1000 ? 100 : 1)); // Convert if in CHF
+        return sum + paidAmountCents;
+    }, 0);
     const allPaid = installments.every((inst) => isStatusPaid(inst.status));
-    // Update invoice
+    // Update invoice - totalPaid should be in cents to match invoice amount format
     await invoiceRef.update({
         installments,
-        totalPaid: parseFloat(totalPaid.toFixed(2)),
+        totalPaid: totalPaidCents, // Store in cents like invoice amount
         status: allPaid ? 'paid' : invoiceData.status,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
@@ -1164,7 +1181,8 @@ exports.recordInstallmentPayment = (0, https_1.onCall)(async (request) => {
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         });
     }
-    return { success: true, totalPaid: parseFloat(totalPaid.toFixed(2)), allPaid };
+    // Return totalPaid in CHF for frontend compatibility
+    return { success: true, totalPaid: parseFloat((totalPaidCents / 100).toFixed(2)), allPaid };
 });
 exports.updateInstallmentPlan = (0, https_1.onCall)(async (request) => {
     var _a;
@@ -1189,13 +1207,34 @@ exports.updateInstallmentPlan = (0, https_1.onCall)(async (request) => {
     if (!(invoiceData === null || invoiceData === void 0 ? void 0 : invoiceData.isInstallmentPlan)) {
         throw new https_1.HttpsError('invalid-argument', 'Invoice is not an installment plan');
     }
-    // Calculate total paid
-    const totalPaid = installments.reduce((sum, inst) => sum + (inst.paidAmount || 0), 0);
-    const allPaid = installments.every((inst) => isStatusPaid(inst.status));
-    // Update invoice
+    // Normalize all amounts to cents (Rappen) for consistency
+    // Frontend might send amounts in CHF or cents, convert all to cents
+    const normalizedInstallments = installments.map((inst) => {
+        // Convert amount to cents if needed (if < 1000, assume CHF)
+        let amountCents = inst.amount || 0;
+        if (amountCents < 1000) {
+            amountCents = Math.round(amountCents * 100);
+        }
+        else {
+            amountCents = Math.round(amountCents);
+        }
+        // Convert paidAmount to cents if needed
+        let paidAmountCents = inst.paidAmount || 0;
+        if (paidAmountCents < 1000) {
+            paidAmountCents = Math.round(paidAmountCents * 100);
+        }
+        else {
+            paidAmountCents = Math.round(paidAmountCents);
+        }
+        return Object.assign(Object.assign({}, inst), { dueDate: inst.dueDate ? (typeof inst.dueDate === 'string' ? admin.firestore.Timestamp.fromDate(new Date(inst.dueDate)) : inst.dueDate) : inst.dueDate, paidDate: inst.paidDate ? (typeof inst.paidDate === 'string' ? admin.firestore.Timestamp.fromDate(new Date(inst.paidDate)) : inst.paidDate) : inst.paidDate, paidAmount: paidAmountCents, amount: amountCents });
+    });
+    // Calculate total paid (all in cents)
+    const totalPaidCents = normalizedInstallments.reduce((sum, inst) => sum + (inst.paidAmount || 0), 0);
+    const allPaid = normalizedInstallments.every((inst) => isStatusPaid(inst.status));
+    // Update invoice - all amounts in cents
     await invoiceRef.update({
-        installments: installments.map((inst) => (Object.assign(Object.assign({}, inst), { dueDate: inst.dueDate ? (typeof inst.dueDate === 'string' ? admin.firestore.Timestamp.fromDate(new Date(inst.dueDate)) : inst.dueDate) : inst.dueDate, paidDate: inst.paidDate ? (typeof inst.paidDate === 'string' ? admin.firestore.Timestamp.fromDate(new Date(inst.paidDate)) : inst.paidDate) : inst.paidDate, paidAmount: parseFloat((inst.paidAmount || 0).toFixed(2)), amount: parseFloat((inst.amount || 0).toFixed(2)) }))),
-        totalPaid: parseFloat(totalPaid.toFixed(2)),
+        installments: normalizedInstallments,
+        totalPaid: totalPaidCents, // Store in cents
         status: allPaid ? 'paid' : invoiceData.status,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
@@ -1253,7 +1292,9 @@ exports.convertToInstallmentPlan = (0, https_1.onCall)(async (request) => {
     else {
         throw new https_1.HttpsError('invalid-argument', 'Either installment amount or count must be provided');
     }
-    const finalInstallmentAmount = installmentAmountValue;
+    const finalInstallmentAmountChf = installmentAmountValue;
+    // Convert to cents (Rappen) for storage consistency
+    const finalInstallmentAmountCents = Math.round(finalInstallmentAmountChf * 100);
     const installments = [];
     for (let i = 0; i < count; i++) {
         const installmentDate = new Date(start);
@@ -1273,18 +1314,19 @@ exports.convertToInstallmentPlan = (0, https_1.onCall)(async (request) => {
         }
         installments.push({
             number: i + 1,
-            amount: finalInstallmentAmount,
+            amount: finalInstallmentAmountCents, // Store in cents (Rappen) like invoice amount
             dueDate: admin.firestore.Timestamp.fromDate(installmentDate),
             status: 'open',
             paidDate: null,
-            paidAmount: 0,
+            paidAmount: 0, // Also in cents
             notes: '', // Add notes field
         });
     }
     // Adjust last installment to account for rounding
-    const totalInstallmentAmount = installments.reduce((sum, inst) => sum + inst.amount, 0);
-    if (totalInstallmentAmount !== amount) {
-        installments[installments.length - 1].amount = parseFloat((amount - (totalInstallmentAmount - installments[installments.length - 1].amount)).toFixed(2));
+    // All amounts are in cents (Rappen)
+    const totalInstallmentAmountCents = installments.reduce((sum, inst) => sum + inst.amount, 0);
+    if (Math.abs(totalInstallmentAmountCents - amount) > 1) { // 1 cent tolerance
+        installments[installments.length - 1].amount = amount - (totalInstallmentAmountCents - installments[installments.length - 1].amount);
     }
     // Calculate end date
     const endDate = new Date(start);

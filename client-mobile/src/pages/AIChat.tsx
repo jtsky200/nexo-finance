@@ -4,7 +4,7 @@ import { AIChatBox, type Message } from '@/components/AIChatBox';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import { RotateCcw, Bell, ScanLine, Wallet, ShoppingCart, LayoutGrid, Camera, X, Upload } from 'lucide-react';
+import { Bell, ScanLine, Wallet, ShoppingCart, LayoutGrid, Camera, X, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -244,20 +244,29 @@ export default function AIChat() {
   }, [messages, currentChatId, chatHistory]);
 
   const handleNewConversation = useCallback(async () => {
-    const newChat = createNewChat();
     try {
+      const newChat = createNewChat();
+      // Save to Firebase - this will update newChat.id with Firebase ID
       await saveChatConversation(newChat);
-      // newChat.id is now updated with Firebase ID after saveChatConversation
+      // Set the current chat ID to the Firebase ID
       setCurrentChatId(newChat.id);
       setMessages([SYSTEM_MESSAGE]);
       await refetchHistory();
       toast.success('Neue Konversation gestartet');
-    } catch (error) {
-      const isDev = typeof (globalThis as any).process !== 'undefined' && (globalThis as any).process?.env?.NODE_ENV === 'development';
-      if (isDev) {
-        console.error('Error creating new chat:', error);
+    } catch (error: any) {
+      console.error('Error creating new chat:', error);
+      // Better error handling
+      let errorMessage = 'Fehler beim Erstellen der neuen Konversation';
+      if (error?.code === 'unauthenticated' || error?.message?.includes('unauthenticated')) {
+        errorMessage = 'Bitte melde dich an, um eine neue Konversation zu erstellen';
+      } else if (error?.code === 'permission-denied' || error?.message?.includes('permission')) {
+        errorMessage = 'Keine Berechtigung zum Erstellen einer Konversation';
+      } else if (error?.message) {
+        errorMessage = `Fehler: ${error.message}`;
+      } else if (typeof error === 'string') {
+        errorMessage = `Fehler: ${error}`;
       }
-      toast.error('Fehler beim Erstellen der neuen Konversation: ' + (error instanceof Error ? error.message : String(error)));
+      toast.error(errorMessage);
     }
   }, [refetchHistory]);
 
@@ -594,17 +603,6 @@ export default function AIChat() {
               </button>
             );
           })}
-          {/* Neue Konversation as Round Button */}
-          {hasUserMessages && (
-            <button
-              onClick={handleNewConversation}
-              className="w-12 h-12 rounded-full bg-background hover:bg-muted border border-border transition-colors flex items-center justify-center active:scale-95 shadow-sm"
-              aria-label="Neue Konversation"
-              title="Neue Konversation"
-            >
-              <RotateCcw className="w-5 h-5 text-foreground" />
-            </button>
-          )}
         </div>
       )}
 

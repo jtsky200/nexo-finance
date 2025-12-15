@@ -283,56 +283,31 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
   };
 
 
-  // Intelligente Konvertierung von Ratenbeträgen zu Rappen für formatAmount
-  // Die Ratenbeträge können in verschiedenen Formaten gespeichert sein aufgrund von Backend-Bugs
-  const getInstallmentAmountInRappen = (inst: any, invoiceAmountInRappen: number, totalInstallments: number, allInstallments?: any[]) => {
+  // Convert installment amount to Rappen (cents)
+  // All amounts are now consistently stored in cents (Rappen) in the backend
+  // But we need to handle legacy data that might be in CHF
+  const getInstallmentAmountInRappen = (inst: any) => {
     const instAmount = inst.amount || 0;
-    if (instAmount === 0 || totalInstallments === 0) return 0;
+    if (instAmount === 0) return 0;
     
-    // Erwarteter Ratenbetrag
-    const expectedPerInstallmentChf = invoiceAmountInRappen / 100 / totalInstallments;
-    const expectedPerInstallmentRappen = invoiceAmountInRappen / totalInstallments;
-    
-    // Wenn alle Raten verfügbar sind, prüfe die Summe
-    if (allInstallments && allInstallments.length > 0) {
-      const totalAsChf = allInstallments.reduce((sum, i) => sum + (i.amount || 0), 0);
-      const totalAsRappen = totalAsChf * 100;
-      const invoiceChf = invoiceAmountInRappen / 100;
-      
-      // Wenn Summe als CHF dem Gesamtbetrag in CHF entspricht → Raten sind in CHF
-      if (Math.abs(totalAsChf - invoiceChf) < invoiceChf * 0.05) {
-        return instAmount * 100; // CHF zu Rappen
-      }
-      
-      // Wenn Summe als Rappen dem Gesamtbetrag entspricht → Raten sind in Rappen
-      if (Math.abs(totalAsChf - invoiceAmountInRappen) < invoiceAmountInRappen * 0.05) {
-        return instAmount; // Bereits Rappen
-      }
+    // If amount is less than 1000, it's likely in CHF (legacy data), convert to cents
+    // Otherwise, it's already in cents (new format)
+    if (instAmount < 1000) {
+      return Math.round(instAmount * 100);
     }
+    return Math.round(instAmount);
+  };
+  
+  // Same for paid amounts
+  const getPaidAmountInRappen = (inst: any) => {
+    const paidAmount = inst.paidAmount || 0;
+    if (paidAmount === 0) return 0;
     
-    // Fall 1: Betrag ist nahe am erwarteten CHF-Betrag (korrekt gespeichert in CHF)
-    if (instAmount >= expectedPerInstallmentChf * 0.5 && instAmount <= expectedPerInstallmentChf * 2) {
-      return instAmount * 100; // CHF zu Rappen
+    // If amount is less than 1000, it's likely in CHF (legacy data), convert to cents
+    if (paidAmount < 1000) {
+      return Math.round(paidAmount * 100);
     }
-    
-    // Fall 2: Betrag ist nahe am erwarteten Rappen-Betrag
-    if (instAmount >= expectedPerInstallmentRappen * 0.5 && instAmount <= expectedPerInstallmentRappen * 2) {
-      return instAmount; // Bereits Rappen
-    }
-    
-    // Fall 3: Betrag ist extrem groß (korrupte Daten) - verwende erwarteten Betrag
-    if (instAmount > invoiceAmountInRappen) {
-      return expectedPerInstallmentRappen;
-    }
-    
-    // Fall 4: Betrag liegt zwischen CHF und Rappen Bereich - berechne korrekt
-    // Wenn Betrag * totalInstallments ≈ invoiceAmountInRappen → es ist Rappen
-    if (Math.abs(instAmount * totalInstallments - invoiceAmountInRappen) < invoiceAmountInRappen * 0.2) {
-      return instAmount; // Bereits Rappen
-    }
-    
-    // Standard: Annahme CHF, konvertiere zu Rappen
-    return instAmount * 100;
+    return Math.round(paidAmount);
   };
 
   const handleAddInvoice = async () => {

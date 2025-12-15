@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'wouter';
 import { 
   User,
   Globe,
   Moon,
   Sun,
   LogOut,
+  LogIn,
   ChevronRight,
   Bell,
   Shield,
@@ -29,9 +31,7 @@ import {
   isBiometricSupported, 
   isBiometricAvailable, 
   registerBiometric,
-  hasBiometricEnabled,
-  enableBiometric,
-  disableBiometric
+  useBiometricAuth
 } from '@/lib/biometricAuth';
 import { Fingerprint } from 'lucide-react';
 import { useGlassEffect } from '@/hooks/useGlassEffect';
@@ -142,11 +142,10 @@ function NotificationsSettings() {
 }
 
 function BiometricSettings() {
-  const { t } = useTranslation();
   const { user } = useAuth();
+  const { isEnabled, enable, disable } = useBiometricAuth();
   const [isSupported, setIsSupported] = useState(false);
   const [isAvailable, setIsAvailable] = useState(false);
-  const [isEnabled, setIsEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
 
@@ -159,8 +158,6 @@ function BiometricSettings() {
         const available = await isBiometricAvailable();
         setIsAvailable(available);
       }
-      
-      setIsEnabled(hasBiometricEnabled());
     };
     
     checkBiometric();
@@ -168,8 +165,7 @@ function BiometricSettings() {
 
   const handleToggleBiometric = async () => {
     if (isEnabled) {
-      disableBiometric();
-      setIsEnabled(false);
+      await disable();
       toast.success('Biometrische Authentifizierung deaktiviert');
       hapticSuccess();
       return;
@@ -197,8 +193,7 @@ function BiometricSettings() {
       );
 
       if (result.success) {
-        enableBiometric();
-        setIsEnabled(true);
+        await enable();
         toast.success('Biometrische Authentifizierung aktiviert');
         hapticSuccess();
       } else {
@@ -370,6 +365,7 @@ function WeatherLocationSettings() {
 
 export default function MobileSettings() {
   const { t, i18n } = useTranslation();
+  const [, setLocation] = useLocation();
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { isEnabled: glassEffectEnabled, toggle: toggleGlassEffect } = useGlassEffect();
@@ -377,12 +373,30 @@ export default function MobileSettings() {
   const [showLanguageDialog, setShowLanguageDialog] = useState(false);
   const [showThemeDialog, setShowThemeDialog] = useState(false);
 
-  const handleLanguageChange = (lang: string) => {
+  const { settings, updateSettings } = useUserSettings();
+  
+  const handleLanguageChange = async (lang: string) => {
     i18n.changeLanguage(lang);
-    localStorage.setItem('language', lang);
+    await updateSettings({ language: lang });
     setShowLanguageDialog(false);
     toast.success(lang === 'de' ? 'Sprache geändert' : 'Language changed');
   };
+  
+  // Load language from Firebase UserSettings
+  useEffect(() => {
+    if (settings?.language) {
+      i18n.changeLanguage(settings.language);
+    } else {
+      // Migrate from localStorage
+      const savedLang = localStorage.getItem('language');
+      if (savedLang) {
+        updateSettings({ language: savedLang }).then(() => {
+          localStorage.removeItem('language');
+        }).catch(console.error);
+        i18n.changeLanguage(savedLang);
+      }
+    }
+  }, [settings?.language, updateSettings, i18n]);
 
   const handleThemeChange = () => {
     if (toggleTheme) {
@@ -398,7 +412,7 @@ export default function MobileSettings() {
         await logout();
       }
       toast.success('Abgemeldet');
-      window.location.href = '/login';
+      setLocation('/login');
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Logout error:', error);
@@ -407,8 +421,12 @@ export default function MobileSettings() {
     }
   };
 
-  const handleDesktopSwitch = () => {
-    localStorage.setItem('preferDesktop', 'true');
+  const handleLogin = () => {
+    setLocation('/login');
+  };
+
+  const handleDesktopSwitch = async () => {
+    await updateSettings({ preferDesktop: true });
     window.location.href = 'https://nexo-jtsky100.web.app';
   };
 
@@ -569,15 +587,23 @@ export default function MobileSettings() {
         </button>
       </div>
 
-      {/* Logout */}
+      {/* Login/Logout */}
       <button
-        onClick={handleLogout}
+        onClick={user ? handleLogout : handleLogin}
         className="mobile-card w-full flex items-center gap-3 mt-6 active:opacity-80 transition-opacity"
       >
-        <div className="w-10 h-10 rounded-lg bg-status-error flex items-center justify-center">
-          <LogOut className="w-5 h-5 status-error" />
+        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+          user ? 'bg-status-error' : 'bg-primary'
+        }`}>
+          {user ? (
+            <LogOut className="w-5 h-5 status-error" />
+          ) : (
+            <LogIn className="w-5 h-5 text-primary-foreground" />
+          )}
         </div>
-        <p className="font-medium status-error">{t('auth.logout', 'Abmelden')}</p>
+        <p className={`font-medium ${user ? 'status-error' : 'text-primary'}`}>
+          {user ? t('auth.logout', 'Abmelden') : t('auth.login', 'Anmelden')}
+        </p>
       </button>
 
       {/* Version */}

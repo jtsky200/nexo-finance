@@ -16,6 +16,12 @@ const resources = {
         logout: 'Abmelden',
       },
       
+      // Auth
+      auth: {
+        login: 'Anmelden',
+        logout: 'Abmelden',
+      },
+      
       // Dashboard
       dashboard: {
         title: 'Dashboard',
@@ -442,6 +448,12 @@ const resources = {
         shopping: 'Shopping List',
         taxes: 'Taxes',
         settings: 'Settings',
+        logout: 'Logout',
+      },
+      
+      // Auth
+      auth: {
+        login: 'Login',
         logout: 'Logout',
       },
       

@@ -11,9 +11,11 @@ import {
   deleteDoc, 
   doc,
   Timestamp,
-  QueryConstraint
+  QueryConstraint,
+  onSnapshot
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
+import { useAuth } from '@/contexts/AuthContext';
 
 import { db, functions } from './firebase';
 
@@ -1220,60 +1222,100 @@ export function useChatConversations() {
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const { user } = useAuth();
 
   useEffect(() => {
-    const fetchConversations = async () => {
+    if (!user) {
+      setConversations([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    
+    // Use Firestore real-time listener for immediate synchronization
+    const unsubscribe = onSnapshot(
+      collection(db, 'chatConversations'),
+      (snapshot) => {
+        try {
+          const mappedConversations = snapshot.docs
+            .filter(doc => doc.data().userId === user.uid)
+            .map((doc) => {
+              const data = doc.data();
+              let createdAt: Date | string = new Date();
+              if (data.createdAt) {
+                if (data.createdAt.toDate) {
+                  createdAt = data.createdAt.toDate().toISOString();
+                } else if (typeof data.createdAt === 'string') {
+                  createdAt = data.createdAt;
+                } else {
+                  createdAt = new Date(data.createdAt).toISOString();
+                }
+              }
+              
+              let updatedAt: Date | string = new Date();
+              if (data.updatedAt) {
+                if (data.updatedAt.toDate) {
+                  updatedAt = data.updatedAt.toDate().toISOString();
+                } else if (typeof data.updatedAt === 'string') {
+                  updatedAt = data.updatedAt;
+                } else {
+                  updatedAt = new Date(data.updatedAt).toISOString();
+                }
+              }
+              
+              return {
+                id: doc.id,
+                userId: data.userId || user.uid,
+                title: data.title || 'Neue Konversation',
+                messages: data.messages || [],
+                createdAt,
+                updatedAt,
+              };
+            });
+          
+          // Sort by updatedAt descending (most recent first)
+          mappedConversations.sort((a, b) => {
+            const aTime = typeof a.updatedAt === 'string' ? new Date(a.updatedAt).getTime() : a.updatedAt.getTime();
+            const bTime = typeof b.updatedAt === 'string' ? new Date(b.updatedAt).getTime() : b.updatedAt.getTime();
+            return bTime - aTime;
+          });
+          
+          setConversations(mappedConversations);
+          setError(null);
+        } catch (err) {
+          console.error('Error processing chat conversations:', err);
+          setError(err as Error);
+        } finally {
+          setIsLoading(false);
+        }
+      },
+      (err) => {
+        console.error('Firestore listener error:', err);
+        setError(err);
+        setIsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const refetch = async () => {
+    // Trigger a refresh by updating refresh key (listener will automatically update)
+    // For real-time listeners, refetch is not needed, but kept for compatibility
+    if (user) {
+      setIsLoading(true);
       try {
-        setIsLoading(true);
         const data = await callFunctionWithTimeout<{ conversations: any[] }>('getChatConversations', {});
-        
-        const mappedConversations = (data.conversations || []).map((c: any) => {
-          let createdAt: Date | string = new Date();
-          if (c.createdAt) {
-            if (typeof c.createdAt === 'string') {
-              createdAt = c.createdAt;
-            } else {
-              createdAt = new Date(c.createdAt).toISOString();
-            }
-          }
-          
-          let updatedAt: Date | string = new Date();
-          if (c.updatedAt) {
-            if (typeof c.updatedAt === 'string') {
-              updatedAt = c.updatedAt;
-            } else {
-              updatedAt = new Date(c.updatedAt).toISOString();
-            }
-          }
-          
-          return {
-            ...c,
-            createdAt,
-            updatedAt,
-          };
-        });
-        
-        // Sort by updatedAt descending (most recent first)
-        mappedConversations.sort((a, b) => {
-          const aTime = typeof a.updatedAt === 'string' ? new Date(a.updatedAt).getTime() : a.updatedAt.getTime();
-          const bTime = typeof b.updatedAt === 'string' ? new Date(b.updatedAt).getTime() : b.updatedAt.getTime();
-          return bTime - aTime;
-        });
-        
-        setConversations(mappedConversations);
-        setError(null);
+        // The listener will update automatically, but we can force a refresh
+        setConversations(prev => [...prev]); // Trigger re-render
       } catch (err) {
         setError(err as Error);
       } finally {
         setIsLoading(false);
       }
-    };
-
-    fetchConversations();
-  }, [refreshKey]);
-
-  const refetch = () => setRefreshKey(prev => prev + 1);
+    }
+  };
 
   return { data: conversations, isLoading, error, refetch };
 }

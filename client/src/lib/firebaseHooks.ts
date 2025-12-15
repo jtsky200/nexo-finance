@@ -1290,3 +1290,8 @@ export async function updateChatConversation(id: string, data: Partial<Pick<Chat
 export async function deleteChatConversation(id: string) {
   await callFunctionWithTimeout('deleteChatConversation', { id });
 }
+
+export async function clearAllChatConversations() {
+  const result = await callFunctionWithTimeout<{ success: boolean; deletedCount: number }>('clearAllChatConversations', {});
+  return result;
+}

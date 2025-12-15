@@ -969,3 +969,9 @@ export async function deleteChatConversation(id: string) {
   const deleteFunc = httpsCallable(functions, 'deleteChatConversation');
   await deleteFunc({ id });
 }
+
+export async function clearAllChatConversations() {
+  const clearFunc = httpsCallable(functions, 'clearAllChatConversations');
+  const result = await clearFunc({});
+  return result.data as { success: boolean; deletedCount: number };
+}

@@ -4,12 +4,15 @@ import {
   Menu,
   UserPlus,
   History,
-  X
+  X,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ChatSidebar from './ChatSidebar';
 import { useGlassEffect } from '@/hooks/useGlassEffect';
-import { useChatHistory } from '@/lib/chatHistory';
+import { useChatHistory, clearAllChatHistory } from '@/lib/chatHistory';
+import { toast } from 'sonner';
 
 interface PageHeaderProps {
   title: string;
@@ -43,6 +46,8 @@ export default function PageHeader({
   const [internalSidebarOpen, setInternalSidebarOpen] = useState(false);
   const { isEnabled: glassEffectEnabled } = useGlassEffect();
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
+  const [showClearAllDialog, setShowClearAllDialog] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const { data: chatHistory, refetch: refetchHistory } = useChatHistory();
   const chatHistoryRef = useRef<HTMLDivElement>(null);
   
@@ -83,6 +88,31 @@ export default function PageHeader({
       return `${days} Tage`;
     } else {
       return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+    }
+  };
+
+  const handleClearAllChats = async () => {
+    if (chatHistory.length === 0) {
+      toast.info('Keine Chats zum Löschen vorhanden');
+      return;
+    }
+
+    setIsClearing(true);
+    try {
+      const result = await clearAllChatHistory();
+      toast.success(`${result.deletedCount} Chat${result.deletedCount !== 1 ? 's' : ''} gelöscht`);
+      setShowClearAllDialog(false);
+      setChatHistoryOpen(false);
+      await refetchHistory();
+      // Reset current chat if it was deleted
+      if (onNewChat) {
+        onNewChat();
+      }
+    } catch (error) {
+      console.error('Fehler beim Löschen aller Chats:', error);
+      toast.error('Fehler beim Löschen der Chats');
+    } finally {
+      setIsClearing(false);
     }
   };
 
@@ -199,6 +229,18 @@ export default function PageHeader({
                         </div>
                       )}
                     </div>
+                    {chatHistory.length > 0 && (
+                      <div className="p-3 border-t border-border">
+                        <button
+                          onClick={() => setShowClearAllDialog(true)}
+                          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive transition-colors text-sm font-medium"
+                          disabled={isClearing}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          <span>Alle löschen</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -206,6 +248,39 @@ export default function PageHeader({
           )}
         </div>
       </header>
+
+      {/* Clear All Chats Confirmation Dialog */}
+      {showClearAllDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-background border border-border rounded-lg shadow-lg max-w-sm w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 rounded-full bg-destructive/10">
+                <AlertTriangle className="w-5 h-5 text-destructive" />
+              </div>
+              <h3 className="text-lg font-semibold">Alle Chats löschen?</h3>
+            </div>
+            <p className="text-sm text-muted-foreground mb-6">
+              Diese Aktion kann nicht rückgängig gemacht werden. Alle {chatHistory.length} Chat{chatHistory.length !== 1 ? 's' : ''} werden permanent gelöscht.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowClearAllDialog(false)}
+                className="flex-1 px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors text-sm font-medium"
+                disabled={isClearing}
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={handleClearAllChats}
+                className="flex-1 px-4 py-2 rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors text-sm font-medium"
+                disabled={isClearing}
+              >
+                {isClearing ? 'Löschen...' : 'Ja, alle löschen'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

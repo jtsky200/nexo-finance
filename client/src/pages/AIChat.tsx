@@ -4,10 +4,20 @@ import Layout from '@/components/Layout';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import { RotateCcw, History, X, UserPlus } from 'lucide-react';
+import { RotateCcw, History, X, UserPlus, Trash2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useChatHistory, getChatConversation, createNewChat, saveChatConversation } from '@/lib/chatHistory';
+import { useChatHistory, getChatConversation, createNewChat, saveChatConversation, clearAllChatHistory } from '@/lib/chatHistory';
 import { cn } from '@/lib/utils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const CHAT_STORAGE_KEY = 'nexo_chat_messages';
 const SYSTEM_MESSAGE: Message = {
@@ -18,6 +28,8 @@ const SYSTEM_MESSAGE: Message = {
 export default function AIChat() {
   const { t } = useTranslation();
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
+  const [showClearAllDialog, setShowClearAllDialog] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const { data: chatHistory, refetch: refetchHistory } = useChatHistory();
   const chatHistoryRef = useRef<HTMLDivElement>(null);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
@@ -252,6 +264,30 @@ export default function AIChat() {
     }
   };
 
+  const handleClearAllChats = async () => {
+    if (chatHistory.length === 0) {
+      toast.info('Keine Chats zum Löschen vorhanden');
+      setShowClearAllDialog(false);
+      return;
+    }
+
+    setIsClearing(true);
+    try {
+      const result = await clearAllChatHistory();
+      toast.success(`${result.deletedCount} Chat${result.deletedCount !== 1 ? 's' : ''} gelöscht`);
+      setShowClearAllDialog(false);
+      setChatHistoryOpen(false);
+      await refetchHistory();
+      // Reset to new chat
+      handleNewConversation();
+    } catch (error) {
+      console.error('Fehler beim Löschen aller Chats:', error);
+      toast.error('Fehler beim Löschen der Chats');
+    } finally {
+      setIsClearing(false);
+    }
+  };
+
   return (
     <Layout title="Assistent">
       <div className="h-[calc(100vh-140px)] flex flex-col bg-background">
@@ -337,6 +373,20 @@ export default function AIChat() {
                     </div>
                   )}
                 </div>
+                {chatHistory.length > 0 && (
+                  <div className="p-3 border-t border-border">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setShowClearAllDialog(true)}
+                      className="w-full flex items-center justify-center gap-2"
+                      disabled={isClearing}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Alle löschen</span>
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -355,6 +405,31 @@ export default function AIChat() {
           />
         </div>
       </div>
+
+      {/* Clear All Chats Confirmation Dialog */}
+      <AlertDialog open={showClearAllDialog} onOpenChange={setShowClearAllDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-destructive" />
+              Alle Chats löschen?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Diese Aktion kann nicht rückgängig gemacht werden. Alle {chatHistory.length} Chat{chatHistory.length !== 1 ? 's' : ''} werden permanent gelöscht.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isClearing}>Abbrechen</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleClearAllChats}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isClearing}
+            >
+              {isClearing ? 'Löschen...' : 'Ja, alle löschen'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 }

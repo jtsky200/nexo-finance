@@ -1,4 +1,3 @@
-import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'wouter';
 import { 
   LayoutDashboard,
@@ -12,12 +11,9 @@ import {
   FileText,
   Settings,
   MessageSquare,
-  X,
-  UserPlus,
-  History
+  X
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useChatHistory } from '@/lib/chatHistory';
 import { cn } from '@/lib/utils';
 import { useGlassEffect } from '@/hooks/useGlassEffect';
 import SidebarCalendar from './SidebarCalendar';
@@ -54,46 +50,6 @@ export default function ChatSidebar({
   const [location] = useLocation();
   const { user } = useAuth();
   const { isEnabled: glassEffectEnabled } = useGlassEffect();
-  const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
-  const { data: chatHistory, refetch: refetchHistory } = useChatHistory();
-  const chatHistoryRef = useRef<HTMLDivElement>(null);
-
-  // Reload chat history when sidebar opens
-  useEffect(() => {
-    if (open) {
-      refetchHistory();
-    }
-  }, [open, refetchHistory]);
-
-  // Close chat history when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (chatHistoryRef.current && !chatHistoryRef.current.contains(event.target as Node)) {
-        setChatHistoryOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const formatDate = (timestamp: string | number | Date) => {
-    const date = typeof timestamp === 'string' ? new Date(timestamp) : 
-                 typeof timestamp === 'number' ? new Date(timestamp) : timestamp;
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-    if (days === 0) {
-      return 'Heute';
-    } else if (days === 1) {
-      return 'Gestern';
-    } else if (days < 7) {
-      return `${days} Tage`;
-    } else {
-      return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
-    }
-  };
 
   // Get user initials
   const getUserInitials = () => {
@@ -149,97 +105,6 @@ export default function ChatSidebar({
                 <X className="w-5 h-5" />
               </button>
               <h2 className="text-lg font-semibold flex-1">Menü</h2>
-            </div>
-
-            {/* Chat Actions: New Chat and History */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  if (onNewChat) {
-                    onNewChat();
-                  }
-                  onClose();
-                }}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors text-sm font-medium"
-                aria-label="Neue Konversation"
-              >
-                <UserPlus className="w-4 h-4" />
-                <span>Neue Konversation</span>
-              </button>
-              
-              <div className="relative" ref={chatHistoryRef}>
-                <button
-                  onClick={() => {
-                    setChatHistoryOpen(!chatHistoryOpen);
-                    if (!chatHistoryOpen) {
-                      refetchHistory();
-                    }
-                  }}
-                  className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors text-sm font-medium"
-                  aria-label="Chat-Verlauf"
-                >
-                  <History className="w-4 h-4" />
-                  <span>Verlauf</span>
-                </button>
-
-                {/* Chat History Dropdown */}
-                {chatHistoryOpen && (
-                  <div className="absolute top-full right-0 mt-2 w-72 bg-background border border-border rounded-lg shadow-lg z-50 overflow-hidden max-h-[60vh] flex flex-col">
-                    <div className="p-3 border-b border-border flex items-center justify-between">
-                      <h3 className="text-sm font-semibold">Chat-Verlauf</h3>
-                      <button
-                        onClick={() => setChatHistoryOpen(false)}
-                        className="p-1 hover:bg-muted rounded transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="overflow-y-auto">
-                      {chatHistory.length === 0 ? (
-                        <p className="text-sm text-muted-foreground py-4 px-3 text-center">
-                          Noch keine Konversationen
-                        </p>
-                      ) : (
-                        <div className="p-2">
-                          {chatHistory.map((chat) => {
-                            const isActive = currentChatId === chat.id;
-                            return (
-                              <button
-                                key={chat.id}
-                                onClick={() => {
-                                  if (onSelectChat) {
-                                    onSelectChat(chat.id);
-                                  }
-                                  setChatHistoryOpen(false);
-                                  onClose();
-                                }}
-                                className={cn(
-                                  "w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg transition-colors text-left",
-                                  isActive
-                                    ? "bg-primary/10 text-primary"
-                                    : "hover:bg-muted"
-                                )}
-                              >
-                                <div className="flex-1 min-w-0">
-                                  <p className={cn(
-                                    "text-sm truncate",
-                                    isActive && "font-medium"
-                                  )}>
-                                    {chat.title}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground mt-0.5">
-                                    {formatDate(chat.updatedAt)}
-                                  </p>
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 

@@ -6499,6 +6499,52 @@ export const deleteChatConversation = onCall(async (request) => {
   return { success: true };
 });
 
+// Clear all chat conversations for the current user
+export const clearAllChatConversations = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const userId = request.auth.uid;
+
+  // Get all chat conversations for this user
+  const snapshot = await db.collection('chatConversations')
+    .where('userId', '==', userId)
+    .get();
+
+  // Delete all conversations in batches (Firestore batch limit is 500)
+  const batch = db.batch();
+  let deletedCount = 0;
+
+  snapshot.docs.forEach(doc => {
+    batch.delete(doc.ref);
+    deletedCount++;
+  });
+
+  if (deletedCount > 0) {
+    await batch.commit();
+  }
+
+  // Also clear old chatHistory collection for backward compatibility
+  const oldHistorySnapshot = await db.collection('chatHistory')
+    .where('userId', '==', userId)
+    .get();
+
+  if (oldHistorySnapshot.size > 0) {
+    const oldBatch = db.batch();
+    oldHistorySnapshot.docs.forEach(doc => {
+      oldBatch.delete(doc.ref);
+      deletedCount++;
+    });
+    await oldBatch.commit();
+  }
+
+  return { 
+    success: true, 
+    deletedCount,
+  };
+});
+
 // ========== Weather Functions (Phase 3: API Integration) ==========
 
 // Helper function to map OpenWeatherMap icon codes to our icon names

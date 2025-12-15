@@ -9,6 +9,7 @@ import {
   createChatConversation, 
   updateChatConversation, 
   deleteChatConversation,
+  clearAllChatConversations,
   type ChatConversation 
 } from './firebaseHooks';
 
@@ -70,6 +71,19 @@ export async function deleteChatConversationById(chatId: string): Promise<void> 
     await deleteChatConversation(chatId);
   } catch (error) {
     console.error('Fehler beim Löschen der Chat-Historie:', error);
+    throw error;
+  }
+}
+
+/**
+ * Clear all chat conversations for the current user
+ */
+export async function clearAllChatHistory(): Promise<{ deletedCount: number }> {
+  try {
+    const result = await clearAllChatConversations();
+    return { deletedCount: result.deletedCount };
+  } catch (error) {
+    console.error('Fehler beim Löschen aller Chat-Verläufe:', error);
     throw error;
   }
 }

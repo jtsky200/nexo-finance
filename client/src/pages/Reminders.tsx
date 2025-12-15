@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -17,9 +17,11 @@ import {
   Clock, AlertTriangle, CheckCircle2, Filter, Search,
   Bell, BellOff, RefreshCw, MoreVertical
 } from 'lucide-react';
-import { useReminders, createReminder, updateReminder, deleteReminder, Reminder } from '@/lib/firebaseHooks';
+import { useReminders, createReminder, updateReminder, deleteReminder, fixReminderTimes, Reminder } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { parseLocalDateTime, formatDateForDisplay, dateToDateTimeLocal, dateToISOString } from '@/lib/dateTimeUtils';
+import { eventBus, Events } from '@/lib/eventBus';
 
 export default function Reminders() {
   const { t } = useTranslation();
@@ -32,6 +34,20 @@ export default function Reminders() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const { data: reminders = [], isLoading, refetch } = useReminders();
+
+  // Fix existing reminders on mount if needed (one-time fix)
+  useEffect(() => {
+    const fixReminders = async () => {
+      try {
+        await fixReminderTimes();
+        refetch();
+      } catch (error) {
+        // Silently fail - this is just a one-time fix
+        console.log('Reminder time fix already applied or not needed');
+      }
+    };
+    fixReminders();
+  }, []); // Only run once on mount
 
   // Form state
   const [formData, setFormData] = useState({
@@ -46,22 +62,8 @@ export default function Reminders() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const formatDate = (date: Date | any) => {
-    if (!date) return 'N/A';
-    try {
-      const d = date?.toDate ? date.toDate() : new Date(date);
-      if (isNaN(d.getTime())) return 'N/A';
-      return d.toLocaleDateString('de-CH', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return 'N/A';
-    }
-  };
+  // Use centralized date formatting utility
+  const formatDate = (date: Date | any) => formatDateForDisplay(date);
 
   const formatAmount = (amount: number, currency: string = 'CHF') => {
     return `${currency} ${(amount / 100).toFixed(2)}`;
@@ -93,9 +95,9 @@ export default function Reminders() {
     }
   };
 
-  const getStatusBadge = (status: string, dueDate: Date) => {
+  const getStatusBadge = (status: string, dueDate: Date | string) => {
     const now = new Date();
-    const due = new Date(dueDate);
+    const due = dueDate instanceof Date ? dueDate : new Date(dueDate);
     const isOverdue = due < now && status === 'offen';
     
     if (isOverdue) {
@@ -204,14 +206,14 @@ export default function Reminders() {
   // Open dialog for editing
   const openEditDialog = (reminder: Reminder) => {
     setEditingReminder(reminder);
-    const dueDate = reminder.dueDate instanceof Date 
-      ? reminder.dueDate 
-      : new Date(reminder.dueDate);
+    
+    // Use centralized utility to convert date to datetime-local format
+    const localDateTimeString = dateToDateTimeLocal(reminder.dueDate);
     
     setFormData({
       title: reminder.title,
-      type: reminder.type,
-      dueDate: dueDate.toISOString().slice(0, 16),
+      type: reminder.type as 'termin' | 'zahlung' | 'aufgabe',
+      dueDate: localDateTimeString,
       isAllDay: reminder.isAllDay,
       amount: reminder.amount ? (reminder.amount / 100).toString() : '',
       currency: reminder.currency || 'CHF',
@@ -230,10 +232,14 @@ export default function Reminders() {
 
     setIsSubmitting(true);
     try {
+      // Use centralized utility to parse datetime-local string
+      // This ensures consistent handling across the entire application
+      const localDate = parseLocalDateTime(formData.dueDate);
+      
       const data = {
         title: formData.title,
         type: formData.type,
-        dueDate: new Date(formData.dueDate),
+        dueDate: localDate,
         isAllDay: formData.isAllDay,
         amount: formData.amount ? Math.round(parseFloat(formData.amount) * 100) : undefined,
         currency: formData.currency,
@@ -244,9 +250,11 @@ export default function Reminders() {
       if (editingReminder) {
         await updateReminder(editingReminder.id, data);
         toast.success(t('reminders.updated', 'Erinnerung aktualisiert'));
+        eventBus.emit(Events.REMINDER_UPDATED, { id: editingReminder.id, data });
       } else {
-        await createReminder(data);
+        const newReminder = await createReminder(data);
         toast.success(t('reminders.created', 'Erinnerung erstellt'));
+        eventBus.emit(Events.REMINDER_CREATED, { reminder: newReminder });
       }
 
       setDialogOpen(false);
@@ -276,6 +284,7 @@ export default function Reminders() {
     try {
       await deleteReminder(deleteConfirmId);
       toast.success(t('reminders.deleted', 'Erinnerung gelöscht'));
+      eventBus.emit(Events.REMINDER_DELETED, { id: deleteConfirmId });
       refetch();
       setDeleteConfirmId(null);
     } catch (error: any) {
@@ -372,10 +381,24 @@ export default function Reminders() {
           <p className="text-muted-foreground">
             {t('reminders.description', 'Verwalten Sie Ihre Termine, Zahlungen und Aufgaben')}
           </p>
-          <Button onClick={openNewDialog}>
-            <Plus className="w-4 h-4 mr-2" />
-            {t('reminders.add', 'Erinnerung hinzufügen')}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={async () => {
+              try {
+                await fixReminderTimes();
+                toast.success('Erinnerungen wurden korrigiert');
+                refetch();
+              } catch (error: any) {
+                toast.error('Fehler beim Korrigieren: ' + error.message);
+              }
+            }}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Zeiten korrigieren
+            </Button>
+            <Button onClick={openNewDialog}>
+              <Plus className="w-4 h-4 mr-2" />
+              {t('reminders.add', 'Erinnerung hinzufügen')}
+            </Button>
+          </div>
         </div>
 
         {/* Statistics Cards */}

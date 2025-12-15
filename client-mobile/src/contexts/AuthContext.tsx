@@ -36,16 +36,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getRedirectResult(auth)
       .then((result) => {
         if (result?.user) {
-          console.log('Redirect sign-in successful:', result.user.email);
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Redirect sign-in successful:', result.user.email);
+          }
           setUser(result.user);
         }
       })
       .catch((err) => {
-        console.error('Redirect result error:', err);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Redirect result error:', err);
+        }
       });
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log('Auth state changed:', user?.email || 'No user');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Auth state changed:', user?.email || 'No user');
+      }
       setUser(user);
       setLoading(false);
     });
@@ -56,11 +62,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       setError(null);
-      console.log('Attempting email sign-in...');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Attempting email sign-in...');
+      }
       const result = await signInWithEmailAndPassword(auth, email, password);
-      console.log('Email sign-in successful:', result.user.email);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Email sign-in successful:', result.user.email);
+      }
     } catch (err: any) {
-      console.error('Email Sign-In Error:', err);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Email Sign-In Error:', err);
+      }
       let errorMessage = 'Anmeldung fehlgeschlagen';
       
       switch (err.code) {
@@ -92,9 +104,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setError(null);
       const result = await createUserWithEmailAndPassword(auth, email, password);
-      console.log('Sign-up successful:', result.user.email);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Sign-up successful:', result.user.email);
+      }
     } catch (err: any) {
-      console.error('Sign-Up Error:', err);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Sign-Up Error:', err);
+      }
       let errorMessage = 'Registrierung fehlgeschlagen';
       
       switch (err.code) {
@@ -119,7 +135,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = async () => {
     try {
       setError(null);
-      console.log('Attempting Google sign-in with redirect...');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Attempting Google sign-in with redirect...');
+      }
       
       const provider = new GoogleAuthProvider();
       provider.addScope('email');
@@ -131,9 +149,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Use redirect directly for mobile - more reliable
       await signInWithRedirect(auth, provider);
     } catch (err: any) {
-      console.error('Google Sign-In Error:', err);
-      console.error('Error code:', err.code);
-      console.error('Error message:', err.message);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Google Sign-In Error:', err);
+        console.error('Error code:', err.code);
+        console.error('Error message:', err.message);
+      }
       
       let errorMessage = 'Ein Fehler ist aufgetreten';
       
@@ -158,11 +178,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     try {
-      console.log('Signing out...');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Signing out...');
+      }
       await firebaseSignOut(auth);
-      console.log('Sign-out successful');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Sign-out successful');
+      }
     } catch (err: any) {
-      console.error('Sign-Out Error:', err);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Sign-Out Error:', err);
+      }
       throw new Error('Abmeldung fehlgeschlagen');
     }
   };

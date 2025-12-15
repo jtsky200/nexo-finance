@@ -20,6 +20,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { functions } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { useReminders, createReminder, updateReminder, deleteReminder } from '@/lib/firebaseHooks';
+import { parseLocalDateTime, normalizeEventDate, formatDateLocal } from '@/lib/dateTimeUtils';
 import { toast } from 'sonner';
 import { useLocation } from 'wouter';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -77,7 +78,7 @@ export default function Calendar() {
   const [newEvent, setNewEvent] = useState({
     title: '',
     description: '',
-    date: new Date().toISOString().split('T')[0],
+    date: formatDateLocal(new Date()),
     time: '',
     category: 'general',
     priority: 'medium',
@@ -121,7 +122,7 @@ export default function Calendar() {
 
     if (todayEvents.length > 0 && Notification.permission === 'granted') {
       // Only show once per session
-      const notificationKey = `notified-${today.toISOString().split('T')[0]}`;
+      const notificationKey = `notified-${formatDateLocal(today)}`;
       if (!sessionStorage.getItem(notificationKey)) {
         new Notification('Nexo Kalender', {
           body: `Du hast ${todayEvents.length} Event(s) heute: ${todayEvents.slice(0, 3).map(e => e.title).join(', ')}`,
@@ -169,7 +170,22 @@ export default function Calendar() {
       const schoolData = schoolSchedulesResult.data as { schedules: any[] };
       const holidaysData = schoolHolidaysResult.data as { holidays: any[] };
       
-      setEvents(eventsData.events || []);
+      // Normalize event dates - use GLOBAL utility function (LOCAL timezone)
+      const loadedEvents = eventsData.events || [];
+      const normalizedEvents = loadedEvents.map(event => ({
+        ...event,
+        date: normalizeEventDate(event.date)
+      }));
+      
+      // Log only in development
+      if (typeof (globalThis as any).process !== 'undefined' && (globalThis as any).process?.env?.NODE_ENV === 'development') {
+        console.log('[Calendar Web] Loaded and normalized events:', {
+          total: normalizedEvents.length,
+          events: normalizedEvents.map(e => ({ title: e.title, date: e.date, type: e.type }))
+        });
+      }
+      
+      setEvents(normalizedEvents);
       setVacations(vacationsData.vacations || []);
       setSchoolSchedules(schoolData.schedules || []);
       setSchoolHolidays(holidaysData.holidays || []);
@@ -234,8 +250,11 @@ export default function Calendar() {
 
   // Helper to get school schedules for a date
   const getSchoolSchedulesForDate = useCallback((date: Date) => {
-    const dateStr = date.toISOString().split('T')[0];
-    return schoolSchedules.filter(s => s.date === dateStr);
+    const dateStr = formatDateLocal(date);
+    return schoolSchedules.filter(s => {
+      const scheduleDateStr = normalizeEventDate(s.date);
+      return scheduleDateStr === dateStr;
+    });
   }, [schoolSchedules]);
 
   // Helper to check if a date is within school holiday
@@ -310,7 +329,7 @@ export default function Calendar() {
             id: `school-holiday-${h.id}`,
             type: 'school-holiday',
             title: h.name,
-            date: date.toISOString().split('T')[0],
+            date: formatDateLocal(date),
           });
         }
       });
@@ -327,9 +346,11 @@ export default function Calendar() {
 
     for (let i = 1; i <= daysInMonth; i++) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), i);
+      // Format date using GLOBAL utility (LOCAL timezone)
+      const dateStr = formatDateLocal(date);
       const dayEvents = filteredEvts.filter(event => {
-        const eventDate = new Date(event.date);
-        return eventDate.toDateString() === date.toDateString();
+        const eventDateStr = normalizeEventDate(event.date);
+        return eventDateStr !== '' && eventDateStr === dateStr;
       });
       days.push({ date, isCurrentMonth: true, events: dayEvents, vacations: getVacationsForDate(date), schoolEvents: createSchoolEvents(date) });
     }
@@ -518,10 +539,11 @@ export default function Calendar() {
     }
 
     try {
-      // Parse date parts to avoid timezone issues
-      const [year, month, day] = newEvent.date.split('-').map(Number);
-      const [hours, minutes] = newEvent.time ? newEvent.time.split(':').map(Number) : [12, 0];
-      const baseDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
+      // Use centralized utility to parse date/time
+      const dateTimeString = newEvent.time 
+        ? `${newEvent.date}T${newEvent.time}`
+        : `${newEvent.date}T12:00`; // Default to noon for all-day events
+      const baseDate = parseLocalDateTime(dateTimeString);
       
       if (newEvent.isRecurring) {
         // Create multiple events for recurring
@@ -539,7 +561,7 @@ export default function Calendar() {
           await createReminder({
             title: newEvent.title,
             notes: newEvent.description,
-            dueDate: date.toISOString(),
+            dueDate: date, // Date object - will be normalized in firebaseHooks
             type: newEvent.category || 'termin',
             isAllDay: !newEvent.time,
           });
@@ -549,7 +571,7 @@ export default function Calendar() {
         await createReminder({
           title: newEvent.title,
           notes: newEvent.description,
-          dueDate: baseDate.toISOString(),
+          dueDate: baseDate, // Date object - will be normalized in firebaseHooks
           type: newEvent.category || 'termin',
           isAllDay: !newEvent.time,
         });
@@ -1299,9 +1321,11 @@ export default function Calendar() {
                 const weekDays = Array.from({ length: 7 }, (_, i) => {
                   const date = new Date(startOfWeek);
                   date.setDate(startOfWeek.getDate() + i);
+                  // Format date using GLOBAL utility (LOCAL timezone)
+                  const dateStr = formatDateLocal(date);
                   const dayEvents = events.filter(event => {
-                    const eventDate = new Date(event.date);
-                    return eventDate.toDateString() === date.toDateString();
+                    const eventDateStr = normalizeEventDate(event.date);
+                    return eventDateStr !== '' && eventDateStr === dateStr;
                   });
                   return { date, events: dayEvents };
                 });
@@ -1692,10 +1716,25 @@ export default function Calendar() {
           </DialogHeader>
           <div className="space-y-5">
             {selectedDate && (() => {
+              // Normalize selectedDate using GLOBAL utility (LOCAL timezone)
+              const normalizedSelectedDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+              const dateStr = formatDateLocal(normalizedSelectedDate);
+              
               const dayEvents = events.filter(event => {
-                const eventDate = new Date(event.date);
-                return eventDate.toDateString() === selectedDate.toDateString();
+                const eventDateStr = normalizeEventDate(event.date);
+                return eventDateStr !== '' && eventDateStr === dateStr;
               });
+              
+              // Log only in development
+              if (typeof (globalThis as any).process !== 'undefined' && (globalThis as any).process?.env?.NODE_ENV === 'development') {
+                console.log('[Calendar Web] Day events filter:', {
+                  selectedDate: normalizedSelectedDate.toISOString(),
+                  dateStr,
+                  totalEvents: events.length,
+                  filteredCount: dayEvents.length,
+                  filteredEvents: dayEvents.map(e => ({ title: e.title, date: e.date, type: e.type }))
+                });
+              }
 
               return (
                 <>

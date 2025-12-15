@@ -43,12 +43,17 @@ var __rest = (this && this.__rest) || function (s, e) {
         }
     return t;
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createSchoolSchedule = exports.getChildren = exports.deleteVacation = exports.updateVacation = exports.createVacation = exports.getVacations = exports.deleteWorkSchedule = exports.updateWorkSchedule = exports.createWorkSchedule = exports.getWorkSchedules = exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.getAllBills = exports.convertToInstallmentPlan = exports.updateInstallmentPlan = exports.recordInstallmentPayment = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
-exports.trpc = exports.migrateUserIds = exports.debugUserData = exports.clearChatHistory = exports.getChatThread = exports.getChatHistory = exports.chat = exports.scheduledDailyBackup = exports.restoreFromBackup = exports.listAllBackups = exports.createManualBackup = exports.transcribeAIChatAudio = exports.uploadAIChatImage = exports.uploadAIChatFile = exports.getReceipts = exports.getStores = exports.getStoreItems = exports.saveReceipt = exports.analyzeSingleLine = exports.analyzeReceipt = exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = void 0;
+exports.saveWeather = exports.getWeather = exports.deleteChatConversation = exports.updateChatConversation = exports.createChatConversation = exports.getChatConversations = exports.migrateUserIds = exports.debugUserData = exports.clearChatHistory = exports.getChatThread = exports.getChatHistory = exports.chat = exports.scheduledDailyBackup = exports.markChatReminderAsRead = exports.getChatReminders = exports.createFollowUpReminder = exports.fixReminderTimes = exports.createQuickReminder = exports.checkReminderNotifications = exports.restoreFromBackup = exports.listAllBackups = exports.createManualBackup = exports.transcribeAIChatAudio = exports.uploadAIChatImage = exports.uploadAIChatFile = exports.getReceipts = exports.getStores = exports.getStoreItems = exports.saveReceipt = exports.analyzeSingleLine = exports.analyzeReceipt = exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = void 0;
+exports.trpc = exports.getWeatherHistory = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
+const axios_1 = __importDefault(require("axios"));
 admin.initializeApp();
 const db = admin.firestore();
 // ========== MEHRSPRACHIGE STATUS-KONSTANTEN (DE/EN/FR/IT) ==========
@@ -102,11 +107,32 @@ function validateEmail(value, fieldName = 'email') {
     }
     return value.trim();
 }
+/**
+ * Validates and normalizes a date value for Firestore storage
+ *
+ * IMPORTANT: This function handles Date objects correctly.
+ * When a Date object is created with local time components (e.g., new Date(2025, 11, 13, 9, 54)),
+ * JavaScript automatically handles UTC conversion. Firestore Timestamp.fromDate() preserves this.
+ *
+ * @param value - Date object, ISO string, or null/undefined
+ * @param fieldName - Field name for error messages
+ * @param required - Whether the field is required
+ * @returns Date object ready for Firestore Timestamp conversion
+ */
 function validateDate(value, fieldName, required = false) {
     if (required && !value) {
         throw new https_1.HttpsError('invalid-argument', `${fieldName} is required`);
     }
     if (value) {
+        // If it's already a Date object, use it directly
+        // JavaScript Date objects created with local time components are already correct
+        if (value instanceof Date) {
+            if (isNaN(value.getTime())) {
+                throw new https_1.HttpsError('invalid-argument', `${fieldName} must be a valid date`);
+            }
+            return value;
+        }
+        // Otherwise, parse it
         const date = new Date(value);
         if (isNaN(date.getTime())) {
             throw new https_1.HttpsError('invalid-argument', `${fieldName} must be a valid date`);
@@ -147,8 +173,10 @@ exports.getReminders = (0, https_1.onCall)(async (request) => {
     const snapshot = await query.orderBy('dueDate').get();
     const reminders = snapshot.docs.map(doc => {
         const data = doc.data();
-        // Convert Firestore Timestamps to ISO strings for proper serialization
         const reminder = Object.assign({ id: doc.id }, data);
+        // IMPORTANT: Convert Firestore Timestamps to ISO strings for HTTP serialization
+        // Firestore Timestamps cannot be directly serialized over HTTP
+        // The client will convert ISO strings back to Date objects correctly
         if (data.dueDate && typeof data.dueDate.toDate === 'function') {
             reminder.dueDate = data.dueDate.toDate().toISOString();
         }
@@ -175,14 +203,26 @@ exports.createReminder = (0, https_1.onCall)(async (request) => {
     const validatedAmount = amount ? validateNumber(amount, 'amount', 0, 1000000000) : null;
     const validatedNotes = validateString(notes, 'notes', 5000, false);
     const validatedPersonName = validateString(personName, 'personName', 200, false);
-    // Parse and validate dueDate
+    // Parse and validate dueDate - normalize to avoid timezone issues
     let parsedDueDate = null;
     if (dueDate) {
         const dateObj = validateDate(dueDate, 'dueDate', false);
-        parsedDueDate = admin.firestore.Timestamp.fromDate(dateObj);
+        // Normalize date to midnight in local timezone to avoid timezone shifts
+        const normalizedDate = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+        // If isAllDay is true, set time to noon (12:00) to avoid timezone issues
+        // Otherwise, preserve the original time
+        if (isAllDay === true) {
+            normalizedDate.setHours(12, 0, 0, 0);
+        }
+        else {
+            normalizedDate.setHours(dateObj.getHours(), dateObj.getMinutes(), dateObj.getSeconds(), dateObj.getMilliseconds());
+        }
+        parsedDueDate = admin.firestore.Timestamp.fromDate(normalizedDate);
     }
     else {
-        parsedDueDate = admin.firestore.Timestamp.fromDate(new Date());
+        const now = new Date();
+        now.setHours(12, 0, 0, 0); // Default to noon for consistency
+        parsedDueDate = admin.firestore.Timestamp.fromDate(now);
     }
     const reminderData = {
         userId,
@@ -201,6 +241,24 @@ exports.createReminder = (0, https_1.onCall)(async (request) => {
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
     const docRef = await db.collection('reminders').add(reminderData);
+    // Immediate notification for same-day reminders that are less than 1 hour away (but more than 5 minutes)
+    // This ensures users get notified immediately when creating reminders for today
+    try {
+        const now = new Date();
+        const dueDateObj = parsedDueDate.toDate();
+        const timeDiff = dueDateObj.getTime() - now.getTime();
+        const minutesDiff = timeDiff / (1000 * 60);
+        const isSameDay = now.toDateString() === dueDateObj.toDateString();
+        // If reminder is for today and between 5 minutes and 1 hour away, create immediate notification
+        if (isSameDay && minutesDiff >= 5 && minutesDiff < 60) {
+            await createChatReminder(userId, docRef.id, reminderData, '1hour', parsedDueDate);
+            console.log(`[createReminder] Created immediate notification for same-day reminder ${docRef.id}`);
+        }
+    }
+    catch (error) {
+        console.error(`[createReminder] Error creating immediate notification:`, error);
+        // Don't fail the reminder creation if notification fails
+    }
     return Object.assign({ id: docRef.id }, reminderData);
 });
 exports.updateReminder = (0, https_1.onCall)(async (request) => {
@@ -525,10 +583,11 @@ exports.createPerson = (0, https_1.onCall)(async (request) => {
     const { name, email, phone, currency, type, relationship, notes } = request.data;
     // Validate inputs
     const validatedName = validateString(name, 'name', 200, true);
-    const validatedEmail = validateEmail(email, 'email');
-    const validatedPhone = validateString(phone, 'phone', 50, false);
+    // For children, email and phone should be null
+    const validatedEmail = (type === 'child' || !email || email === '') ? null : validateEmail(email, 'email');
+    const validatedPhone = (type === 'child' || !phone || phone === '') ? null : validateString(phone, 'phone', 50, false);
     const validatedCurrency = validateEnum(currency, 'currency', ['CHF', 'EUR', 'USD'], false) || 'CHF';
-    const validatedType = validateEnum(type, 'type', ['household', 'external'], false) || 'household';
+    const validatedType = validateEnum(type, 'type', ['household', 'external', 'child'], false) || 'household';
     const validatedRelationship = type === 'external'
         ? (validateEnum(relationship, 'relationship', ['creditor', 'debtor', 'both'], false) || 'both')
         : null;
@@ -565,10 +624,11 @@ exports.updatePerson = (0, https_1.onCall)(async (request) => {
     }
     // Validate inputs if provided
     const validatedName = name !== undefined ? validateString(name, 'name', 200, true) : undefined;
-    const validatedEmail = email !== undefined ? validateEmail(email, 'email') : undefined;
-    const validatedPhone = phone !== undefined ? validateString(phone, 'phone', 50, false) : undefined;
+    // For children, email and phone should be null
+    const validatedEmail = email !== undefined ? (email === null || email === '' ? null : validateEmail(email, 'email')) : undefined;
+    const validatedPhone = phone !== undefined ? (phone === null || phone === '' ? null : validateString(phone, 'phone', 50, false)) : undefined;
     const validatedNotes = notes !== undefined ? validateString(notes, 'notes', 5000, false) : undefined;
-    const validatedType = type !== undefined ? validateEnum(type, 'type', ['household', 'external'], false) : undefined;
+    const validatedType = type !== undefined ? validateEnum(type, 'type', ['household', 'external', 'child'], false) : undefined;
     const validatedRelationship = (type === 'external' && relationship !== undefined)
         ? validateEnum(relationship, 'relationship', ['creditor', 'debtor', 'both'], false)
         : undefined;
@@ -1510,16 +1570,23 @@ exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
         const minutes = reminderDate.getMinutes();
         const timeStr = (hours > 0 || minutes > 0) ?
             `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}` : undefined;
+        // Use the original type from reminderData, not hardcoded 'appointment'
+        // Map 'termin' and 'erinnerung' to 'appointment' for display, but preserve original type
+        const eventType = reminderData.type === 'termin' || reminderData.type === 'erinnerung'
+            ? 'appointment'
+            : reminderData.type || 'appointment';
         events.push({
             id: `appointment-${reminderDoc.id}`,
-            type: 'appointment',
+            type: eventType,
             title: reminderData.title,
             date: reminderDate.toISOString(),
             time: timeStr,
             description: reminderData.notes || reminderData.description,
-            category: reminderData.type, // termin, aufgabe
+            category: reminderData.type, // termin, aufgabe - preserve original
             priority: reminderData.priority,
             completed: isStatusCompleted(reminderData.status),
+            // Add original reminder ID for deduplication
+            reminderId: reminderDoc.id,
         });
     }
     // Get work schedules
@@ -1786,7 +1853,37 @@ exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
     console.log(`Total events: ${events.length}`);
     // Sort by date
     events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    return { events };
+    // Deduplicate events: Remove duplicates based on title, date, and type
+    // This prevents the same event from appearing multiple times
+    const deduplicatedEvents = events.reduce((acc, current) => {
+        // Check if an event with the same title, date (day only), and type already exists
+        const currentDateStr = current.date ? current.date.split('T')[0] : '';
+        const existingIndex = acc.findIndex((e) => {
+            const existingDateStr = e.date ? e.date.split('T')[0] : '';
+            return e.title === current.title &&
+                existingDateStr === currentDateStr &&
+                e.type === current.type &&
+                e.reminderId === current.reminderId; // Also check reminderId to avoid false positives
+        });
+        if (existingIndex === -1) {
+            // No duplicate found, add the event
+            acc.push(current);
+        }
+        else {
+            // Duplicate found - keep the one with more information or the first one
+            const existing = acc[existingIndex];
+            // If current has more info (e.g., description, time), replace
+            if ((current.description && !existing.description) ||
+                (current.time && !existing.time) ||
+                (current.reminderId && !existing.reminderId)) {
+                acc[existingIndex] = current;
+            }
+            // Otherwise keep the existing one
+        }
+        return acc;
+    }, []);
+    console.log(`[getCalendarEvents] Deduplication: ${events.length} events -> ${deduplicatedEvents.length} unique events`);
+    return { events: deduplicatedEvents };
 });
 // ========== Shopping List Functions ==========
 exports.getShoppingList = (0, https_1.onCall)(async (request) => {
@@ -2541,6 +2638,7 @@ exports.getUserSettings = (0, https_1.onCall)(async (request) => {
             defaultFolder: 'Sonstiges',
             language: 'de',
             theme: 'system',
+            weatherLocation: 'Zurich, CH', // Default weather location
         };
     }
     return settingsDoc.data();
@@ -4580,6 +4678,332 @@ exports.restoreFromBackup = (0, https_1.onCall)(async (request) => {
     }
 });
 // Automatisches tägliches Backup (Scheduled Function)
+// ========== Reminder Notifications ==========
+// Check for reminders that need notifications (runs every 15 minutes)
+exports.checkReminderNotifications = (0, scheduler_1.onSchedule)({
+    schedule: '*/5 * * * *', // Every 5 minutes for more precise notifications
+    timeZone: 'Europe/Zurich',
+}, async () => {
+    console.log('[ReminderNotifications] Starting reminder check...');
+    const now = new Date();
+    try {
+        // Get all open reminders
+        const remindersSnapshot = await db.collection('reminders')
+            .where('status', '==', 'offen')
+            .get();
+        let notificationsCreated = 0;
+        for (const reminderDoc of remindersSnapshot.docs) {
+            const reminder = reminderDoc.data();
+            const reminderId = reminderDoc.id;
+            const userId = reminder.userId;
+            if (!reminder.dueDate)
+                continue;
+            const dueDate = reminder.dueDate.toDate();
+            const dueDateTimestamp = reminder.dueDate;
+            // Check if notification already sent
+            const existingNotification = await db.collection('chatReminders')
+                .where('userId', '==', userId)
+                .where('reminderId', '==', reminderId)
+                .get();
+            const existingTypes = existingNotification.docs.map(doc => doc.data().notificationType);
+            // Calculate time differences
+            const timeDiff = dueDate.getTime() - now.getTime();
+            const hoursDiff = timeDiff / (1000 * 60 * 60);
+            const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
+            const isSameDay = now.toDateString() === dueDate.toDateString();
+            const isInPast = timeDiff < 0;
+            // Skip reminders that are already in the past
+            if (isInPast)
+                continue;
+            // Send 1-day-before notification (between 23-25 hours before)
+            // This ensures we catch reminders that are exactly 1 day away
+            const isWithinDayWindow = daysDiff >= 0.95 && daysDiff <= 1.05 && hoursDiff >= 23 && hoursDiff <= 25;
+            if (isWithinDayWindow && !existingTypes.includes('1day')) {
+                await createChatReminder(userId, reminderId, reminder, '1day', dueDateTimestamp);
+                notificationsCreated++;
+            }
+            // Send 1-hour-before notification
+            // For all reminders: send if between 1-1.25 hours before
+            // For same-day reminders: also send if less than 1 hour but more than 15 minutes
+            // This ensures reminders created for today still get notified
+            const isWithinHourWindow = hoursDiff >= 1 && hoursDiff <= 1.25;
+            const isSoonButNotTooSoon = hoursDiff >= 0.25 && hoursDiff < 1; // 15 minutes to 1 hour
+            // Send 1-hour notification for all reminders within the hour window
+            if (isWithinHourWindow && !existingTypes.includes('1hour')) {
+                await createChatReminder(userId, reminderId, reminder, '1hour', dueDateTimestamp);
+                notificationsCreated++;
+            }
+            // For same-day reminders that are soon (15 min - 1 hour), send immediate notification
+            else if (isSameDay && isSoonButNotTooSoon && !existingTypes.includes('1hour')) {
+                await createChatReminder(userId, reminderId, reminder, '1hour', dueDateTimestamp);
+                notificationsCreated++;
+            }
+        }
+        console.log(`[ReminderNotifications] Created ${notificationsCreated} notifications`);
+    }
+    catch (error) {
+        console.error('[ReminderNotifications] Error:', error);
+    }
+});
+// Helper function to create chat reminder
+async function createChatReminder(userId, reminderId, reminder, notificationType, dueDate) {
+    const dueDateObj = dueDate.toDate();
+    const formattedDate = dueDateObj.toLocaleDateString('de-CH', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
+    const formattedTime = reminder.isAllDay
+        ? ''
+        : dueDateObj.toLocaleTimeString('de-CH', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    // Create personalized message with intelligent formatting
+    let message = '';
+    const reminderTypeLabel = reminder.type === 'termin' ? 'Termin' : reminder.type === 'zahlung' ? 'Zahlung' : 'Aufgabe';
+    if (notificationType === '1day') {
+        // Friendly 1-day-before message
+        message = `Hallo! 👋\n\nVergiss bitte nicht: **${reminder.title}**`;
+        if (formattedTime) {
+            message += `\n\n📅 Datum: ${formattedDate} um ${formattedTime}`;
+        }
+        else {
+            message += `\n\n📅 Datum: ${formattedDate}`;
+        }
+        if (reminder.type === 'zahlung' && reminder.amount) {
+            const amountChf = (reminder.amount / 100).toFixed(2);
+            message += `\n💰 Betrag: ${amountChf} ${reminder.currency || 'CHF'}`;
+        }
+        message += `\n📋 Typ: ${reminderTypeLabel}`;
+        message += '\n\nIch erinnere dich gerne daran, damit du nichts vergisst! 😊';
+    }
+    else {
+        // Urgent 1-hour-before message
+        message = `Hallo! ⏰\n\n**WICHTIG:** Dein ${reminderTypeLabel.toLowerCase()} "${reminder.title}"`;
+        if (formattedTime) {
+            message += ` ist in 1 Stunde!\n\n📅 ${formattedDate} um ${formattedTime}`;
+        }
+        else {
+            message += ` ist heute!\n\n📅 ${formattedDate}`;
+        }
+        if (reminder.type === 'zahlung' && reminder.amount) {
+            const amountChf = (reminder.amount / 100).toFixed(2);
+            message += `\n💰 Betrag: ${amountChf} ${reminder.currency || 'CHF'}`;
+        }
+        message += '\n\nViel Erfolg! 🎯';
+    }
+    if (reminder.notes) {
+        message += `\n\n📝 Notiz: ${reminder.notes}`;
+    }
+    // Add follow-up question for 1-hour reminders
+    if (notificationType === '1hour') {
+        message += `\n\n💡 Soll ich dich in 15 Minuten nochmal daran erinnern? Antworte einfach "Ja" oder "Nein".\n\n(Erinnerungs-ID für Follow-up: ${reminderId})`;
+    }
+    // Create chat reminder document
+    await db.collection('chatReminders').add({
+        userId,
+        reminderId,
+        notificationType,
+        message,
+        reminderTitle: reminder.title,
+        reminderType: reminder.type,
+        dueDate: dueDate,
+        isRead: false,
+        shouldOpenDialog: true,
+        askForFollowUp: notificationType === '1hour', // Ask for follow-up on 1-hour reminders
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    console.log(`[ReminderNotifications] Created ${notificationType} notification for reminder ${reminderId}`);
+}
+// Create a quick reminder (e.g., "remind me in 5 minutes")
+exports.createQuickReminder = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { title, minutesFromNow = 5, notes } = request.data;
+    if (!title || typeof title !== 'string' || title.trim().length === 0) {
+        throw new https_1.HttpsError('invalid-argument', 'title is required');
+    }
+    const minutes = Math.max(1, Math.min(1440, Math.round(minutesFromNow))); // Between 1 minute and 24 hours
+    // Calculate due date
+    const now = new Date();
+    const dueDate = new Date(now.getTime() + minutes * 60 * 1000);
+    const dueDateTimestamp = admin.firestore.Timestamp.fromDate(dueDate);
+    // Create reminder
+    const reminderData = {
+        userId,
+        title: title.trim(),
+        type: 'erinnerung',
+        dueDate: dueDateTimestamp,
+        isAllDay: false,
+        notes: notes ? validateString(notes, 'notes', 5000, false) : null,
+        status: 'offen',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    const docRef = await db.collection('reminders').add(reminderData);
+    // If reminder is less than 1 hour away, create immediate chat notification
+    if (minutes < 60) {
+        try {
+            await createChatReminder(userId, docRef.id, reminderData, '1hour', dueDateTimestamp);
+            console.log(`[createQuickReminder] Created immediate notification for quick reminder ${docRef.id}`);
+        }
+        catch (error) {
+            console.error(`[createQuickReminder] Error creating immediate notification:`, error);
+        }
+    }
+    return Object.assign(Object.assign({ id: docRef.id }, reminderData), { dueDate: dueDate.toISOString() });
+});
+// Create a follow-up reminder after a chat reminder
+// Fix existing reminders with incorrect time (subtract 1 hour to correct timezone issue)
+exports.fixReminderTimes = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    try {
+        const remindersSnapshot = await db.collection('reminders')
+            .where('userId', '==', userId)
+            .get();
+        let fixedCount = 0;
+        const updates = [];
+        for (const reminderDoc of remindersSnapshot.docs) {
+            const reminder = reminderDoc.data();
+            if (reminder.dueDate && typeof reminder.dueDate.toDate === 'function') {
+                const dueDate = reminder.dueDate.toDate();
+                // The issue: When user enters "09:54" local time (UTC+1), it should be stored as "08:54 UTC"
+                // But if it was stored as "09:54 UTC", it displays as "10:54" local time
+                // We need to check if the stored time is off by 1 hour and correct it
+                // Extract UTC components and check if they match what was likely intended
+                const utcHours = dueDate.getUTCHours();
+                const utcMinutes = dueDate.getUTCMinutes();
+                const localHours = dueDate.getHours();
+                const localMinutes = dueDate.getMinutes();
+                // If local time is 1 hour ahead of UTC time, the stored time is likely correct
+                // If local time equals UTC time, it was stored incorrectly (should be 1 hour less in UTC)
+                // For UTC+1 timezone, if user entered "09:54", it should be stored as "08:54 UTC"
+                // If it's stored as "09:54 UTC", it displays as "10:54" local time
+                // We need to subtract 1 hour from UTC time to correct this
+                if (localHours === utcHours && localMinutes === utcMinutes) {
+                    // The time was stored incorrectly - subtract 1 hour
+                    const correctedDate = new Date(dueDate.getTime() - (60 * 60 * 1000));
+                    const correctedTimestamp = admin.firestore.Timestamp.fromDate(correctedDate);
+                    updates.push(reminderDoc.ref.update({
+                        dueDate: correctedTimestamp,
+                        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                    }));
+                    fixedCount++;
+                }
+            }
+        }
+        if (updates.length > 0) {
+            await Promise.all(updates);
+        }
+        console.log(`[fixReminderTimes] Fixed ${fixedCount} reminders for user ${userId}`);
+        return {
+            success: true,
+            message: `${fixedCount} Erinnerungen wurden korrigiert.`,
+            fixedCount
+        };
+    }
+    catch (error) {
+        console.error('[fixReminderTimes] Error:', error);
+        throw new https_1.HttpsError('internal', `Fehler beim Korrigieren der Erinnerungen: ${error.message}`);
+    }
+});
+exports.createFollowUpReminder = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { originalReminderId, minutesFromNow = 15, title } = request.data;
+    if (!originalReminderId) {
+        throw new https_1.HttpsError('invalid-argument', 'originalReminderId is required');
+    }
+    // Get original reminder
+    const originalReminderRef = db.collection('reminders').doc(originalReminderId);
+    const originalReminderDoc = await originalReminderRef.get();
+    if (!originalReminderDoc.exists || ((_a = originalReminderDoc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized to create follow-up for this reminder');
+    }
+    const originalReminder = originalReminderDoc.data();
+    const minutes = Math.max(1, Math.min(1440, Math.round(minutesFromNow))); // Between 1 minute and 24 hours
+    // Calculate due date
+    const now = new Date();
+    const dueDate = new Date(now.getTime() + minutes * 60 * 1000);
+    const dueDateTimestamp = admin.firestore.Timestamp.fromDate(dueDate);
+    // Use provided title or original reminder title
+    const reminderTitle = (title === null || title === void 0 ? void 0 : title.trim()) || (originalReminder === null || originalReminder === void 0 ? void 0 : originalReminder.title) || 'Erinnerung';
+    // Create follow-up reminder
+    const reminderData = {
+        userId,
+        title: reminderTitle,
+        type: (originalReminder === null || originalReminder === void 0 ? void 0 : originalReminder.type) || 'erinnerung',
+        dueDate: dueDateTimestamp,
+        isAllDay: false,
+        notes: (originalReminder === null || originalReminder === void 0 ? void 0 : originalReminder.notes) || null,
+        status: 'offen',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    const docRef = await db.collection('reminders').add(reminderData);
+    // Create immediate chat notification for follow-up
+    try {
+        await createChatReminder(userId, docRef.id, reminderData, '1hour', dueDateTimestamp);
+        console.log(`[createFollowUpReminder] Created follow-up reminder ${docRef.id}`);
+    }
+    catch (error) {
+        console.error(`[createFollowUpReminder] Error creating notification:`, error);
+    }
+    return Object.assign(Object.assign({ id: docRef.id }, reminderData), { dueDate: dueDate.toISOString() });
+});
+// Get unread chat reminders for a user
+exports.getChatReminders = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { unreadOnly = true } = request.data || {};
+    let query = db.collection('chatReminders')
+        .where('userId', '==', userId)
+        .orderBy('createdAt', 'desc')
+        .limit(50);
+    if (unreadOnly) {
+        query = query.where('isRead', '==', false);
+    }
+    const snapshot = await query.get();
+    const reminders = snapshot.docs.map(doc => {
+        var _a, _b;
+        const data = doc.data();
+        return Object.assign(Object.assign({ id: doc.id }, data), { createdAt: ((_a = data.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) ? data.createdAt.toDate().toISOString() : data.createdAt, dueDate: ((_b = data.dueDate) === null || _b === void 0 ? void 0 : _b.toDate) ? data.dueDate.toDate().toISOString() : data.dueDate });
+    });
+    return { reminders };
+});
+// Mark chat reminder as read
+exports.markChatReminderAsRead = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { reminderId } = request.data;
+    if (!reminderId) {
+        throw new https_1.HttpsError('invalid-argument', 'reminderId is required');
+    }
+    const reminderRef = db.collection('chatReminders').doc(reminderId);
+    const reminderDoc = await reminderRef.get();
+    if (!reminderDoc.exists || ((_a = reminderDoc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized to update this reminder');
+    }
+    await reminderRef.update({
+        isRead: true,
+        readAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { success: true };
+});
 exports.scheduledDailyBackup = (0, scheduler_1.onSchedule)({
     schedule: 'every day 02:00', // Jeden Tag um 2 Uhr morgens
     timeZone: 'Europe/Zurich',
@@ -4616,9 +5040,78 @@ exports.scheduledDailyBackup = (0, scheduler_1.onSchedule)({
 // ========== Chat Functions (manus.ai compatibility) ==========
 const params_1 = require("firebase-functions/params");
 const openaiApiKeySecret = (0, params_1.defineSecret)('OPENAI_API_KEY');
+const openWeatherMapApiKey = (0, params_1.defineSecret)('OPENWEATHERMAP_API_KEY');
 // Chat function - AI Chat with OpenAI
-exports.chat = (0, https_1.onCall)({ secrets: [openaiApiKeySecret] }, async (request) => {
-    var _a, _b, _c;
+// Helper function to get weather data for AI (Phase 1)
+async function getWeatherForAI(userId, date, location) {
+    var _a, _b;
+    try {
+        // Get user location from settings if not provided
+        if (!location) {
+            const settingsDoc = await db.collection('userSettings').doc(userId).get();
+            location = settingsDoc.exists ? (((_a = settingsDoc.data()) === null || _a === void 0 ? void 0 : _a.weatherLocation) || 'Zurich, CH') : 'Zurich, CH';
+        }
+        const dateStr = date.toISOString().split('T')[0];
+        const validatedLocation = validateString(location, 'location', 200, true);
+        // Check cache first
+        const weatherQuery = db.collection('weatherData')
+            .where('userId', '==', userId)
+            .where('date', '==', dateStr)
+            .where('location', '==', validatedLocation);
+        const snapshot = await weatherQuery.limit(1).get();
+        if (!snapshot.empty) {
+            const doc = snapshot.docs[0];
+            const data = doc.data();
+            return {
+                temperature: data.temperature,
+                condition: data.condition,
+                icon: data.icon,
+                humidity: data.humidity || null,
+                windSpeed: data.windSpeed || null,
+                location: validatedLocation,
+                date: dateStr,
+            };
+        }
+        // Fetch from API if not cached
+        const apiKey = (_b = openWeatherMapApiKey.value()) === null || _b === void 0 ? void 0 : _b.trim();
+        if (!apiKey) {
+            return null;
+        }
+        const apiWeather = await fetchWeatherFromAPI(validatedLocation, date, apiKey);
+        if (!apiWeather) {
+            return null;
+        }
+        // Cache the result
+        const weatherData = {
+            userId,
+            date: dateStr,
+            location: validatedLocation,
+            temperature: apiWeather.temperature,
+            condition: apiWeather.condition,
+            icon: apiWeather.icon,
+            humidity: apiWeather.humidity || null,
+            windSpeed: apiWeather.windSpeed || null,
+            cached: false,
+            fetchedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+        await db.collection('weatherData').add(weatherData);
+        return {
+            temperature: apiWeather.temperature,
+            condition: apiWeather.condition,
+            icon: apiWeather.icon,
+            humidity: apiWeather.humidity || null,
+            windSpeed: apiWeather.windSpeed || null,
+            location: validatedLocation,
+            date: dateStr,
+        };
+    }
+    catch (error) {
+        console.error('[getWeatherForAI] Error:', error);
+        return null;
+    }
+}
+exports.chat = (0, https_1.onCall)({ secrets: [openaiApiKeySecret, openWeatherMapApiKey] }, async (request) => {
+    var _a, _b, _c, _d;
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
@@ -4642,8 +5135,66 @@ exports.chat = (0, https_1.onCall)({ secrets: [openaiApiKeySecret] }, async (req
                 threadId: threadId || `thread_${Date.now()}`,
             };
         }
-        // Call OpenAI API
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        // Define available functions for AI (Phase 1: Weather)
+        const functions = [
+            {
+                name: 'get_weather',
+                description: 'Ruft Wetterdaten für ein bestimmtes Datum und einen Standort ab. Verwende dies, wenn der Benutzer nach Wetter fragt oder einen Termin/Erinnerung für draußen erstellt.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        date: {
+                            type: 'string',
+                            description: 'Datum im ISO-Format (YYYY-MM-DD) oder relative Angaben wie "heute", "morgen", "übermorgen"',
+                        },
+                        location: {
+                            type: 'string',
+                            description: 'Standort (z.B. "Zurich, CH"). Optional, verwendet Standard-Standort aus Einstellungen wenn nicht angegeben.',
+                        },
+                    },
+                    required: ['date'],
+                },
+            },
+        ];
+        // Prepare messages with system prompt
+        const systemMessage = {
+            role: 'system',
+            content: `Du bist ein hilfreicher Assistent für die Nexo-Anwendung. Du hilfst Benutzern bei Fragen zu Finanzen, Rechnungen, Terminen und anderen Funktionen der App.
+
+WICHTIG - Wetter-Integration (Phase 1-2):
+Wenn ein Benutzer einen Termin, eine Erinnerung oder Aktivität erwähnt, die draußen/im Freien stattfindet, rufe IMMER die get_weather Function auf, um das Wetter für diesen Tag zu prüfen.
+
+Erkenne Outdoor-Aktivitäten an folgenden Begriffen:
+- "spazieren gehen", "Spaziergang", "laufen", "joggen", "wandern"
+- "im Park", "draußen", "outdoor", "im Freien", "außen"
+- "Fahrrad fahren", "radfahren", "biken"
+- "Picknick", "Grillen", "Camping"
+- "Sport", "Training" (wenn im Freien)
+- Jede Aktivität, die offensichtlich draußen stattfindet
+
+             WENN WETTERDATEN VERFÜGBAR SIND - Gib hilfreiche, freundliche Warnungen:
+             - Temperaturen unter 5°C: "⚠️ Es wird sehr kalt sein. Zieh dich warm an - Jacke, Schal und Handschuhe sind empfohlen!"
+             - Temperaturen 5-10°C: "🌡️ Es wird kühl sein. Eine warme Jacke wäre sinnvoll."
+             - Regen/Niederschlag: "☔ Es wird regnen! Nimm unbedingt einen Regenschirm oder Regenjacke mit."
+             - Wind über 20 km/h: "💨 Es wird windig sein. Pass auf und halte dich warm."
+             - Wind über 40 km/h: "🌪️ Starker Wind erwartet! Vorsicht bei Outdoor-Aktivitäten."
+             - Hohe Luftfeuchtigkeit (>80%): "💧 Die Luftfeuchtigkeit ist hoch. Es könnte sich feucht anfühlen."
+
+             WENN KEINE WETTERDATEN VERFÜGBAR SIND:
+             - Wenn die get_weather Function einen Fehler mit "forecast_limit" zurückgibt, bedeutet das, dass das Datum mehr als 5 Tage in der Zukunft liegt.
+             - In diesem Fall: Erstelle den Termin trotzdem, aber gib eine freundliche Nachricht wie: "Ich habe den Termin erstellt. Hinweis: Für dieses Datum konnten aktuell keine Wetterdaten abgerufen werden, da die Wettervorhersage nur für die nächsten 5 Tage verfügbar ist. Bitte prüfe das Wetter kurz vor dem Termin, um dich passend vorzubereiten."
+             - Wenn die get_weather Function einen anderen Fehler zurückgibt, erstelle den Termin trotzdem und erwähne, dass die Wetterdaten aktuell nicht verfügbar sind.
+
+             Verwende die tatsächlichen Werte aus den Wetterdaten (temperature, windSpeed, humidity) in deinen Antworten, WENN sie verfügbar sind!
+
+Wenn der Benutzer direkt nach Wetter fragt, rufe get_weather auf und gib eine freundliche, informative Antwort mit allen relevanten Wetterdaten.`,
+        };
+        const chatMessages = [systemMessage, ...messages.map((m) => ({
+                role: m.role,
+                content: m.content,
+            }))];
+        // Call OpenAI API with function calling
+        let response = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -4651,10 +5202,9 @@ exports.chat = (0, https_1.onCall)({ secrets: [openaiApiKeySecret] }, async (req
             },
             body: JSON.stringify({
                 model: 'gpt-4o-mini',
-                messages: messages.map((m) => ({
-                    role: m.role,
-                    content: m.content,
-                })),
+                messages: chatMessages,
+                functions: functions,
+                function_call: 'auto',
                 max_tokens: 2000,
             }),
         });
@@ -4666,8 +5216,102 @@ exports.chat = (0, https_1.onCall)({ secrets: [openaiApiKeySecret] }, async (req
                 threadId: threadId || `thread_${Date.now()}`,
             };
         }
-        const data = await response.json();
-        const aiResponse = ((_c = (_b = (_a = data.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) === null || _c === void 0 ? void 0 : _c.content) || 'Keine Antwort erhalten.';
+        let data = await response.json();
+        let aiMessage = (_b = (_a = data.choices) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message;
+        // Handle function calls (Phase 1: Weather)
+        if (aiMessage.function_call) {
+            const functionName = aiMessage.function_call.name;
+            const functionArgs = JSON.parse(aiMessage.function_call.arguments || '{}');
+            console.log('[Chat] Function call:', functionName, functionArgs);
+            if (functionName === 'get_weather') {
+                // Parse date
+                let weatherDate = new Date();
+                const dateStr = functionArgs.date;
+                if (dateStr === 'heute' || dateStr === 'today') {
+                    weatherDate = new Date();
+                }
+                else if (dateStr === 'morgen' || dateStr === 'tomorrow') {
+                    weatherDate = new Date();
+                    weatherDate.setDate(weatherDate.getDate() + 1);
+                }
+                else if (dateStr === 'übermorgen' || dateStr === 'day after tomorrow') {
+                    weatherDate = new Date();
+                    weatherDate.setDate(weatherDate.getDate() + 2);
+                }
+                else {
+                    try {
+                        weatherDate = new Date(dateStr);
+                    }
+                    catch (e) {
+                        weatherDate = new Date();
+                    }
+                }
+                // Check if date is within 5 days (forecast limit)
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const requestDate = new Date(weatherDate);
+                requestDate.setHours(0, 0, 0, 0);
+                const daysDiff = Math.ceil((requestDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                let weatherData = null;
+                if (daysDiff > 5) {
+                    weatherData = {
+                        error: 'Wettervorhersage für dieses Datum nicht verfügbar',
+                        reason: 'forecast_limit',
+                        message: `Die Wettervorhersage ist nur für die nächsten 5 Tage verfügbar. Das angefragte Datum liegt ${daysDiff} Tage in der Zukunft.`
+                    };
+                }
+                else {
+                    weatherData = await getWeatherForAI(userId, weatherDate, functionArgs.location);
+                    if (!weatherData) {
+                        weatherData = {
+                            error: 'Keine Wetterdaten verfügbar',
+                            reason: 'api_error',
+                            message: 'Die Wetterdaten konnten nicht abgerufen werden.'
+                        };
+                    }
+                }
+                // Add function result to messages
+                chatMessages.push({
+                    role: 'assistant',
+                    content: null,
+                    function_call: {
+                        name: functionName,
+                        arguments: JSON.stringify(functionArgs),
+                    },
+                });
+                chatMessages.push({
+                    role: 'function',
+                    name: functionName,
+                    content: JSON.stringify(weatherData),
+                });
+                // Call OpenAI again with function result
+                response = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`,
+                    },
+                    body: JSON.stringify({
+                        model: 'gpt-4o-mini',
+                        messages: chatMessages,
+                        functions: functions,
+                        function_call: 'auto',
+                        max_tokens: 2000,
+                    }),
+                });
+                if (!response.ok) {
+                    const error = await response.text();
+                    console.error('[Chat] OpenAI error (after function call):', error);
+                    return {
+                        response: getRuleBasedResponse(lastMessage.content),
+                        threadId: threadId || `thread_${Date.now()}`,
+                    };
+                }
+                data = await response.json();
+                aiMessage = (_d = (_c = data.choices) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.message;
+            }
+        }
+        const aiResponse = (aiMessage === null || aiMessage === void 0 ? void 0 : aiMessage.content) || 'Keine Antwort erhalten.';
         // Save chat history
         const chatRef = db.collection('chatHistory').doc();
         await chatRef.set({
@@ -4825,6 +5469,545 @@ exports.migrateUserIds = (0, https_1.onCall)(async (request) => {
         migrated,
         timestamp: new Date().toISOString(),
     };
+});
+// ========== Chat Conversations Functions ==========
+exports.getChatConversations = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    try {
+        const snapshot = await db.collection('chatConversations')
+            .where('userId', '==', userId)
+            .orderBy('updatedAt', 'desc')
+            .limit(50)
+            .get();
+        const conversations = snapshot.docs.map(doc => {
+            var _a, _b, _c, _d, _e, _f;
+            const data = doc.data();
+            return Object.assign(Object.assign({ id: doc.id }, data), { createdAt: ((_c = (_b = (_a = data.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || new Date().toISOString(), updatedAt: ((_f = (_e = (_d = data.updatedAt) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || new Date().toISOString() });
+        });
+        return { conversations };
+    }
+    catch (error) {
+        console.error('[getChatConversations] Error:', error);
+        throw new https_1.HttpsError('internal', 'Failed to fetch chat conversations');
+    }
+});
+exports.createChatConversation = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { title, messages } = request.data;
+    const validatedTitle = validateString(title || 'Neue Konversation', 'title', 200, false);
+    // Validate messages
+    if (!Array.isArray(messages)) {
+        throw new https_1.HttpsError('invalid-argument', 'messages must be an array');
+    }
+    if (messages.length > 100) {
+        throw new https_1.HttpsError('invalid-argument', 'messages array cannot exceed 100 items');
+    }
+    // Validate each message
+    for (const msg of messages) {
+        if (!msg.role || !['system', 'user', 'assistant'].includes(msg.role)) {
+            throw new https_1.HttpsError('invalid-argument', 'Invalid message role');
+        }
+        if (!msg.content || typeof msg.content !== 'string') {
+            throw new https_1.HttpsError('invalid-argument', 'Message content must be a string');
+        }
+        if (msg.content.length > 100000) {
+            throw new https_1.HttpsError('invalid-argument', 'Message content cannot exceed 100000 characters');
+        }
+    }
+    const conversationData = {
+        userId,
+        title: validatedTitle,
+        messages,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    const docRef = await db.collection('chatConversations').add(conversationData);
+    return Object.assign(Object.assign({ id: docRef.id }, conversationData), { createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+});
+exports.updateChatConversation = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { id, title, messages } = request.data;
+    if (!id) {
+        throw new https_1.HttpsError('invalid-argument', 'id is required');
+    }
+    const docRef = db.collection('chatConversations').doc(id);
+    const doc = await docRef.get();
+    if (!doc.exists) {
+        throw new https_1.HttpsError('not-found', 'Chat conversation not found');
+    }
+    if (((_a = doc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized');
+    }
+    const updateData = {
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (title !== undefined) {
+        updateData.title = validateString(title, 'title', 200, false);
+    }
+    if (messages !== undefined) {
+        if (!Array.isArray(messages)) {
+            throw new https_1.HttpsError('invalid-argument', 'messages must be an array');
+        }
+        if (messages.length > 100) {
+            throw new https_1.HttpsError('invalid-argument', 'messages array cannot exceed 100 items');
+        }
+        // Validate each message
+        for (const msg of messages) {
+            if (!msg.role || !['system', 'user', 'assistant'].includes(msg.role)) {
+                throw new https_1.HttpsError('invalid-argument', 'Invalid message role');
+            }
+            if (!msg.content || typeof msg.content !== 'string') {
+                throw new https_1.HttpsError('invalid-argument', 'Message content must be a string');
+            }
+            if (msg.content.length > 100000) {
+                throw new https_1.HttpsError('invalid-argument', 'Message content cannot exceed 100000 characters');
+            }
+        }
+        updateData.messages = messages;
+    }
+    await docRef.update(updateData);
+    return { success: true };
+});
+exports.deleteChatConversation = (0, https_1.onCall)(async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { id } = request.data;
+    if (!id) {
+        throw new https_1.HttpsError('invalid-argument', 'id is required');
+    }
+    const docRef = db.collection('chatConversations').doc(id);
+    const doc = await docRef.get();
+    if (!doc.exists) {
+        throw new https_1.HttpsError('not-found', 'Chat conversation not found');
+    }
+    if (((_a = doc.data()) === null || _a === void 0 ? void 0 : _a.userId) !== userId) {
+        throw new https_1.HttpsError('permission-denied', 'Not authorized');
+    }
+    await docRef.delete();
+    return { success: true };
+});
+// ========== Weather Functions (Phase 3: API Integration) ==========
+// Helper function to map OpenWeatherMap icon codes to our icon names
+function mapWeatherIcon(iconCode) {
+    // OpenWeatherMap icon codes: https://openweathermap.org/weather-conditions
+    const iconMap = {
+        '01d': 'sun', // clear sky day
+        '01n': 'sun', // clear sky night
+        '02d': 'cloud-sun', // few clouds day
+        '02n': 'cloud-sun', // few clouds night
+        '03d': 'cloud', // scattered clouds
+        '03n': 'cloud',
+        '04d': 'cloud', // broken clouds
+        '04n': 'cloud',
+        '09d': 'rain', // shower rain
+        '09n': 'rain',
+        '10d': 'rain', // rain day
+        '10n': 'rain', // rain night
+        '11d': 'rain', // thunderstorm
+        '11n': 'rain',
+        '13d': 'snow', // snow
+        '13n': 'snow',
+        '50d': 'cloud', // mist
+        '50n': 'cloud',
+    };
+    return iconMap[iconCode] || 'cloud';
+}
+// Helper function to map OpenWeatherMap weather condition to German
+function mapWeatherCondition(condition) {
+    const conditionMap = {
+        'clear sky': 'Klar',
+        'few clouds': 'Wenig bewölkt',
+        'scattered clouds': 'Bewölkt',
+        'broken clouds': 'Stark bewölkt',
+        'shower rain': 'Regenschauer',
+        'rain': 'Regen',
+        'thunderstorm': 'Gewitter',
+        'snow': 'Schnee',
+        'mist': 'Nebel',
+        'fog': 'Nebel',
+        'haze': 'Dunst',
+        'dust': 'Staub',
+        'sand': 'Sand',
+        'ash': 'Asche',
+        'squall': 'Böen',
+        'tornado': 'Tornado',
+    };
+    return conditionMap[condition.toLowerCase()] || condition;
+}
+// Helper function to fetch weather from OpenWeatherMap API
+async function fetchWeatherFromAPI(location, date, apiKey) {
+    var _a, _b, _c, _d;
+    if (!apiKey) {
+        throw new https_1.HttpsError('failed-precondition', 'OpenWeatherMap API key not configured. Please set OPENWEATHERMAP_API_KEY secret in Firebase.');
+    }
+    try {
+        // For current weather (today and future dates)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const requestDate = new Date(date);
+        requestDate.setHours(0, 0, 0, 0);
+        // Check if date is in the future (forecast) or past (historical)
+        const isFuture = requestDate > today;
+        const isPast = requestDate < today;
+        const isToday = requestDate.getTime() === today.getTime();
+        if (isToday) {
+            // Use current weather API for today
+            const url = `https://api.openweathermap.org/data/2.5/weather`;
+            const params = {
+                q: location,
+                appid: apiKey,
+                units: 'metric',
+                lang: 'de',
+            };
+            console.log('[fetchWeatherFromAPI] Request (current):', { url, location, date: date.toISOString().split('T')[0] });
+            const response = await axios_1.default.get(url, { params, timeout: 10000 });
+            const data = response.data;
+            if (!data || !data.main || !data.weather || data.weather.length === 0) {
+                throw new Error('Invalid API response');
+            }
+            return {
+                temperature: Math.round(data.main.temp),
+                condition: mapWeatherCondition(data.weather[0].description),
+                icon: mapWeatherIcon(data.weather[0].icon),
+                humidity: data.main.humidity || null,
+                windSpeed: ((_a = data.wind) === null || _a === void 0 ? void 0 : _a.speed) ? Math.round(data.wind.speed * 3.6) : null, // Convert m/s to km/h
+            };
+        }
+        else if (isFuture) {
+            // Use forecast API for future dates (up to 5 days)
+            const daysDiff = Math.ceil((requestDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+            if (daysDiff > 5) {
+                // Forecast API only provides 5 days, return null for dates beyond that
+                console.log('[fetchWeatherFromAPI] Date is more than 5 days in the future, forecast not available');
+                return null;
+            }
+            const url = `https://api.openweathermap.org/data/2.5/forecast`;
+            const params = {
+                q: location,
+                appid: apiKey,
+                units: 'metric',
+                lang: 'de',
+            };
+            console.log('[fetchWeatherFromAPI] Request (forecast):', { url, location, date: date.toISOString().split('T')[0], daysDiff });
+            const response = await axios_1.default.get(url, { params, timeout: 10000 });
+            const data = response.data;
+            if (!data || !data.list || !Array.isArray(data.list) || data.list.length === 0) {
+                throw new Error('Invalid forecast API response');
+            }
+            // Find the forecast entry for the requested date
+            // Forecast entries are in 3-hour intervals, we want the one closest to 12:00 (noon) for that day
+            const targetDateStr = requestDate.toISOString().split('T')[0];
+            let bestForecast = null;
+            let bestScore = Infinity;
+            console.log('[fetchWeatherFromAPI] Looking for forecast for date:', targetDateStr);
+            console.log('[fetchWeatherFromAPI] Available forecasts:', data.list.length, 'entries');
+            for (const forecast of data.list) {
+                const forecastTime = new Date(forecast.dt * 1000);
+                const forecastDateStr = forecastTime.toISOString().split('T')[0];
+                // Only consider forecasts for the target date
+                if (forecastDateStr === targetDateStr) {
+                    // Calculate score: prefer forecasts closer to 12:00 (noon)
+                    // Lower score = better (closer to noon)
+                    const hours = forecastTime.getHours();
+                    const minutes = forecastTime.getMinutes();
+                    const timeOfDay = hours + minutes / 60;
+                    const distanceFromNoon = Math.abs(timeOfDay - 12);
+                    if (distanceFromNoon < bestScore) {
+                        bestForecast = forecast;
+                        bestScore = distanceFromNoon;
+                    }
+                    console.log('[fetchWeatherFromAPI] Found forecast for target date:', {
+                        time: forecastTime.toISOString(),
+                        temp: (_b = forecast.main) === null || _b === void 0 ? void 0 : _b.temp,
+                        distanceFromNoon: distanceFromNoon.toFixed(2),
+                    });
+                }
+            }
+            // If no forecast found for exact date, use the closest one
+            if (!bestForecast) {
+                console.log('[fetchWeatherFromAPI] No forecast found for exact date, using closest');
+                const targetTime = requestDate.getTime();
+                let closestForecast = data.list[0];
+                let minTimeDiff = Math.abs(new Date(closestForecast.dt * 1000).getTime() - targetTime);
+                for (const forecast of data.list) {
+                    const forecastTime = new Date(forecast.dt * 1000).getTime();
+                    const timeDiff = Math.abs(forecastTime - targetTime);
+                    if (timeDiff < minTimeDiff) {
+                        closestForecast = forecast;
+                        minTimeDiff = timeDiff;
+                    }
+                }
+                bestForecast = closestForecast;
+            }
+            if (!bestForecast || !bestForecast.main || !bestForecast.weather || bestForecast.weather.length === 0) {
+                throw new Error('No suitable forecast found');
+            }
+            const selectedTime = new Date(bestForecast.dt * 1000);
+            console.log('[fetchWeatherFromAPI] Selected forecast:', {
+                time: selectedTime.toISOString(),
+                temperature: bestForecast.main.temp,
+                condition: bestForecast.weather[0].description,
+                humidity: bestForecast.main.humidity,
+                windSpeed: (_c = bestForecast.wind) === null || _c === void 0 ? void 0 : _c.speed,
+            });
+            return {
+                temperature: Math.round(bestForecast.main.temp),
+                condition: mapWeatherCondition(bestForecast.weather[0].description),
+                icon: mapWeatherIcon(bestForecast.weather[0].icon),
+                humidity: bestForecast.main.humidity || null,
+                windSpeed: ((_d = bestForecast.wind) === null || _d === void 0 ? void 0 : _d.speed) ? Math.round(bestForecast.wind.speed * 3.6) : null, // Convert m/s to km/h
+                forecastTime: selectedTime.toISOString(), // Include for debugging
+            };
+        }
+        else if (isPast) {
+            // Historical data requires paid plan or we can return cached data only
+            // For now, return null - historical data should be cached when it was current
+            // Don't throw error, just return null so client can show appropriate message
+            return null;
+        }
+        return null;
+    }
+    catch (error) {
+        if (error instanceof https_1.HttpsError) {
+            throw error;
+        }
+        // Handle API errors
+        if (error.response) {
+            const status = error.response.status;
+            const errorData = error.response.data;
+            console.error('[fetchWeatherFromAPI] API Error:', {
+                status,
+                data: errorData,
+                location,
+                apiKeyPrefix: apiKey ? `${apiKey.substring(0, 8)}...` : 'MISSING'
+            });
+            if (status === 401) {
+                throw new https_1.HttpsError('failed-precondition', `Invalid OpenWeatherMap API key. Response: ${JSON.stringify(errorData)}`);
+            }
+            else if (status === 404) {
+                throw new https_1.HttpsError('not-found', `Location "${location}" not found`);
+            }
+            else if (status === 429) {
+                throw new https_1.HttpsError('resource-exhausted', 'OpenWeatherMap API rate limit exceeded');
+            }
+            else {
+                throw new https_1.HttpsError('internal', `Weather API error: ${(errorData === null || errorData === void 0 ? void 0 : errorData.message) || JSON.stringify(errorData) || 'Unknown error'}`);
+            }
+        }
+        else if (error.request) {
+            console.error('[fetchWeatherFromAPI] Request Error:', { location, hasApiKey: !!apiKey });
+            throw new https_1.HttpsError('deadline-exceeded', 'Weather API request timeout');
+        }
+        else {
+            console.error('[fetchWeatherFromAPI] Unknown Error:', { message: error.message, location, hasApiKey: !!apiKey });
+            throw new https_1.HttpsError('internal', `Failed to fetch weather: ${error.message}`);
+        }
+    }
+}
+exports.getWeather = (0, https_1.onCall)({
+    secrets: [openWeatherMapApiKey],
+}, async (request) => {
+    var _a, _b;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { date, location } = request.data;
+    if (!date) {
+        throw new https_1.HttpsError('invalid-argument', 'date is required');
+    }
+    if (!location) {
+        throw new https_1.HttpsError('invalid-argument', 'location is required');
+    }
+    const dateObj = validateDate(date, 'date', true);
+    const dateStr = dateObj.toISOString().split('T')[0];
+    const validatedLocation = validateString(location, 'location', 200, true);
+    // Check if weather data exists in cache
+    const weatherQuery = db.collection('weatherData')
+        .where('userId', '==', userId)
+        .where('date', '==', dateStr)
+        .where('location', '==', validatedLocation);
+    const snapshot = await weatherQuery.limit(1).get();
+    if (!snapshot.empty) {
+        const doc = snapshot.docs[0];
+        const data = doc.data();
+        return {
+            id: doc.id,
+            date: data.date,
+            location: data.location || null,
+            temperature: data.temperature,
+            condition: data.condition,
+            icon: data.icon,
+            humidity: data.humidity || null,
+            windSpeed: data.windSpeed || null,
+            cached: true,
+            fetchedAt: ((_a = data.fetchedAt) === null || _a === void 0 ? void 0 : _a.toDate) ? data.fetchedAt.toDate().toISOString() : new Date().toISOString(),
+        };
+    }
+    // No cached data found - fetch from API
+    try {
+        const apiKey = (_b = openWeatherMapApiKey.value()) === null || _b === void 0 ? void 0 : _b.trim();
+        console.log('[getWeather] Using API key:', apiKey ? `${apiKey.substring(0, 8)}... (length: ${apiKey.length})` : 'MISSING');
+        if (!apiKey) {
+            throw new https_1.HttpsError('failed-precondition', 'OpenWeatherMap API key not configured');
+        }
+        const apiWeather = await fetchWeatherFromAPI(validatedLocation, dateObj, apiKey);
+        if (!apiWeather) {
+            return null;
+        }
+        // Save to cache
+        const weatherData = {
+            userId,
+            date: dateStr,
+            location: validatedLocation,
+            temperature: apiWeather.temperature,
+            condition: apiWeather.condition,
+            icon: apiWeather.icon,
+            humidity: apiWeather.humidity,
+            windSpeed: apiWeather.windSpeed,
+            fetchedAt: admin.firestore.FieldValue.serverTimestamp(),
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+        const docRef = await db.collection('weatherData').add(weatherData);
+        return {
+            id: docRef.id,
+            date: dateStr,
+            location: validatedLocation,
+            temperature: apiWeather.temperature,
+            condition: apiWeather.condition,
+            icon: apiWeather.icon,
+            humidity: apiWeather.humidity,
+            windSpeed: apiWeather.windSpeed,
+            cached: false,
+            fetchedAt: new Date().toISOString(),
+        };
+    }
+    catch (error) {
+        // Log detailed error for debugging
+        console.error('[getWeather] Error fetching weather from API:', {
+            error: error.message,
+            code: error.code,
+            location: validatedLocation,
+            date: dateStr,
+            userId,
+            stack: error.stack
+        });
+        // If it's already an HttpsError, re-throw it
+        if (error instanceof https_1.HttpsError) {
+            throw error;
+        }
+        // Otherwise, wrap it in an HttpsError
+        throw new https_1.HttpsError(error.code || 'internal', error.message || 'Fehler beim Abrufen der Wetterdaten. Bitte überprüfen Sie den Standort in den Einstellungen.');
+    }
+});
+exports.saveWeather = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { date, location, temperature, condition, icon, humidity, windSpeed } = request.data;
+    if (!date) {
+        throw new https_1.HttpsError('invalid-argument', 'date is required');
+    }
+    const dateObj = validateDate(date, 'date', true);
+    const dateStr = dateObj.toISOString().split('T')[0];
+    const validatedLocation = validateString(location, 'location', 200, false);
+    const validatedTemperature = validateNumber(temperature, 'temperature', -100, 100, true);
+    const validatedCondition = validateString(condition, 'condition', 100, true);
+    const validatedIcon = validateString(icon, 'icon', 50, false) || 'cloud';
+    const validatedHumidity = validateNumber(humidity, 'humidity', 0, 100, false);
+    const validatedWindSpeed = validateNumber(windSpeed, 'windSpeed', 0, 500, false);
+    // Check if weather data already exists for this date and location
+    const existingQuery = db.collection('weatherData')
+        .where('userId', '==', userId)
+        .where('date', '==', dateStr);
+    if (validatedLocation) {
+        existingQuery.where('location', '==', validatedLocation);
+    }
+    const existingSnapshot = await existingQuery.limit(1).get();
+    const weatherData = {
+        userId,
+        date: dateStr,
+        location: validatedLocation || null,
+        temperature: validatedTemperature,
+        condition: validatedCondition,
+        icon: validatedIcon,
+        humidity: validatedHumidity || null,
+        windSpeed: validatedWindSpeed || null,
+        fetchedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (!existingSnapshot.empty) {
+        // Update existing record
+        const docRef = existingSnapshot.docs[0].ref;
+        await docRef.update(weatherData);
+        return Object.assign(Object.assign({ id: existingSnapshot.docs[0].id }, weatherData), { updated: true });
+    }
+    else {
+        // Create new record
+        weatherData.createdAt = admin.firestore.FieldValue.serverTimestamp();
+        const docRef = await db.collection('weatherData').add(weatherData);
+        return Object.assign(Object.assign({ id: docRef.id }, weatherData), { created: true });
+    }
+});
+exports.getWeatherHistory = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    const { startDate, endDate, location, limit = 30 } = request.data;
+    let query = db.collection('weatherData')
+        .where('userId', '==', userId);
+    if (startDate) {
+        const start = validateDate(startDate, 'startDate', false);
+        if (start) {
+            query = query.where('date', '>=', start.toISOString().split('T')[0]);
+        }
+    }
+    if (endDate) {
+        const end = validateDate(endDate, 'endDate', false);
+        if (end) {
+            query = query.where('date', '<=', end.toISOString().split('T')[0]);
+        }
+    }
+    if (location) {
+        const validatedLocation = validateString(location, 'location', 200, false);
+        if (validatedLocation) {
+            query = query.where('location', '==', validatedLocation);
+        }
+    }
+    const validatedLimit = validateNumber(limit, 'limit', 1, 100, false) || 30;
+    const snapshot = await query.orderBy('date', 'desc').limit(validatedLimit).get();
+    const weatherHistory = snapshot.docs.map(doc => {
+        var _a;
+        const data = doc.data();
+        return {
+            id: doc.id,
+            date: data.date,
+            location: data.location || null,
+            temperature: data.temperature,
+            condition: data.condition,
+            icon: data.icon,
+            humidity: data.humidity || null,
+            windSpeed: data.windSpeed || null,
+            fetchedAt: ((_a = data.fetchedAt) === null || _a === void 0 ? void 0 : _a.toDate) ? data.fetchedAt.toDate().toISOString() : null,
+        };
+    });
+    return { weatherHistory };
 });
 // Export tRPC function
 var trpc_1 = require("./trpc");

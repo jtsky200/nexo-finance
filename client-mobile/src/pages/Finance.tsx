@@ -12,7 +12,8 @@ import {
   Repeat,
   Search,
   Filter,
-  ChevronRight
+  ChevronRight,
+  Download
 } from 'lucide-react';
 import MobileLayout from '@/components/MobileLayout';
 import { useFinanceEntries, createFinanceEntry, updateFinanceEntry } from '@/lib/firebaseHooks';
@@ -26,7 +27,6 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { hapticSuccess, hapticError, hapticSelection } from '@/lib/hapticFeedback';
 import { formatErrorForDisplay } from '@/lib/errorHandler';
 import { exportFinanceToCSV, exportFinanceToPDF } from '@/lib/exportUtils';
-import { Download, Search, Filter } from 'lucide-react';
 
 type TabType = 'all' | 'income' | 'expenses';
 
@@ -102,7 +102,9 @@ export default function MobileFinance() {
 
     // Aggregate entries by month
     allEntries.forEach(entry => {
-      const date = entry.date?.toDate ? entry.date.toDate() : new Date(entry.date);
+      const date = (entry.date && typeof entry.date === 'object' && 'toDate' in entry.date) 
+        ? (entry.date as any).toDate() 
+        : new Date(entry.date as string | Date);
       const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       
       if (months[key]) {
@@ -193,7 +195,9 @@ export default function MobileFinance() {
       }
 
       filtered = filtered.filter(e => {
-        const entryDate = e.date?.toDate ? e.date.toDate() : new Date(e.date);
+        const entryDate = (e.date && typeof e.date === 'object' && 'toDate' in e.date)
+          ? (e.date as any).toDate()
+          : new Date(e.date as string | Date);
         return entryDate >= cutoff;
       });
     }
@@ -210,8 +214,12 @@ export default function MobileFinance() {
 
     // Sort by date (newest first)
     return filtered.sort((a, b) => {
-      const dateA = a.date?.toDate ? a.date.toDate() : new Date(a.date);
-      const dateB = b.date?.toDate ? b.date.toDate() : new Date(b.date);
+      const dateA = (a.date && typeof a.date === 'object' && 'toDate' in a.date)
+        ? (a.date as any).toDate()
+        : new Date(a.date as string | Date);
+      const dateB = (b.date && typeof b.date === 'object' && 'toDate' in b.date)
+        ? (b.date as any).toDate()
+        : new Date(b.date as string | Date);
       return dateB.getTime() - dateA.getTime();
     });
   }, [activeTab, allEntries, incomeEntries, expenseEntries, selectedCategory, dateRange, searchQuery]);
@@ -504,7 +512,7 @@ export default function MobileFinance() {
               <button
                 onClick={() => {
                   hapticSelection();
-                  exportFinanceToPDF(displayedEntries, { totalIncome, totalExpenses, balance });
+                  exportFinanceToPDF(displayedEntries, { income: totalIncome, expenses: totalExpenses, balance });
                   hapticSuccess();
                 }}
                 className="p-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors"

@@ -174,13 +174,24 @@ export const createReminder = onCall(async (request) => {
   const validatedNotes = validateString(notes, 'notes', 5000, false);
   const validatedPersonName = validateString(personName, 'personName', 200, false);
   
-  // Parse and validate dueDate
+  // Parse and validate dueDate - normalize to avoid timezone issues
   let parsedDueDate: admin.firestore.Timestamp | null = null;
   if (dueDate) {
     const dateObj = validateDate(dueDate, 'dueDate', false);
-    parsedDueDate = admin.firestore.Timestamp.fromDate(dateObj);
+    // Normalize date to midnight in local timezone to avoid timezone shifts
+    const normalizedDate = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+    // If isAllDay is true, set time to noon (12:00) to avoid timezone issues
+    // Otherwise, preserve the original time
+    if (isAllDay === true) {
+      normalizedDate.setHours(12, 0, 0, 0);
+    } else {
+      normalizedDate.setHours(dateObj.getHours(), dateObj.getMinutes(), dateObj.getSeconds(), dateObj.getMilliseconds());
+    }
+    parsedDueDate = admin.firestore.Timestamp.fromDate(normalizedDate);
   } else {
-    parsedDueDate = admin.firestore.Timestamp.fromDate(new Date());
+    const now = new Date();
+    now.setHours(12, 0, 0, 0); // Default to noon for consistency
+    parsedDueDate = admin.firestore.Timestamp.fromDate(now);
   }
 
   const reminderData = {
@@ -1737,16 +1748,24 @@ export const getCalendarEvents = onCall(async (request) => {
     const timeStr = (hours > 0 || minutes > 0) ? 
       `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}` : undefined;
     
+    // Use the original type from reminderData, not hardcoded 'appointment'
+    // Map 'termin' and 'erinnerung' to 'appointment' for display, but preserve original type
+    const eventType = reminderData.type === 'termin' || reminderData.type === 'erinnerung' 
+      ? 'appointment' 
+      : reminderData.type || 'appointment';
+    
     events.push({
       id: `appointment-${reminderDoc.id}`,
-      type: 'appointment',
+      type: eventType,
       title: reminderData.title,
       date: reminderDate.toISOString(),
       time: timeStr,
       description: reminderData.notes || reminderData.description,
-      category: reminderData.type, // termin, aufgabe
+      category: reminderData.type, // termin, aufgabe - preserve original
       priority: reminderData.priority,
       completed: isStatusCompleted(reminderData.status),
+      // Add original reminder ID for deduplication
+      reminderId: reminderDoc.id,
     });
   }
 
@@ -2030,7 +2049,40 @@ export const getCalendarEvents = onCall(async (request) => {
   // Sort by date
   events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  return { events };
+  // Deduplicate events: Remove duplicates based on title, date, and type
+  // This prevents the same event from appearing multiple times
+  const deduplicatedEvents = events.reduce((acc: any[], current: any) => {
+    // Check if an event with the same title, date (day only), and type already exists
+    const currentDateStr = current.date ? current.date.split('T')[0] : '';
+    const existingIndex = acc.findIndex((e: any) => {
+      const existingDateStr = e.date ? e.date.split('T')[0] : '';
+      return e.title === current.title && 
+             existingDateStr === currentDateStr && 
+             e.type === current.type &&
+             e.reminderId === current.reminderId; // Also check reminderId to avoid false positives
+    });
+    
+    if (existingIndex === -1) {
+      // No duplicate found, add the event
+      acc.push(current);
+    } else {
+      // Duplicate found - keep the one with more information or the first one
+      const existing = acc[existingIndex];
+      // If current has more info (e.g., description, time), replace
+      if ((current.description && !existing.description) || 
+          (current.time && !existing.time) ||
+          (current.reminderId && !existing.reminderId)) {
+        acc[existingIndex] = current;
+      }
+      // Otherwise keep the existing one
+    }
+    
+    return acc;
+  }, []);
+  
+  console.log(`[getCalendarEvents] Deduplication: ${events.length} events -> ${deduplicatedEvents.length} unique events`);
+  
+  return { events: deduplicatedEvents };
 });
 
 // ========== Shopping List Functions ==========
@@ -5776,7 +5828,83 @@ const openaiApiKeySecret = defineSecret('OPENAI_API_KEY');
 const openWeatherMapApiKey = defineSecret('OPENWEATHERMAP_API_KEY');
 
 // Chat function - AI Chat with OpenAI
-export const chat = onCall({ secrets: [openaiApiKeySecret] }, async (request) => {
+// Helper function to get weather data for AI (Phase 1)
+async function getWeatherForAI(userId: string, date: Date, location?: string): Promise<any> {
+  try {
+    // Get user location from settings if not provided
+    if (!location) {
+      const settingsDoc = await db.collection('userSettings').doc(userId).get();
+      location = settingsDoc.exists ? (settingsDoc.data()?.weatherLocation || 'Zurich, CH') : 'Zurich, CH';
+    }
+
+    const dateStr = date.toISOString().split('T')[0];
+    const validatedLocation = validateString(location, 'location', 200, true);
+
+    // Check cache first
+    const weatherQuery = db.collection('weatherData')
+      .where('userId', '==', userId)
+      .where('date', '==', dateStr)
+      .where('location', '==', validatedLocation);
+
+    const snapshot = await weatherQuery.limit(1).get();
+
+    if (!snapshot.empty) {
+      const doc = snapshot.docs[0];
+      const data = doc.data();
+      return {
+        temperature: data.temperature,
+        condition: data.condition,
+        icon: data.icon,
+        humidity: data.humidity || null,
+        windSpeed: data.windSpeed || null,
+        location: validatedLocation,
+        date: dateStr,
+      };
+    }
+
+    // Fetch from API if not cached
+    const apiKey = openWeatherMapApiKey.value()?.trim();
+    if (!apiKey) {
+      return null;
+    }
+
+    const apiWeather = await fetchWeatherFromAPI(validatedLocation, date, apiKey);
+    if (!apiWeather) {
+      return null;
+    }
+
+    // Cache the result
+    const weatherData: any = {
+      userId,
+      date: dateStr,
+      location: validatedLocation,
+      temperature: apiWeather.temperature,
+      condition: apiWeather.condition,
+      icon: apiWeather.icon,
+      humidity: apiWeather.humidity || null,
+      windSpeed: apiWeather.windSpeed || null,
+      cached: false,
+      fetchedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    await db.collection('weatherData').add(weatherData);
+
+    return {
+      temperature: apiWeather.temperature,
+      condition: apiWeather.condition,
+      icon: apiWeather.icon,
+      humidity: apiWeather.humidity || null,
+      windSpeed: apiWeather.windSpeed || null,
+      location: validatedLocation,
+      date: dateStr,
+    };
+  } catch (error: any) {
+    console.error('[getWeatherForAI] Error:', error);
+    return null;
+  }
+}
+
+export const chat = onCall({ secrets: [openaiApiKeySecret, openWeatherMapApiKey] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'User must be authenticated');
   }
@@ -5806,8 +5934,69 @@ export const chat = onCall({ secrets: [openaiApiKeySecret] }, async (request) =>
       };
     }
 
-    // Call OpenAI API
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Define available functions for AI (Phase 1: Weather)
+    const functions = [
+      {
+        name: 'get_weather',
+        description: 'Ruft Wetterdaten für ein bestimmtes Datum und einen Standort ab. Verwende dies, wenn der Benutzer nach Wetter fragt oder einen Termin/Erinnerung für draußen erstellt.',
+        parameters: {
+          type: 'object',
+          properties: {
+            date: {
+              type: 'string',
+              description: 'Datum im ISO-Format (YYYY-MM-DD) oder relative Angaben wie "heute", "morgen", "übermorgen"',
+            },
+            location: {
+              type: 'string',
+              description: 'Standort (z.B. "Zurich, CH"). Optional, verwendet Standard-Standort aus Einstellungen wenn nicht angegeben.',
+            },
+          },
+          required: ['date'],
+        },
+      },
+    ];
+
+    // Prepare messages with system prompt
+    const systemMessage = {
+      role: 'system' as const,
+      content: `Du bist ein hilfreicher Assistent für die Nexo-Anwendung. Du hilfst Benutzern bei Fragen zu Finanzen, Rechnungen, Terminen und anderen Funktionen der App.
+
+WICHTIG - Wetter-Integration (Phase 1-2):
+Wenn ein Benutzer einen Termin, eine Erinnerung oder Aktivität erwähnt, die draußen/im Freien stattfindet, rufe IMMER die get_weather Function auf, um das Wetter für diesen Tag zu prüfen.
+
+Erkenne Outdoor-Aktivitäten an folgenden Begriffen:
+- "spazieren gehen", "Spaziergang", "laufen", "joggen", "wandern"
+- "im Park", "draußen", "outdoor", "im Freien", "außen"
+- "Fahrrad fahren", "radfahren", "biken"
+- "Picknick", "Grillen", "Camping"
+- "Sport", "Training" (wenn im Freien)
+- Jede Aktivität, die offensichtlich draußen stattfindet
+
+             WENN WETTERDATEN VERFÜGBAR SIND - Gib hilfreiche, freundliche Warnungen:
+             - Temperaturen unter 5°C: "⚠️ Es wird sehr kalt sein. Zieh dich warm an - Jacke, Schal und Handschuhe sind empfohlen!"
+             - Temperaturen 5-10°C: "🌡️ Es wird kühl sein. Eine warme Jacke wäre sinnvoll."
+             - Regen/Niederschlag: "☔ Es wird regnen! Nimm unbedingt einen Regenschirm oder Regenjacke mit."
+             - Wind über 20 km/h: "💨 Es wird windig sein. Pass auf und halte dich warm."
+             - Wind über 40 km/h: "🌪️ Starker Wind erwartet! Vorsicht bei Outdoor-Aktivitäten."
+             - Hohe Luftfeuchtigkeit (>80%): "💧 Die Luftfeuchtigkeit ist hoch. Es könnte sich feucht anfühlen."
+
+             WENN KEINE WETTERDATEN VERFÜGBAR SIND:
+             - Wenn die get_weather Function einen Fehler mit "forecast_limit" zurückgibt, bedeutet das, dass das Datum mehr als 5 Tage in der Zukunft liegt.
+             - In diesem Fall: Erstelle den Termin trotzdem, aber gib eine freundliche Nachricht wie: "Ich habe den Termin erstellt. Hinweis: Für dieses Datum konnten aktuell keine Wetterdaten abgerufen werden, da die Wettervorhersage nur für die nächsten 5 Tage verfügbar ist. Bitte prüfe das Wetter kurz vor dem Termin, um dich passend vorzubereiten."
+             - Wenn die get_weather Function einen anderen Fehler zurückgibt, erstelle den Termin trotzdem und erwähne, dass die Wetterdaten aktuell nicht verfügbar sind.
+
+             Verwende die tatsächlichen Werte aus den Wetterdaten (temperature, windSpeed, humidity) in deinen Antworten, WENN sie verfügbar sind!
+
+Wenn der Benutzer direkt nach Wetter fragt, rufe get_weather auf und gib eine freundliche, informative Antwort mit allen relevanten Wetterdaten.`,
+    };
+
+    const chatMessages = [systemMessage, ...messages.map((m: any) => ({
+      role: m.role,
+      content: m.content,
+    }))];
+
+    // Call OpenAI API with function calling
+    let response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -5815,10 +6004,9 @@ export const chat = onCall({ secrets: [openaiApiKeySecret] }, async (request) =>
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
-        messages: messages.map((m: any) => ({
-          role: m.role,
-          content: m.content,
-        })),
+        messages: chatMessages,
+        functions: functions,
+        function_call: 'auto',
         max_tokens: 2000,
       }),
     });
@@ -5832,8 +6020,109 @@ export const chat = onCall({ secrets: [openaiApiKeySecret] }, async (request) =>
       };
     }
 
-    const data = await response.json();
-    const aiResponse = data.choices?.[0]?.message?.content || 'Keine Antwort erhalten.';
+    let data = await response.json();
+    let aiMessage = data.choices?.[0]?.message;
+
+    // Handle function calls (Phase 1: Weather)
+    if (aiMessage.function_call) {
+      const functionName = aiMessage.function_call.name;
+      const functionArgs = JSON.parse(aiMessage.function_call.arguments || '{}');
+
+      console.log('[Chat] Function call:', functionName, functionArgs);
+
+      if (functionName === 'get_weather') {
+        // Parse date
+        let weatherDate = new Date();
+        const dateStr = functionArgs.date;
+        
+        if (dateStr === 'heute' || dateStr === 'today') {
+          weatherDate = new Date();
+        } else if (dateStr === 'morgen' || dateStr === 'tomorrow') {
+          weatherDate = new Date();
+          weatherDate.setDate(weatherDate.getDate() + 1);
+        } else if (dateStr === 'übermorgen' || dateStr === 'day after tomorrow') {
+          weatherDate = new Date();
+          weatherDate.setDate(weatherDate.getDate() + 2);
+        } else {
+          try {
+            weatherDate = new Date(dateStr);
+          } catch (e) {
+            weatherDate = new Date();
+          }
+        }
+
+        // Check if date is within 5 days (forecast limit)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const requestDate = new Date(weatherDate);
+        requestDate.setHours(0, 0, 0, 0);
+        const daysDiff = Math.ceil((requestDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        
+        let weatherData: any = null;
+        if (daysDiff > 5) {
+          weatherData = { 
+            error: 'Wettervorhersage für dieses Datum nicht verfügbar',
+            reason: 'forecast_limit',
+            message: `Die Wettervorhersage ist nur für die nächsten 5 Tage verfügbar. Das angefragte Datum liegt ${daysDiff} Tage in der Zukunft.`
+          };
+        } else {
+          weatherData = await getWeatherForAI(userId, weatherDate, functionArgs.location);
+          if (!weatherData) {
+            weatherData = { 
+              error: 'Keine Wetterdaten verfügbar',
+              reason: 'api_error',
+              message: 'Die Wetterdaten konnten nicht abgerufen werden.'
+            };
+          }
+        }
+
+        // Add function result to messages
+        chatMessages.push({
+          role: 'assistant' as any,
+          content: null as any,
+          function_call: {
+            name: functionName,
+            arguments: JSON.stringify(functionArgs),
+          },
+        } as any);
+
+        chatMessages.push({
+          role: 'function' as any,
+          name: functionName,
+          content: JSON.stringify(weatherData),
+        } as any);
+
+        // Call OpenAI again with function result
+        response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: chatMessages,
+            functions: functions,
+            function_call: 'auto',
+            max_tokens: 2000,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.text();
+          console.error('[Chat] OpenAI error (after function call):', error);
+          return {
+            response: getRuleBasedResponse(lastMessage.content),
+            threadId: threadId || `thread_${Date.now()}`,
+          };
+        }
+
+        data = await response.json();
+        aiMessage = data.choices?.[0]?.message;
+      }
+    }
+
+    const aiResponse = aiMessage?.content || 'Keine Antwort erhalten.';
 
     // Save chat history
     const chatRef = db.collection('chatHistory').doc();
@@ -6279,10 +6568,8 @@ async function fetchWeatherFromAPI(location: string, date: Date, apiKey: string)
     const isPast = requestDate < today;
     const isToday = requestDate.getTime() === today.getTime();
 
-    if (isToday || isFuture) {
-      // Use current weather API for today, or forecast API for future dates
-      // For simplicity, we'll use current weather API (free tier limitation)
-      // For production, consider using forecast API for future dates
+    if (isToday) {
+      // Use current weather API for today
       const url = `https://api.openweathermap.org/data/2.5/weather`;
       const params: any = {
         q: location,
@@ -6290,6 +6577,8 @@ async function fetchWeatherFromAPI(location: string, date: Date, apiKey: string)
         units: 'metric',
         lang: 'de',
       };
+      
+      console.log('[fetchWeatherFromAPI] Request (current):', { url, location, date: date.toISOString().split('T')[0] });
 
       const response = await axios.get(url, { params, timeout: 10000 });
       const data = response.data;
@@ -6304,6 +6593,108 @@ async function fetchWeatherFromAPI(location: string, date: Date, apiKey: string)
         icon: mapWeatherIcon(data.weather[0].icon),
         humidity: data.main.humidity || null,
         windSpeed: data.wind?.speed ? Math.round(data.wind.speed * 3.6) : null, // Convert m/s to km/h
+      };
+    } else if (isFuture) {
+      // Use forecast API for future dates (up to 5 days)
+      const daysDiff = Math.ceil((requestDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (daysDiff > 5) {
+        // Forecast API only provides 5 days, return null for dates beyond that
+        console.log('[fetchWeatherFromAPI] Date is more than 5 days in the future, forecast not available');
+        return null;
+      }
+
+      const url = `https://api.openweathermap.org/data/2.5/forecast`;
+      const params: any = {
+        q: location,
+        appid: apiKey,
+        units: 'metric',
+        lang: 'de',
+      };
+      
+      console.log('[fetchWeatherFromAPI] Request (forecast):', { url, location, date: date.toISOString().split('T')[0], daysDiff });
+
+      const response = await axios.get(url, { params, timeout: 10000 });
+      const data = response.data;
+
+      if (!data || !data.list || !Array.isArray(data.list) || data.list.length === 0) {
+        throw new Error('Invalid forecast API response');
+      }
+
+      // Find the forecast entry for the requested date
+      // Forecast entries are in 3-hour intervals, we want the one closest to 12:00 (noon) for that day
+      const targetDateStr = requestDate.toISOString().split('T')[0];
+      let bestForecast: any = null;
+      let bestScore = Infinity;
+
+      console.log('[fetchWeatherFromAPI] Looking for forecast for date:', targetDateStr);
+      console.log('[fetchWeatherFromAPI] Available forecasts:', data.list.length, 'entries');
+
+      for (const forecast of data.list) {
+        const forecastTime = new Date(forecast.dt * 1000);
+        const forecastDateStr = forecastTime.toISOString().split('T')[0];
+        
+        // Only consider forecasts for the target date
+        if (forecastDateStr === targetDateStr) {
+          // Calculate score: prefer forecasts closer to 12:00 (noon)
+          // Lower score = better (closer to noon)
+          const hours = forecastTime.getHours();
+          const minutes = forecastTime.getMinutes();
+          const timeOfDay = hours + minutes / 60;
+          const distanceFromNoon = Math.abs(timeOfDay - 12);
+          
+          if (distanceFromNoon < bestScore) {
+            bestForecast = forecast;
+            bestScore = distanceFromNoon;
+          }
+          
+          console.log('[fetchWeatherFromAPI] Found forecast for target date:', {
+            time: forecastTime.toISOString(),
+            temp: forecast.main?.temp,
+            distanceFromNoon: distanceFromNoon.toFixed(2),
+          });
+        }
+      }
+
+      // If no forecast found for exact date, use the closest one
+      if (!bestForecast) {
+        console.log('[fetchWeatherFromAPI] No forecast found for exact date, using closest');
+        const targetTime = requestDate.getTime();
+        let closestForecast = data.list[0];
+        let minTimeDiff = Math.abs(new Date(closestForecast.dt * 1000).getTime() - targetTime);
+
+        for (const forecast of data.list) {
+          const forecastTime = new Date(forecast.dt * 1000).getTime();
+          const timeDiff = Math.abs(forecastTime - targetTime);
+          
+          if (timeDiff < minTimeDiff) {
+            closestForecast = forecast;
+            minTimeDiff = timeDiff;
+          }
+        }
+        bestForecast = closestForecast;
+      }
+
+      if (!bestForecast || !bestForecast.main || !bestForecast.weather || bestForecast.weather.length === 0) {
+        throw new Error('No suitable forecast found');
+      }
+
+      const selectedTime = new Date(bestForecast.dt * 1000);
+      console.log('[fetchWeatherFromAPI] Selected forecast:', {
+        time: selectedTime.toISOString(),
+        temperature: bestForecast.main.temp,
+        condition: bestForecast.weather[0].description,
+        humidity: bestForecast.main.humidity,
+        windSpeed: bestForecast.wind?.speed,
+      });
+
+      return {
+        temperature: Math.round(bestForecast.main.temp),
+        condition: mapWeatherCondition(bestForecast.weather[0].description),
+        icon: mapWeatherIcon(bestForecast.weather[0].icon),
+        humidity: bestForecast.main.humidity || null,
+        windSpeed: bestForecast.wind?.speed ? Math.round(bestForecast.wind.speed * 3.6) : null, // Convert m/s to km/h
+        forecastTime: selectedTime.toISOString(), // Include for debugging
       };
     } else if (isPast) {
       // Historical data requires paid plan or we can return cached data only
@@ -6321,18 +6712,28 @@ async function fetchWeatherFromAPI(location: string, date: Date, apiKey: string)
     // Handle API errors
     if (error.response) {
       const status = error.response.status;
+      const errorData = error.response.data;
+      console.error('[fetchWeatherFromAPI] API Error:', { 
+        status, 
+        data: errorData, 
+        location,
+        apiKeyPrefix: apiKey ? `${apiKey.substring(0, 8)}...` : 'MISSING'
+      });
+      
       if (status === 401) {
-        throw new HttpsError('failed-precondition', 'Invalid OpenWeatherMap API key');
+        throw new HttpsError('failed-precondition', `Invalid OpenWeatherMap API key. Response: ${JSON.stringify(errorData)}`);
       } else if (status === 404) {
         throw new HttpsError('not-found', `Location "${location}" not found`);
       } else if (status === 429) {
         throw new HttpsError('resource-exhausted', 'OpenWeatherMap API rate limit exceeded');
       } else {
-        throw new HttpsError('internal', `Weather API error: ${error.response.data?.message || 'Unknown error'}`);
+        throw new HttpsError('internal', `Weather API error: ${errorData?.message || JSON.stringify(errorData) || 'Unknown error'}`);
       }
     } else if (error.request) {
+      console.error('[fetchWeatherFromAPI] Request Error:', { location, hasApiKey: !!apiKey });
       throw new HttpsError('deadline-exceeded', 'Weather API request timeout');
     } else {
+      console.error('[fetchWeatherFromAPI] Unknown Error:', { message: error.message, location, hasApiKey: !!apiKey });
       throw new HttpsError('internal', `Failed to fetch weather: ${error.message}`);
     }
   }
@@ -6389,7 +6790,11 @@ export const getWeather = onCall(
 
   // No cached data found - fetch from API
   try {
-    const apiKey = openWeatherMapApiKey.value();
+    const apiKey = openWeatherMapApiKey.value()?.trim();
+    console.log('[getWeather] Using API key:', apiKey ? `${apiKey.substring(0, 8)}... (length: ${apiKey.length})` : 'MISSING');
+    if (!apiKey) {
+      throw new HttpsError('failed-precondition', 'OpenWeatherMap API key not configured');
+    }
     const apiWeather = await fetchWeatherFromAPI(validatedLocation, dateObj, apiKey);
     
     if (!apiWeather) {

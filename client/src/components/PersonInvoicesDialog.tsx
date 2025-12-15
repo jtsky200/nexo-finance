@@ -23,6 +23,7 @@ import {
   updateInstallmentPlan,
   convertToInstallmentPlan
 } from '@/lib/firebaseHooks';
+import { convertPaidAmountToChf, calculateTotalPaidChf, areInstallmentsInChf } from '@/lib/installmentUtils';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
@@ -137,6 +138,24 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     if (selectedInvoiceForPayment && invoices.length > 0) {
       const updatedInvoice = invoices.find((inv: any) => inv.id === selectedInvoiceForPayment.id);
       if (updatedInvoice) {
+        // Debug: Log totalPaid für Diagnose (nur in Entwicklung)
+        if (process.env.NODE_ENV === 'development') {
+          const invoiceAmountChf = ((updatedInvoice as any).amount || 0) / 100;
+          const calculatedTotalPaid = (updatedInvoice as any).installments && Array.isArray((updatedInvoice as any).installments)
+            ? calculateTotalPaidChf((updatedInvoice as any).installments, invoiceAmountChf)
+            : 0;
+          console.log('[Ratenverwaltung] Invoice aktualisiert:', {
+            invoiceId: updatedInvoice.id,
+            totalPaidFromDB: (updatedInvoice as any).totalPaid,
+            calculatedTotalPaid,
+            installments: (updatedInvoice as any).installments?.map((inst: any) => ({
+              number: inst.number,
+            amount: inst.amount,
+            paidAmount: inst.paidAmount,
+            status: inst.status
+          }))
+          });
+        }
         setSelectedInvoiceForPayment(updatedInvoice);
       }
     }
@@ -262,6 +281,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
   const roundTo5Rappen = (amount: number): number => {
     return Math.round(amount * 20) / 20;
   };
+
 
   // Intelligente Konvertierung von Ratenbeträgen zu Rappen für formatAmount
   // Die Ratenbeträge können in verschiedenen Formaten gespeichert sein aufgrund von Backend-Bugs
@@ -501,17 +521,34 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     invoices.reduce((sum, inv) => sum + inv.amount, 0), 
     [invoices]
   );
+  const paidAmount = useMemo(() => {
+    return invoices.reduce((sum, inv) => {
+      // Wenn Rechnung vollständig bezahlt ist
+      if (inv.status === 'paid') {
+        return sum + inv.amount;
+      }
+      // Wenn Rechnung einen Ratenplan hat, berechne totalPaid
+      const invAny = inv as any;
+      if (invAny.isInstallmentPlan && invAny.installments && Array.isArray(invAny.installments)) {
+        const invoiceAmountChf = (inv.amount || 0) / 100;
+        const installmentsAreInChf = areInstallmentsInChf(invAny.installments, invoiceAmountChf);
+        
+        // Verwende totalPaid, falls vorhanden
+        let totalPaidChf = invAny.totalPaid || 0;
+        if (totalPaidChf === 0) {
+          // Berechne aus installments mit Hilfsfunktion
+          totalPaidChf = calculateTotalPaidChf(invAny.installments, invoiceAmountChf);
+        }
+        
+        // Konvertiere CHF zu Rappen für die Summe
+        return sum + (totalPaidChf * 100);
+      }
+      return sum;
+    }, 0);
+  }, [invoices]);
   const openAmount = useMemo(() => 
-    invoices
-      .filter(inv => inv.status === 'open' || inv.status === 'postponed')
-      .reduce((sum, inv) => sum + inv.amount, 0),
-    [invoices]
-  );
-  const paidAmount = useMemo(() => 
-    invoices
-      .filter(inv => inv.status === 'paid')
-      .reduce((sum, inv) => sum + inv.amount, 0),
-    [invoices]
+    totalAmount - paidAmount,
+    [totalAmount, paidAmount]
   );
 
   const handleScannedData = (data: ScannedInvoiceData) => {
@@ -711,13 +748,33 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                           <div 
                             className="bg-green-500 h-2 rounded-full transition-all"
                             style={{ 
-                              width: `${(invoice.totalPaid || 0) / invoice.amount * 100}%` 
+                              width: `${(() => {
+                                const invoiceAmountChf = (invoice.amount || 0) / 100; // amount ist in Rappen
+                                // Berechne totalPaid aus installments, falls nicht vorhanden (Fallback)
+                                let totalPaidChf = invoice.totalPaid || 0;
+                                if (totalPaidChf === 0 && invoice.installments && Array.isArray(invoice.installments)) {
+                                  // Intelligente Erkennung der Einheit
+                                  const installmentsAreInChf = areInstallmentsInChf(invoice.installments, invoiceAmountChf);
+                                  totalPaidChf = calculateTotalPaidChf(invoice.installments, invoiceAmountChf);
+                                }
+                                return invoiceAmountChf > 0 ? Math.min(100, (totalPaidChf / invoiceAmountChf) * 100) : 0;
+                              })()}%` 
                             }}
                           />
                         </div>
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">
-                            Bezahlt: {formatAmount((invoice.totalPaid || 0) * 100)}
+                            Bezahlt: {formatAmount(((() => {
+                              // Berechne totalPaid aus installments, falls nicht vorhanden (Fallback)
+                              let totalPaidChf = invoice.totalPaid || 0;
+                              if (totalPaidChf === 0 && invoice.installments && Array.isArray(invoice.installments)) {
+                                // Intelligente Erkennung der Einheit
+                                const invoiceAmountChf = (invoice.amount || 0) / 100;
+                                const installmentsAreInChf = areInstallmentsInChf(invoice.installments, invoiceAmountChf);
+                                totalPaidChf = calculateTotalPaidChf(invoice.installments, invoiceAmountChf);
+                              }
+                              return totalPaidChf * 100; // Konvertiere CHF zu Rappen für formatAmount
+                            })()))}
                           </span>
                           <span className="text-muted-foreground">
                             {invoice.installmentEndDate ? `Fertig: ${formatDate(invoice.installmentEndDate)}` : ''}
@@ -1770,7 +1827,27 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   <div>
                     <p className="text-base font-semibold">{selectedInvoiceForPayment.description}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {selectedInvoiceForPayment.installmentCount} Raten à {selectedInvoiceForPayment.installmentInterval === 'weekly' ? 'Woche' : selectedInvoiceForPayment.installmentInterval === 'monthly' ? 'Monat' : selectedInvoiceForPayment.installmentInterval === 'quarterly' ? 'Quartal' : 'Jahr'}
+                      {(() => {
+                        const invoiceAmount = selectedInvoiceForPayment.amount || 0;
+                        const invoiceAmountChf = invoiceAmount / 100;
+                        const allInst = selectedInvoiceForPayment.installments || [];
+                        const totalInstallments = allInst.length || selectedInvoiceForPayment.installmentCount || 1;
+                        // Berechne Rate-Betrag mit intelligenter Einheitserkennung
+                        let rateAmountChf = 0;
+                        if (allInst.length > 0 && allInst[0].amount) {
+                          // Intelligente Erkennung: inst.amount kann in CHF oder Rappen sein
+                          const installmentsAreInChf = areInstallmentsInChf(allInst, invoiceAmountChf);
+                          const firstInstallmentAmount = allInst[0].amount;
+                          rateAmountChf = installmentsAreInChf 
+                            ? firstInstallmentAmount  // Bereits CHF
+                            : firstInstallmentAmount / 100;  // Rappen zu CHF
+                        } else {
+                          // Fallback: Berechne aus Gesamtbetrag
+                          rateAmountChf = invoiceAmountChf / totalInstallments;
+                        }
+                        const intervalText = selectedInvoiceForPayment.installmentInterval === 'weekly' ? 'Woche' : selectedInvoiceForPayment.installmentInterval === 'monthly' ? 'Monat' : selectedInvoiceForPayment.installmentInterval === 'quarterly' ? 'Quartal' : 'Jahr';
+                        return `${totalInstallments} Raten à ${rateAmountChf.toFixed(2)} CHF pro ${intervalText}`;
+                      })()}
                     </p>
                   </div>
                   <div className="text-right">
@@ -1784,7 +1861,17 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   <div 
                     className="bg-green-500 h-3 rounded-full transition-all"
                     style={{ 
-                      width: `${Math.min(100, selectedInvoiceForPayment.amount > 0 ? ((selectedInvoiceForPayment.totalPaid || 0) / selectedInvoiceForPayment.amount) * 100 : 0)}%` 
+                      width: `${(() => {
+                        const invoiceAmountChf = (selectedInvoiceForPayment.amount || 0) / 100; // amount ist in Rappen
+                        // Berechne totalPaid aus installments, falls nicht vorhanden (Fallback)
+                        let totalPaidChf = selectedInvoiceForPayment.totalPaid || 0;
+                        if (totalPaidChf === 0 && selectedInvoiceForPayment.installments && Array.isArray(selectedInvoiceForPayment.installments)) {
+                          // Intelligente Erkennung der Einheit
+                          const installmentsAreInChf = areInstallmentsInChf(selectedInvoiceForPayment.installments, invoiceAmountChf);
+                          totalPaidChf = calculateTotalPaidChf(selectedInvoiceForPayment.installments, invoiceAmountChf);
+                        }
+                        return invoiceAmountChf > 0 ? Math.min(100, (totalPaidChf / invoiceAmountChf) * 100) : 0;
+                      })()}%` 
                     }}
                   />
                 </div>
@@ -1794,13 +1881,35 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Bezahlt</p>
                     <p className="text-sm font-semibold text-green-600">
-                      {formatAmount((selectedInvoiceForPayment.totalPaid || 0) * 100)}
+                      {formatAmount(((() => {
+                        // Berechne totalPaid aus installments, falls nicht vorhanden (Fallback)
+                        let totalPaidChf = selectedInvoiceForPayment.totalPaid || 0;
+                        if (totalPaidChf === 0 && selectedInvoiceForPayment.installments && Array.isArray(selectedInvoiceForPayment.installments)) {
+                          // Intelligente Erkennung der Einheit
+                          const invoiceAmountChf = (selectedInvoiceForPayment.amount || 0) / 100;
+                          const installmentsAreInChf = areInstallmentsInChf(selectedInvoiceForPayment.installments, invoiceAmountChf);
+                          totalPaidChf = calculateTotalPaidChf(selectedInvoiceForPayment.installments, invoiceAmountChf);
+                        }
+                        return totalPaidChf * 100; // Konvertiere CHF zu Rappen für formatAmount
+                      })()))}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Noch offen</p>
                     <p className="text-sm font-semibold text-red-600">
-                      {formatAmount(selectedInvoiceForPayment.amount - ((selectedInvoiceForPayment.totalPaid || 0) * 100))}
+                      {formatAmount(((() => {
+                        const invoiceAmountRappen = selectedInvoiceForPayment.amount || 0;
+                        // Berechne totalPaid aus installments, falls nicht vorhanden (Fallback)
+                        let totalPaidChf = selectedInvoiceForPayment.totalPaid || 0;
+                        if (totalPaidChf === 0 && selectedInvoiceForPayment.installments && Array.isArray(selectedInvoiceForPayment.installments)) {
+                          // Intelligente Erkennung der Einheit
+                          const invoiceAmountChf = invoiceAmountRappen / 100;
+                          const installmentsAreInChf = areInstallmentsInChf(selectedInvoiceForPayment.installments, invoiceAmountChf);
+                          totalPaidChf = calculateTotalPaidChf(selectedInvoiceForPayment.installments, invoiceAmountChf);
+                        }
+                        const totalPaidRappen = totalPaidChf * 100; // Konvertiere CHF zu Rappen
+                        return invoiceAmountRappen - totalPaidRappen;
+                      })()))}
                     </p>
                   </div>
                   <div>
@@ -1823,12 +1932,22 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 
                 <div className="space-y-2 max-h-[400px] overflow-y-auto">
                   {selectedInvoiceForPayment.installments.map((inst: any, idx: number) => {
-                    // Intelligente Betragskonvertierung
-                    const invoiceAmount = selectedInvoiceForPayment.amount || 0;
-                    const allInst = selectedInvoiceForPayment.installments || [];
-                    const totalInstallments = allInst.length || 1;
-                    const amountInRappen = getInstallmentAmountInRappen(inst, invoiceAmount, totalInstallments, allInst);
-                    const paidInRappen = (inst.paidAmount || 0) * (amountInRappen / (inst.amount || 1)); // Proportional konvertieren
+                    // Intelligente Erkennung: inst.amount und inst.paidAmount können in CHF oder Rappen sein
+                    const invoiceAmountChf = (selectedInvoiceForPayment.amount || 0) / 100; // invoice.amount ist in Rappen
+                    // Schritt 1: Erkenne, ob installments.amount in CHF oder Rappen ist
+                    const installmentsAreInChf = areInstallmentsInChf(selectedInvoiceForPayment.installments || [], invoiceAmountChf);
+                    
+                    // Schritt 2: Konvertiere amount zu Rappen für Vergleich
+                    const amountInRappen = installmentsAreInChf 
+                      ? (inst.amount || 0) * 100  // CHF zu Rappen
+                      : (inst.amount || 0);        // Bereits Rappen
+                    
+                    // Schritt 3: Erkenne paidAmount-Einheit mit Hilfsfunktion
+                    const installmentAmount = inst.amount || 0;
+                    const paidAmount = inst.paidAmount || 0;
+                    const paidAmountChf = convertPaidAmountToChf(paidAmount, installmentAmount, installmentsAreInChf);
+                    const paidInRappen = paidAmountChf * 100; // Konvertiere CHF zu Rappen für formatAmount
+                    
                     const remainingInRappen = amountInRappen - paidInRappen;
                     
                     let dueDateObj: Date | null = null;
@@ -2006,11 +2125,31 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                       <div className="grid grid-cols-2 gap-3 text-xs">
                         <div>
                           <p className="text-muted-foreground mb-1">Rate</p>
-                          <p className="font-semibold">{formatAmount(selectedInstallment.amount * 100)}</p>
+                          <p className="font-semibold">{formatAmount((() => {
+                            // Intelligente Erkennung der Einheit für Rate-Anzeige
+                            const invoiceAmountChf = (selectedInvoiceForPayment.amount || 0) / 100;
+                            const installmentsAreInChf = areInstallmentsInChf(selectedInvoiceForPayment.installments || [], invoiceAmountChf);
+                            const installmentAmount = selectedInstallment.amount || 0;
+                            const amountInRappen = installmentsAreInChf 
+                              ? installmentAmount * 100  // CHF zu Rappen
+                              : installmentAmount;       // Bereits Rappen
+                            return amountInRappen;
+                          })())}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground mb-1">Bereits bezahlt</p>
-                          <p className="font-semibold text-green-600">{formatAmount((selectedInstallment.paidAmount || 0) * 100)}</p>
+                          <p className="font-semibold text-green-600">{formatAmount((() => {
+                            // Intelligente Erkennung der Einheit mit Hilfsfunktion
+                            const invoiceAmountChf = (selectedInvoiceForPayment.amount || 0) / 100;
+                            const installmentsAreInChf = areInstallmentsInChf(selectedInvoiceForPayment.installments || [], invoiceAmountChf);
+                            
+                            const installmentAmount = selectedInstallment.amount || 0;
+                            const paidAmount = selectedInstallment.paidAmount || 0;
+                            if (paidAmount === 0) return 0;
+                            
+                            const paidAmountChf = convertPaidAmountToChf(paidAmount, installmentAmount, installmentsAreInChf);
+                            return paidAmountChf * 100; // Konvertiere CHF zu Rappen für formatAmount
+                          })())}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground mb-1">Fälligkeitsdatum</p>
@@ -2021,7 +2160,22 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                         <div>
                           <p className="text-muted-foreground mb-1">Noch zu zahlen</p>
                           <p className="font-semibold text-red-600">
-                            {formatAmount((selectedInstallment.amount - (selectedInstallment.paidAmount || 0)) * 100)}
+                            {formatAmount((() => {
+                              // Intelligente Erkennung der Einheit mit Hilfsfunktion
+                              const invoiceAmountChf = (selectedInvoiceForPayment.amount || 0) / 100;
+                              const installmentsAreInChf = areInstallmentsInChf(selectedInvoiceForPayment.installments || [], invoiceAmountChf);
+                              
+                              const amountInRappen = installmentsAreInChf 
+                                ? (selectedInstallment.amount || 0) * 100
+                                : (selectedInstallment.amount || 0);
+                              
+                              const installmentAmount = selectedInstallment.amount || 0;
+                              const paidAmount = selectedInstallment.paidAmount || 0;
+                              const paidAmountChf = convertPaidAmountToChf(paidAmount, installmentAmount, installmentsAreInChf);
+                              const paidInRappen = paidAmountChf * 100; // Konvertiere CHF zu Rappen
+                              
+                              return amountInRappen - paidInRappen;
+                            })())}
                           </p>
                         </div>
                       </div>
@@ -2038,7 +2192,19 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                         className="mt-2 h-10"
                       />
                       <p className="text-xs text-muted-foreground mt-1">
-                        Maximal: {formatAmount((selectedInstallment.amount - (selectedInstallment.paidAmount || 0)) * 100)}
+                        Maximal: {formatAmount((() => {
+                          // Intelligente Erkennung der Einheit
+                          const invoiceAmountChf = (selectedInvoiceForPayment.amount || 0) / 100;
+                          const installmentsAreInChf = areInstallmentsInChf(selectedInvoiceForPayment.installments || [], invoiceAmountChf);
+                          const amountInRappen = installmentsAreInChf 
+                            ? (selectedInstallment.amount || 0) * 100
+                            : (selectedInstallment.amount || 0);
+                          const installmentAmount = selectedInstallment.amount || 0;
+                          const paidAmount = selectedInstallment.paidAmount || 0;
+                          const paidAmountChf = convertPaidAmountToChf(paidAmount, installmentAmount, installmentsAreInChf);
+                          const paidInRappen = paidAmountChf * 100;
+                          return amountInRappen - paidInRappen;
+                        })())}
                       </p>
                     </div>
 
@@ -2072,33 +2238,58 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                             toast.error('Betrag muss größer als 0 sein');
                             return;
                           }
-                          const remaining = selectedInstallment.amount - (selectedInstallment.paidAmount || 0);
+                          // Intelligente Erkennung der Einheit für Validierung
+                          const invoiceAmountChf = (selectedInvoiceForPayment.amount || 0) / 100;
+                          const totalInstallmentAmountAsChf = (selectedInvoiceForPayment.installments || []).reduce((sum: number, i: any) => sum + (i.amount || 0), 0);
+                          const installmentsAreInChf = Math.abs(totalInstallmentAmountAsChf - invoiceAmountChf) < invoiceAmountChf * 0.1;
+                          
+                          const installmentAmount = selectedInstallment.amount || 0;
+                          const paidAmount = selectedInstallment.paidAmount || 0;
+                          const paidAmountChf = convertPaidAmountToChf(paidAmount, installmentAmount, installmentsAreInChf);
+                          
+                          const amountInRappen = installmentsAreInChf 
+                            ? installmentAmount * 100
+                            : installmentAmount;
+                          const installmentAmountChf = amountInRappen / 100;
+                          const installmentPaidAmountChf = paidAmountChf;
+                          const remaining = installmentAmountChf - installmentPaidAmountChf;
                           if (amount > remaining) {
                             toast.error(`Betrag darf nicht größer als ${formatAmount(remaining * 100)} sein`);
                             return;
                           }
                           try {
-                            await recordInstallmentPayment(
+                            const result = await recordInstallmentPayment(
                               person.id,
                               selectedInvoiceForPayment.id,
                               selectedInstallment.number,
                               amount,
                               new Date()
                             );
+                            if (process.env.NODE_ENV === 'development') {
+                              console.log('[Ratenverwaltung] Zahlung erfasst:', { 
+                                installmentNumber: selectedInstallment.number,
+                                amount,
+                                result 
+                              });
+                            }
                             toast.success('Zahlung erfolgreich erfasst');
                             setSelectedInstallment(null);
                             setPaymentAmount('');
-                            try {
-                              await refreshData();
-                              // Update selected invoice to show latest data
-                              const updatedInvoice = invoices.find((inv: any) => inv.id === selectedInvoiceForPayment.id);
-                              if (updatedInvoice) {
-                                setSelectedInvoiceForPayment(updatedInvoice);
+                            // Refresh data - useEffect will update selectedInvoiceForPayment automatically
+                            await refreshData();
+                            // Warte kurz, damit die Daten aktualisiert werden können
+                            setTimeout(async () => {
+                              // Aktualisiere selectedInvoiceForPayment explizit
+                              await refetchInvoices();
+                              if (process.env.NODE_ENV === 'development') {
+                                console.log('[Ratenverwaltung] Daten nach Zahlung aktualisiert');
                               }
-                            } catch (refreshError) {
-                              // Silently fail - data will refresh on next dialog open
-                            }
+                              // Der useEffect wird selectedInvoiceForPayment automatisch aktualisieren
+                            }, 200);
                           } catch (error: any) {
+                            if (process.env.NODE_ENV === 'development') {
+                              console.error('[Ratenverwaltung] Fehler beim Erfassen der Zahlung:', error);
+                            }
                             toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
                           }
                         }}

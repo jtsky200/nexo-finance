@@ -4,7 +4,27 @@ import { getFirestore } from "firebase/firestore";
 import { getAnalytics } from "firebase/analytics";
 import { getFunctions } from "firebase/functions";
 
-// Firebase configuration from user's project
+/**
+ * Firebase Configuration
+ * 
+ * NOTE: The API key in this configuration is PUBLIC and is intended for client-side use.
+ * This is standard practice for Firebase client SDKs. The API key alone does not provide
+ * access to your Firebase resources - it only identifies your Firebase project.
+ * 
+ * Security is enforced through:
+ * 1. Firestore Security Rules (firestore.rules) - All database access is controlled
+ * 2. Firebase Authentication - User authentication is required for all operations
+ * 3. Firebase Cloud Functions - Server-side logic validates all requests
+ * 4. Firebase App Check (if enabled) - Prevents abuse from unauthorized apps
+ * 
+ * IMPORTANT: Never commit sensitive data or server-side secrets to this file.
+ * All sensitive operations are handled server-side via Firebase Cloud Functions.
+ * 
+ * For production deployments, consider using environment variables for different environments:
+ * - Development: Use Firebase emulator or development project
+ * - Staging: Use staging Firebase project
+ * - Production: Use production Firebase project
+ */
 const firebaseConfig = {
   apiKey: "AIzaSyCZ8V17HUVMlBKXK0ftrMURS-XP2zIsOps",
   authDomain: "nexo-jtsky100.firebaseapp.com",
@@ -21,7 +41,8 @@ const app = initializeApp(firebaseConfig);
 // Initialize Firebase services
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-export const functions = getFunctions(app);
+// Initialize Functions with explicit region (us-central1)
+export const functions = getFunctions(app, 'us-central1');
 
 // Initialize analytics only in browser environment
 let analytics;

@@ -183,49 +183,65 @@ export default function AIChat() {
   }, [isLoadingHistory, chatHistory, currentChatId, refetchHistory]);
   
   const [messages, setMessages] = useState<Message[]>([SYSTEM_MESSAGE]);
+  const lastChatIdRef = useRef<string | null>(null);
+  const isSavingRef = useRef(false);
 
-  // Load messages when chat changes
+  // Load messages when chat changes (only when currentChatId changes, not when chatHistory updates)
   useEffect(() => {
-    if (currentChatId && chatHistory.length > 0) {
-      const chat = getChatConversation(currentChatId, chatHistory);
-      if (chat && chat.messages.length > 0) {
-        setMessages(chat.messages);
+    // Only reload messages if the chat ID actually changed
+    if (currentChatId && currentChatId !== lastChatIdRef.current) {
+      lastChatIdRef.current = currentChatId;
+      
+      if (chatHistory.length > 0) {
+        const chat = getChatConversation(currentChatId, chatHistory);
+        if (chat && chat.messages.length > 0) {
+          setMessages(chat.messages);
+        } else {
+          setMessages([SYSTEM_MESSAGE]);
+        }
       } else {
         setMessages([SYSTEM_MESSAGE]);
       }
     }
-  }, [currentChatId, chatHistory]);
+  }, [currentChatId, chatHistory]); // Include chatHistory but only reload if chatId changed
 
   // Save messages to chat history (debounced)
   useEffect(() => {
+    // Don't save if we're currently saving (to avoid race conditions)
+    if (isSavingRef.current) return;
+    
     if (currentChatId && messages.length > 1) { // More than just system message
       const timeoutId = setTimeout(async () => {
-        const chat = getChatConversation(currentChatId, chatHistory);
-        if (chat) {
-          // Generate title from first user message if not set
-          const firstUserMessage = messages.find(m => m.role === 'user');
-          if (firstUserMessage && chat.title === 'Neue Konversation') {
-            chat.title = generateChatTitle(firstUserMessage.content);
-          }
-          
-          chat.messages = messages;
-          chat.updatedAt = new Date().toISOString();
-          
-          try {
-            await saveChatConversation(chat);
-            refetchHistory();
-          } catch (error) {
-            const isDev = typeof (globalThis as any).process !== 'undefined' && (globalThis as any).process?.env?.NODE_ENV === 'development';
-            if (isDev) {
-              console.error('Error saving chat:', error);
+        isSavingRef.current = true;
+        try {
+          const chat = getChatConversation(currentChatId, chatHistory);
+          if (chat) {
+            // Generate title from first user message if not set
+            const firstUserMessage = messages.find(m => m.role === 'user');
+            if (firstUserMessage && chat.title === 'Neue Konversation') {
+              chat.title = generateChatTitle(firstUserMessage.content);
             }
+            
+            chat.messages = messages;
+            chat.updatedAt = new Date().toISOString();
+            
+            await saveChatConversation(chat);
+            // Don't refetch immediately - let it happen naturally or on next interaction
+            // refetchHistory(); // Removed to prevent race condition
           }
+        } catch (error) {
+          const isDev = typeof (globalThis as any).process !== 'undefined' && (globalThis as any).process?.env?.NODE_ENV === 'development';
+          if (isDev) {
+            console.error('Error saving chat:', error);
+          }
+        } finally {
+          isSavingRef.current = false;
         }
       }, 1000); // Debounce by 1 second
       
       return () => clearTimeout(timeoutId);
     }
-  }, [messages, currentChatId, chatHistory, refetchHistory]);
+  }, [messages, currentChatId, chatHistory]);
 
   const handleNewConversation = useCallback(async () => {
     const newChat = createNewChat();

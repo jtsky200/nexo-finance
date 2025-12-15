@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { 
   Plus, Trash2, Edit2, Eye, Search, 
   Phone, Mail, Filter, FileText, Users, UserPlus, Building2,
-  ArrowDownLeft, ArrowUpRight, Home
+  ArrowDownLeft, ArrowUpRight, Home, Baby
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { usePeople, createPerson, deletePerson, updatePerson } from '@/lib/firebaseHooks';
@@ -37,7 +37,7 @@ export default function People() {
     email: '',
     phone: '',
     currency: 'CHF',
-    type: 'household' as 'household' | 'external',
+    type: 'household' as 'household' | 'external' | 'child',
     relationship: 'both' as 'creditor' | 'debtor' | 'both',
     notes: ''
   });
@@ -139,15 +139,15 @@ export default function People() {
     try {
       await createPerson({
         name: newPerson.name.trim(),
-        email: newPerson.email.trim() || null,
-        phone: newPerson.phone.trim() || null,
+        email: newPerson.type === 'child' ? null : (newPerson.email.trim() || null),
+        phone: newPerson.type === 'child' ? null : (newPerson.phone.trim() || null),
         currency: newPerson.currency,
         type: newPerson.type,
         relationship: newPerson.type === 'external' ? newPerson.relationship : null,
         notes: newPerson.notes.trim() || null,
       });
       
-      toast.success('Person hinzugefügt');
+      toast.success(newPerson.type === 'child' ? 'Kind hinzugefügt' : 'Person hinzugefügt');
       setNewPerson({ name: '', email: '', phone: '', currency: 'CHF', type: 'household', relationship: 'both', notes: '' });
       setShowAddDialog(false);
       refetch();
@@ -165,8 +165,8 @@ export default function People() {
     try {
       await updatePerson(selectedPerson.id, {
         name: selectedPerson.name.trim(),
-        email: selectedPerson.email?.trim() || '',
-        phone: selectedPerson.phone?.trim() || '',
+        email: selectedPerson.type === 'child' ? null : (selectedPerson.email?.trim() || null),
+        phone: selectedPerson.type === 'child' ? null : (selectedPerson.phone?.trim() || null),
         type: selectedPerson.type,
         relationship: selectedPerson.type === 'external' ? selectedPerson.relationship : null,
         notes: selectedPerson.notes?.trim() || '',
@@ -194,7 +194,7 @@ export default function People() {
     }
   };
 
-  const openAddDialog = (type: 'household' | 'external') => {
+  const openAddDialog = (type: 'household' | 'external' | 'child') => {
     setNewPerson({ ...newPerson, type });
     setShowAddDialog(true);
   };
@@ -215,6 +215,12 @@ export default function People() {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold">{person.name}</h3>
+                {person.type === 'child' && (
+                  <Badge variant="outline" className="text-xs border-purple-300 text-purple-700">
+                    <Baby className="w-3 h-3 mr-1" />
+                    Kind
+                  </Badge>
+                )}
                 {isExternal && person.relationship && (
                   <Badge variant="outline" className="text-xs">
                     {person.relationship === 'creditor' ? 'Ich schulde' : 
@@ -330,10 +336,18 @@ export default function People() {
               </TabsTrigger>
             </TabsList>
             
-            <Button onClick={() => openAddDialog(activeTab)}>
-              <UserPlus className="w-4 h-4 mr-2" />
-              {activeTab === 'household' ? 'Haushaltsmitglied' : 'Externe Person'}
-            </Button>
+            <div className="flex gap-2">
+              {activeTab === 'household' && (
+                <Button variant="outline" onClick={() => openAddDialog('child')}>
+                  <Baby className="w-4 h-4 mr-2" />
+                  Kind hinzufügen
+                </Button>
+              )}
+              <Button onClick={() => openAddDialog(activeTab === 'household' ? 'household' : 'external')}>
+                <UserPlus className="w-4 h-4 mr-2" />
+                {activeTab === 'household' ? 'Haushaltsmitglied' : 'Externe Person'}
+              </Button>
+            </div>
           </div>
 
           {/* Household Tab */}
@@ -513,7 +527,9 @@ export default function People() {
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>
-              {newPerson.type === 'household' ? 'Haushaltsmitglied hinzufügen' : 'Externe Person hinzufügen'}
+              {newPerson.type === 'household' ? 'Haushaltsmitglied hinzufügen' : 
+               newPerson.type === 'child' ? 'Kind hinzufügen' : 
+               'Externe Person hinzufügen'}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -527,6 +543,11 @@ export default function People() {
                   <SelectItem value="household">
                     <span className="flex items-center gap-2">
                       <Home className="w-4 h-4" /> Haushaltsmitglied
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="child">
+                    <span className="flex items-center gap-2">
+                      <Baby className="w-4 h-4" /> Kind
                     </span>
                   </SelectItem>
                   <SelectItem value="external">
@@ -576,28 +597,30 @@ export default function People() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>E-Mail</Label>
-                <Input
-                  type="email"
-                  value={newPerson.email}
-                  onChange={(e) => setNewPerson({ ...newPerson, email: e.target.value })}
-                  placeholder="email@beispiel.ch"
-                  className="mt-2"
-                />
+            {newPerson.type !== 'child' && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>E-Mail</Label>
+                  <Input
+                    type="email"
+                    value={newPerson.email}
+                    onChange={(e) => setNewPerson({ ...newPerson, email: e.target.value })}
+                    placeholder="email@beispiel.ch"
+                    className="mt-2"
+                  />
+                </div>
+                <div>
+                  <Label>Telefon</Label>
+                  <Input
+                    type="tel"
+                    value={newPerson.phone}
+                    onChange={(e) => setNewPerson({ ...newPerson, phone: e.target.value })}
+                    placeholder="+41 79 123 45 67"
+                    className="mt-2"
+                  />
+                </div>
               </div>
-              <div>
-                <Label>Telefon</Label>
-                <Input
-                  type="tel"
-                  value={newPerson.phone}
-                  onChange={(e) => setNewPerson({ ...newPerson, phone: e.target.value })}
-                  placeholder="+41 79 123 45 67"
-                  className="mt-2"
-                />
-              </div>
-            </div>
+            )}
 
             <div>
               <Label>Notizen</Label>
@@ -637,6 +660,11 @@ export default function People() {
                         <Home className="w-4 h-4" /> Haushaltsmitglied
                       </span>
                     </SelectItem>
+                    <SelectItem value="child">
+                      <span className="flex items-center gap-2">
+                        <Baby className="w-4 h-4" /> Kind
+                      </span>
+                    </SelectItem>
                     <SelectItem value="external">
                       <span className="flex items-center gap-2">
                         <Building2 className="w-4 h-4" /> Externe Person
@@ -671,26 +699,28 @@ export default function People() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>E-Mail</Label>
-                  <Input
-                    type="email"
-                    value={selectedPerson.email || ''}
-                    onChange={(e) => setSelectedPerson({ ...selectedPerson, email: e.target.value })}
-                    className="mt-2"
-                  />
+              {selectedPerson.type !== 'child' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>E-Mail</Label>
+                    <Input
+                      type="email"
+                      value={selectedPerson.email || ''}
+                      onChange={(e) => setSelectedPerson({ ...selectedPerson, email: e.target.value })}
+                      className="mt-2"
+                    />
+                  </div>
+                  <div>
+                    <Label>Telefon</Label>
+                    <Input
+                      type="tel"
+                      value={selectedPerson.phone || ''}
+                      onChange={(e) => setSelectedPerson({ ...selectedPerson, phone: e.target.value })}
+                      className="mt-2"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label>Telefon</Label>
-                  <Input
-                    type="tel"
-                    value={selectedPerson.phone || ''}
-                    onChange={(e) => setSelectedPerson({ ...selectedPerson, phone: e.target.value })}
-                    className="mt-2"
-                  />
-                </div>
-              </div>
+              )}
 
               <div>
                 <Label>Notizen</Label>

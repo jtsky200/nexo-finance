@@ -49,13 +49,34 @@ export const currencyUtils = { roundToSwiss5Rappen, chfToRappen, rappenToChf };
 
 // Define the secret for OpenAI API Key
 const openaiApiKeySecret = defineSecret('OPENAI_API_KEY');
+// Define the secret for OpenWeatherMap API Key (Phase 1)
+const openWeatherMapApiKey = defineSecret('OPENWEATHERMAP_API_KEY');
 
 // Initialize tRPC for Firebase Functions without transformer (superjson is ESM only)
 // We'll handle serialization manually if needed
 const t = initTRPC.context<{
   user: any | null;
   req: Request;
-}>().create();
+}>().create({
+  errorFormatter({ shape, error, ctx }) {
+    // Extract Request ID from context if available
+    let requestId: string | undefined;
+    if (ctx?.req) {
+      const traceHeader = ctx.req.headers.get('x-cloud-trace-context');
+      const googRequestId = ctx.req.headers.get('x-goog-request-id');
+      requestId = traceHeader?.split('/')[0] || googRequestId || undefined;
+    }
+    
+    return {
+      ...shape,
+      data: {
+        ...shape.data,
+        requestId, // Include Request ID in error data
+        httpStatus: shape.data.httpStatus ?? 500,
+      },
+    };
+  },
+});
 
 export const router = t.router;
 export const publicProcedure = t.procedure;
@@ -130,7 +151,17 @@ async function createContext(opts: { req: Request }): Promise<{ user: any | null
   } catch (error) {
     // Authentication is optional for public procedures
     // Log error for debugging but don't throw
-    console.error('[tRPC] Auth error:', error);
+    const requestId = opts.req.headers.get('x-cloud-trace-context')?.split('/')[0] || 
+                     opts.req.headers.get('x-goog-request-id') ||
+                     'unknown';
+    console.error('[tRPC] Auth error:', {
+      requestId,
+      error: error instanceof Error ? {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+      } : error,
+    });
     user = null;
   }
 
@@ -385,6 +416,38 @@ WICHTIG: Verwende diese Funktion wenn der Nutzer fragt:
             reminderId: { type: 'string', description: 'ID der zu löschenden Erinnerung' },
           },
           required: ['reminderId'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'createQuickReminder',
+        description: 'Erstellt eine kurzfristige Erinnerung (z.B. "Erinnere mich in 5 Minuten an den Kochherd"). Perfekt für sofortige oder kurzfristige Erinnerungen. Die Erinnerung wird automatisch in X Minuten ausgelöst.',
+        parameters: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Titel der Erinnerung (z.B. "Kochherd ausschalten")' },
+            minutesFromNow: { type: 'number', description: 'Anzahl Minuten bis zur Erinnerung (Standard: 5, Minimum: 1, Maximum: 1440 = 24 Stunden)' },
+            notes: { type: 'string', description: 'Zusätzliche Notizen (optional)' },
+          },
+          required: ['title'],
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'createFollowUpReminder',
+        description: 'Erstellt eine Follow-up-Erinnerung basierend auf einer bestehenden Erinnerung. Wird verwendet, wenn der Benutzer nach einer Erinnerung gefragt wird, ob er nochmal erinnert werden soll.',
+        parameters: {
+          type: 'object',
+          properties: {
+            originalReminderId: { type: 'string', description: 'ID der ursprünglichen Erinnerung' },
+            minutesFromNow: { type: 'number', description: 'Anzahl Minuten bis zur Follow-up-Erinnerung (Standard: 15)' },
+            title: { type: 'string', description: 'Titel für die Follow-up-Erinnerung (optional, verwendet sonst den Originaltitel)' },
+          },
+          required: ['originalReminderId'],
         },
       },
     },
@@ -795,6 +858,44 @@ Die Funktion:
           properties: {
             includeDetails: { type: 'boolean', description: 'Detaillierte Daten einschließen? (Standard: false für Übersicht)' },
           },
+        },
+      },
+    },
+    
+    // ========== WETTER (Phase 1) ==========
+    {
+      type: 'function',
+      function: {
+        name: 'getWeather',
+        description: `Ruft Wetterdaten für ein bestimmtes Datum und einen Standort ab. 
+        
+WICHTIG - Verwende diese Funktion IMMER wenn:
+- Der Benutzer einen Termin oder eine Erinnerung für draußen erstellt (z.B. "spazieren gehen", "im Park", "draußen", "outdoor", "Fahrrad fahren", "Picknick", "Grillen")
+- Der Benutzer direkt nach Wetter fragt
+- Eine Aktivität offensichtlich im Freien stattfindet
+
+Erkenne Outdoor-Aktivitäten an Begriffen wie: spazieren, Park, draußen, outdoor, Fahrrad, Picknick, Grillen, Camping, Sport im Freien, etc.
+
+Gib nach dem Abruf der Wetterdaten hilfreiche Warnungen:
+- Temperaturen unter 5°C: Warnung vor Kälte, warme Kleidung empfehlen
+- Temperaturen 5-10°C: Kühle Temperaturen, Jacke empfehlen
+- Regen/Niederschlag: Regenschirm oder Regenjacke empfehlen
+- Wind über 20 km/h: Windige Bedingungen warnen
+- Wind über 40 km/h: Starker Wind, Vorsicht bei Outdoor-Aktivitäten
+- Hohe Luftfeuchtigkeit (>80%): Feuchte Bedingungen erwähnen`,
+        parameters: {
+          type: 'object',
+          properties: {
+            date: {
+              type: 'string',
+              description: 'Datum im ISO-Format (YYYY-MM-DD) oder relative Angaben wie "heute", "morgen", "übermorgen". Für Termine verwende das dueDate des Termins.',
+            },
+            location: {
+              type: 'string',
+              description: 'Standort (z.B. "Zurich, CH"). Optional, verwendet Standard-Standort aus Einstellungen wenn nicht angegeben.',
+            },
+          },
+          required: ['date'],
         },
       },
     },
@@ -1401,14 +1502,30 @@ async function executeFunction(functionName: string, args: any, userId: string):
     case 'createReminder': {
       const { title, dueDate, type, personId, personName, amount, currency, notes, recurring, recurringFrequency } = args;
       
-      // Parse and validate date
+      // Parse and validate date - normalize to avoid timezone issues
       const parsedDate = new Date(dueDate);
       if (isNaN(parsedDate.getTime())) {
         return { error: `Ungültiges Datum: ${dueDate}. Format: YYYY-MM-DD oder YYYY-MM-DDTHH:mm:ss` };
       }
 
-      // WICHTIG: Prüfe, ob das Datum in der Zukunft liegt
-      if (parsedDate < swissTime) {
+      // Normalize date to avoid timezone shifts
+      // Extract date components to create a clean date object
+      const normalizedDate = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
+      
+      // If time is provided in the date string, preserve it; otherwise default to noon
+      if (dueDate.includes('T') && dueDate.includes(':')) {
+        // Time is specified, preserve it
+        normalizedDate.setHours(parsedDate.getHours(), parsedDate.getMinutes(), parsedDate.getSeconds(), parsedDate.getMilliseconds());
+      } else {
+        // No time specified, default to noon to avoid timezone issues
+        normalizedDate.setHours(12, 0, 0, 0);
+      }
+
+      // WICHTIG: Prüfe, ob das Datum in der Zukunft liegt (compare dates only, not time)
+      const normalizedSwissTime = new Date(swissTime.getFullYear(), swissTime.getMonth(), swissTime.getDate());
+      const normalizedRequestDate = new Date(normalizedDate.getFullYear(), normalizedDate.getMonth(), normalizedDate.getDate());
+      
+      if (normalizedRequestDate < normalizedSwissTime) {
         const tomorrow = new Date(swissTime);
         tomorrow.setDate(tomorrow.getDate() + 1);
         return { 
@@ -1428,7 +1545,7 @@ async function executeFunction(functionName: string, args: any, userId: string):
       const reminderData: any = {
         userId,
         title,
-        dueDate: admin.firestore.Timestamp.fromDate(parsedDate),
+        dueDate: admin.firestore.Timestamp.fromDate(normalizedDate),
         type: type || 'reminder',
         status: 'pending',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1450,6 +1567,94 @@ async function executeFunction(functionName: string, args: any, userId: string):
         reminderId: reminderRef.id,
         message: `Erinnerung "${title}" für ${parsedDate.toLocaleDateString('de-CH')} wurde erstellt.`,
         dueDate: parsedDate.toISOString(),
+      };
+    }
+
+    case 'createQuickReminder': {
+      const { title, minutesFromNow = 5, notes } = args;
+      
+      if (!title || typeof title !== 'string' || title.trim().length === 0) {
+        return { error: 'title ist erforderlich' };
+      }
+
+      const minutes = Math.max(1, Math.min(1440, Math.round(minutesFromNow || 5)));
+
+      // Calculate due date
+      const dueDate = new Date(swissTime.getTime() + minutes * 60 * 1000);
+      const dueDateTimestamp = admin.firestore.Timestamp.fromDate(dueDate);
+
+      // Create reminder
+      const reminderData: any = {
+        userId,
+        title: title.trim(),
+        type: 'erinnerung',
+        dueDate: dueDateTimestamp,
+        isAllDay: false,
+        notes: notes || null,
+        status: 'offen',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+
+      const reminderRef = await db.collection('reminders').add(reminderData);
+
+      console.log(`[createQuickReminder] Created quick reminder ${reminderRef.id} for ${minutes} minutes`);
+
+      return {
+        success: true,
+        reminderId: reminderRef.id,
+        message: `Erinnerung "${title}" wurde für ${minutes} Minuten erstellt.`,
+        dueDate: dueDate.toISOString(),
+        minutesFromNow: minutes,
+      };
+    }
+
+    case 'createFollowUpReminder': {
+      const { originalReminderId, minutesFromNow = 15, title } = args;
+      
+      if (!originalReminderId) {
+        return { error: 'originalReminderId ist erforderlich' };
+      }
+
+      // Get original reminder
+      const originalReminderRef = db.collection('reminders').doc(originalReminderId);
+      const originalReminderDoc = await originalReminderRef.get();
+
+      if (!originalReminderDoc.exists || originalReminderDoc.data()?.userId !== userId) {
+        return { error: 'Ursprüngliche Erinnerung nicht gefunden oder nicht autorisiert' };
+      }
+
+      const originalReminder = originalReminderDoc.data();
+      const minutes = Math.max(1, Math.min(1440, Math.round(minutesFromNow || 15)));
+
+      // Calculate due date
+      const dueDate = new Date(swissTime.getTime() + minutes * 60 * 1000);
+      const dueDateTimestamp = admin.firestore.Timestamp.fromDate(dueDate);
+
+      // Use provided title or original reminder title
+      const reminderTitle = title?.trim() || originalReminder?.title || 'Erinnerung';
+
+      // Create follow-up reminder
+      const reminderData: any = {
+        userId,
+        title: reminderTitle,
+        type: originalReminder?.type || 'erinnerung',
+        dueDate: dueDateTimestamp,
+        isAllDay: false,
+        notes: originalReminder?.notes || null,
+        status: 'offen',
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+
+      const reminderRef = await db.collection('reminders').add(reminderData);
+
+      return {
+        success: true,
+        reminderId: reminderRef.id,
+        message: `Follow-up-Erinnerung "${reminderTitle}" wurde für ${minutes} Minuten erstellt.`,
+        dueDate: dueDate.toISOString(),
+        minutesFromNow: minutes,
       };
     }
 
@@ -2197,10 +2402,13 @@ async function executeFunction(functionName: string, args: any, userId: string):
           if (dueDate && dueDate >= start && dueDate <= end) {
             events.push({
               id: doc.id,
-              type: 'reminder',
+              type: data.type || 'reminder', // Preserve original type (termin, erinnerung, etc.)
               title: data.title,
               date: dueDate.toISOString(),
+              time: data.isAllDay ? null : (dueDate.toTimeString().slice(0, 5)),
               status: data.status,
+              description: data.notes || null,
+              isAllDay: data.isAllDay || false,
             });
           }
         });
@@ -2486,8 +2694,447 @@ async function executeFunction(functionName: string, args: any, userId: string):
       return summary;
     }
 
+    // ========== WETTER (Phase 1) ==========
+    case 'getWeather': {
+      const { date, location } = args;
+      
+      console.log('[getWeather] Called with args:', { date, location });
+      
+      if (!date) {
+        return { error: 'date ist erforderlich' };
+      }
+
+      try {
+        // Parse date
+        let weatherDate = new Date();
+        if (date === 'heute' || date === 'today') {
+          weatherDate = new Date();
+        } else if (date === 'morgen' || date === 'tomorrow') {
+          weatherDate = new Date();
+          weatherDate.setDate(weatherDate.getDate() + 1);
+        } else if (date === 'übermorgen' || date === 'day after tomorrow') {
+          weatherDate = new Date();
+          weatherDate.setDate(weatherDate.getDate() + 2);
+        } else {
+          try {
+            // Try parsing as ISO date string (YYYY-MM-DD) or full date string
+            weatherDate = new Date(date);
+            if (isNaN(weatherDate.getTime())) {
+              // Try parsing German date format (e.g., "17. Dezember 2025")
+              const dateMatch = date.match(/(\d{1,2})\.?\s*(?:Januar|Februar|März|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s*(\d{4})/i);
+              if (dateMatch) {
+                const day = parseInt(dateMatch[1]);
+                const year = parseInt(dateMatch[2]);
+                const monthNames = ['januar', 'februar', 'märz', 'april', 'mai', 'juni', 'juli', 'august', 'september', 'oktober', 'november', 'dezember'];
+                const month = monthNames.findIndex(m => date.toLowerCase().includes(m));
+                if (month >= 0) {
+                  weatherDate = new Date(year, month, day);
+                } else {
+                  return { error: `Ungültiges Datum: ${date}` };
+                }
+              } else {
+                return { error: `Ungültiges Datum: ${date}` };
+              }
+            }
+          } catch (e) {
+            console.error('[getWeather] Date parsing error:', e);
+            return { error: `Ungültiges Datum: ${date}` };
+          }
+        }
+        
+        // Normalize date to start of day
+        weatherDate.setHours(0, 0, 0, 0);
+        
+        console.log('[getWeather] Parsed date:', {
+          input: date,
+          parsed: weatherDate.toISOString(),
+          dateStr: weatherDate.toISOString().split('T')[0],
+        });
+
+        // Check if date is within 5 days (forecast limit)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const daysDiff = Math.ceil((weatherDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (daysDiff > 5) {
+          return { 
+            error: `Wettervorhersage für dieses Datum nicht verfügbar`,
+            reason: 'forecast_limit',
+            message: `Die Wettervorhersage ist nur für die nächsten 5 Tage verfügbar. Das angefragte Datum liegt ${daysDiff} Tage in der Zukunft. Bitte prüfe das Wetter kurz vor dem Termin.`
+          };
+        }
+
+        // Use the helper function
+        console.log('[getWeather] Calling getWeatherForAI with:', {
+          date: weatherDate.toISOString(),
+          location: location || 'default',
+        });
+        
+        const weatherData = await getWeatherForAI(userId, weatherDate, location);
+        
+        console.log('[getWeather] Received weather data:', weatherData ? {
+          temperature: weatherData.temperature,
+          condition: weatherData.condition,
+          date: weatherData.date,
+          forecastTime: weatherData.forecastTime,
+        } : 'null');
+        
+        if (!weatherData) {
+          return { 
+            error: 'Keine Wetterdaten verfügbar für dieses Datum',
+            reason: 'api_error',
+            message: 'Die Wetterdaten konnten nicht abgerufen werden. Bitte versuche es später erneut oder prüfe das Wetter kurz vor dem Termin.'
+          };
+        }
+
+        return weatherData;
+      } catch (error: any) {
+        console.error('[getWeather] Error:', error);
+        return { error: `Fehler beim Abrufen der Wetterdaten: ${error.message || 'Unbekannter Fehler'}` };
+      }
+    }
+
     default:
       throw new Error(`Unknown function: ${functionName}`);
+  }
+}
+
+// Helper function to get weather data for AI (Phase 1) - copied from index.ts
+async function getWeatherForAI(userId: string, date: Date, location?: string): Promise<any> {
+  const db = admin.firestore();
+  try {
+    // Get user location from settings if not provided
+    if (!location) {
+      const settingsDoc = await db.collection('userSettings').doc(userId).get();
+      location = settingsDoc.exists ? (settingsDoc.data()?.weatherLocation || 'Zurich, CH') : 'Zurich, CH';
+    }
+
+    const dateStr = date.toISOString().split('T')[0];
+    const validatedLocation = (location || 'Zurich, CH').trim();
+    
+    // Determine if this is a future date (forecast) or today (current)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const requestDate = new Date(date);
+    requestDate.setHours(0, 0, 0, 0);
+    const isFuture = requestDate > today;
+    const isToday = requestDate.getTime() === today.getTime();
+    
+    console.log('[getWeatherForAI] Request:', {
+      date: dateStr,
+      location: validatedLocation,
+      isToday,
+      isFuture,
+      daysDiff: isFuture ? Math.ceil((requestDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 0,
+    });
+
+    // For future dates, cache is less reliable - only use if very recent (within 1 hour)
+    // For today, cache is more reliable (can use older cache)
+    const maxCacheAgeForFuture = 1 * 60 * 60 * 1000; // 1 hour for future dates
+    const maxCacheAgeForToday = 6 * 60 * 60 * 1000; // 6 hours for today
+    
+    // Check cache first
+    const weatherQuery = db.collection('weatherData')
+      .where('userId', '==', userId)
+      .where('date', '==', dateStr)
+      .where('location', '==', validatedLocation);
+
+    const snapshot = await weatherQuery.limit(1).get();
+
+    if (!snapshot.empty) {
+      const doc = snapshot.docs[0];
+      const data = doc.data();
+      const cachedDate = data.fetchedAt?.toDate?.() || data.fetchedAt;
+      const cacheAge = cachedDate ? Date.now() - cachedDate.getTime() : Infinity;
+      const maxCacheAge = isFuture ? maxCacheAgeForFuture : maxCacheAgeForToday;
+      
+      if (cacheAge < maxCacheAge) {
+        console.log('[getWeatherForAI] Using cached data:', {
+          date: dateStr,
+          temperature: data.temperature,
+          condition: data.condition,
+          cacheAgeHours: Math.floor(cacheAge / (1000 * 60 * 60)),
+          cachedAt: cachedDate?.toISOString(),
+          isFuture,
+        });
+        
+        return {
+          temperature: data.temperature,
+          condition: data.condition,
+          icon: data.icon,
+          humidity: data.humidity || null,
+          windSpeed: data.windSpeed || null,
+          location: validatedLocation,
+          date: dateStr,
+          fromCache: true,
+        };
+      } else {
+        console.log('[getWeatherForAI] Cache too old, fetching fresh data:', {
+          cacheAgeHours: Math.floor(cacheAge / (1000 * 60 * 60)),
+          maxCacheAgeHours: Math.floor(maxCacheAge / (1000 * 60 * 60)),
+        });
+      }
+    } else {
+      console.log('[getWeatherForAI] No cache found, fetching from API');
+    }
+
+    // Fetch from API if not cached
+    const apiKey = openWeatherMapApiKey.value()?.trim();
+    if (!apiKey) {
+      console.error('[getWeatherForAI] No API key available');
+      return null;
+    }
+
+    console.log('[getWeatherForAI] Fetching from API:', {
+      location: validatedLocation,
+      date: date.toISOString(),
+      dateStr: dateStr,
+    });
+
+    const apiWeather = await fetchWeatherFromAPI(validatedLocation, date, apiKey);
+    
+    console.log('[getWeatherForAI] API response:', apiWeather ? {
+      temperature: apiWeather.temperature,
+      condition: apiWeather.condition,
+      forecastTime: apiWeather.forecastTime,
+    } : 'null');
+    
+    if (!apiWeather) {
+      console.error('[getWeatherForAI] No weather data from API');
+      return null;
+    }
+
+    // Cache the result
+    const weatherData: any = {
+      userId,
+      date: dateStr,
+      location: validatedLocation,
+      temperature: apiWeather.temperature,
+      condition: apiWeather.condition,
+      icon: apiWeather.icon,
+      humidity: apiWeather.humidity || null,
+      windSpeed: apiWeather.windSpeed || null,
+      cached: false,
+      fetchedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    await db.collection('weatherData').add(weatherData);
+
+    return {
+      temperature: apiWeather.temperature,
+      condition: apiWeather.condition,
+      icon: apiWeather.icon,
+      humidity: apiWeather.humidity || null,
+      windSpeed: apiWeather.windSpeed || null,
+      location: validatedLocation,
+      date: dateStr,
+      forecastTime: apiWeather.forecastTime || null,
+      fromCache: false,
+    };
+  } catch (error: any) {
+    console.error('[getWeatherForAI] Error:', error);
+    return null;
+  }
+}
+
+// Helper function to map OpenWeatherMap icon codes to our icon names
+function mapWeatherIcon(iconCode: string): string {
+  const iconMap: { [key: string]: string } = {
+    '01d': 'sun',        '01n': 'sun',
+    '02d': 'cloud-sun',  '02n': 'cloud-sun',
+    '03d': 'cloud',      '03n': 'cloud',
+    '04d': 'cloud',      '04n': 'cloud',
+    '09d': 'rain',       '09n': 'rain',
+    '10d': 'rain',       '10n': 'rain',
+    '11d': 'rain',       '11n': 'rain',
+    '13d': 'rain',       '13n': 'rain', // snow -> rain (no snow icon available)
+    '50d': 'cloud',      '50n': 'cloud',
+  };
+  return iconMap[iconCode] || 'cloud';
+}
+
+// Helper function to map OpenWeatherMap weather condition to German
+function mapWeatherCondition(condition: string): string {
+  const conditionMap: { [key: string]: string } = {
+    'clear sky': 'Klar',
+    'few clouds': 'Wenig bewölkt',
+    'scattered clouds': 'Bewölkt',
+    'broken clouds': 'Stark bewölkt',
+    'shower rain': 'Regenschauer',
+    'rain': 'Regen',
+    'thunderstorm': 'Gewitter',
+    'snow': 'Schnee',
+    'mist': 'Nebel',
+    'fog': 'Nebel',
+    'haze': 'Dunst',
+  };
+  return conditionMap[condition.toLowerCase()] || condition;
+}
+
+// Helper function to fetch weather from OpenWeatherMap API
+async function fetchWeatherFromAPI(location: string, date: Date, apiKey: string): Promise<any> {
+  if (!apiKey) {
+    return null;
+  }
+
+  try {
+    const axios = require('axios');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const requestDate = new Date(date);
+    requestDate.setHours(0, 0, 0, 0);
+    
+    const isFuture = requestDate > today;
+    const isPast = requestDate < today;
+    const isToday = requestDate.getTime() === today.getTime();
+
+    if (isToday) {
+      // Use current weather API for today
+      const url = `https://api.openweathermap.org/data/2.5/weather`;
+      const params: any = {
+        q: location,
+        appid: apiKey,
+        units: 'metric',
+        lang: 'de',
+      };
+      
+      console.log('[fetchWeatherFromAPI] Request (current):', { url, location, date: date.toISOString().split('T')[0] });
+      
+      const response = await axios.get(url, { params, timeout: 10000 });
+      const data = response.data;
+
+      if (!data || !data.main || !data.weather || data.weather.length === 0) {
+        console.error('[fetchWeatherFromAPI] Invalid API response:', data);
+        return null;
+      }
+
+      return {
+        temperature: Math.round(data.main.temp),
+        condition: mapWeatherCondition(data.weather[0].description),
+        icon: mapWeatherIcon(data.weather[0].icon),
+        humidity: data.main.humidity || null,
+        windSpeed: data.wind?.speed ? Math.round(data.wind.speed * 3.6) : null, // Convert m/s to km/h
+      };
+    } else if (isFuture) {
+      // Use forecast API for future dates (up to 5 days)
+      const daysDiff = Math.ceil((requestDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (daysDiff > 5) {
+        // Forecast API only provides 5 days, return null for dates beyond that
+        console.log('[fetchWeatherFromAPI] Date is more than 5 days in the future, forecast not available');
+        return null;
+      }
+
+      const url = `https://api.openweathermap.org/data/2.5/forecast`;
+      const params: any = {
+        q: location,
+        appid: apiKey,
+        units: 'metric',
+        lang: 'de',
+      };
+      
+      console.log('[fetchWeatherFromAPI] Request (forecast):', { url, location, date: date.toISOString().split('T')[0], daysDiff });
+
+      const response = await axios.get(url, { params, timeout: 10000 });
+      const data = response.data;
+
+      if (!data || !data.list || !Array.isArray(data.list) || data.list.length === 0) {
+        console.error('[fetchWeatherFromAPI] Invalid forecast API response:', data);
+        return null;
+      }
+
+      // Find the forecast entry for the requested date
+      // Forecast entries are in 3-hour intervals, we want the one closest to 12:00 (noon) for that day
+      const targetDateStr = requestDate.toISOString().split('T')[0];
+      let bestForecast: any = null;
+      let bestScore = Infinity;
+
+      console.log('[fetchWeatherFromAPI] Looking for forecast for date:', targetDateStr);
+      console.log('[fetchWeatherFromAPI] Available forecasts:', data.list.length, 'entries');
+
+      for (const forecast of data.list) {
+        const forecastTime = new Date(forecast.dt * 1000);
+        const forecastDateStr = forecastTime.toISOString().split('T')[0];
+        
+        // Only consider forecasts for the target date
+        if (forecastDateStr === targetDateStr) {
+          // Calculate score: prefer forecasts closer to 12:00 (noon)
+          // Lower score = better (closer to noon)
+          const hours = forecastTime.getHours();
+          const minutes = forecastTime.getMinutes();
+          const timeOfDay = hours + minutes / 60;
+          const distanceFromNoon = Math.abs(timeOfDay - 12);
+          
+          if (distanceFromNoon < bestScore) {
+            bestForecast = forecast;
+            bestScore = distanceFromNoon;
+          }
+          
+          console.log('[fetchWeatherFromAPI] Found forecast for target date:', {
+            time: forecastTime.toISOString(),
+            temp: forecast.main?.temp,
+            distanceFromNoon: distanceFromNoon.toFixed(2),
+          });
+        }
+      }
+
+      // If no forecast found for exact date, use the closest one
+      if (!bestForecast) {
+        console.log('[fetchWeatherFromAPI] No forecast found for exact date, using closest');
+        const targetTime = requestDate.getTime();
+        let closestForecast = data.list[0];
+        let minTimeDiff = Math.abs(new Date(closestForecast.dt * 1000).getTime() - targetTime);
+
+        for (const forecast of data.list) {
+          const forecastTime = new Date(forecast.dt * 1000).getTime();
+          const timeDiff = Math.abs(forecastTime - targetTime);
+          
+          if (timeDiff < minTimeDiff) {
+            closestForecast = forecast;
+            minTimeDiff = timeDiff;
+          }
+        }
+        bestForecast = closestForecast;
+      }
+
+      if (!bestForecast || !bestForecast.main || !bestForecast.weather || bestForecast.weather.length === 0) {
+        console.error('[fetchWeatherFromAPI] No suitable forecast found');
+        return null;
+      }
+
+      const selectedTime = new Date(bestForecast.dt * 1000);
+      console.log('[fetchWeatherFromAPI] Selected forecast:', {
+        time: selectedTime.toISOString(),
+        temperature: bestForecast.main.temp,
+        condition: bestForecast.weather[0].description,
+        humidity: bestForecast.main.humidity,
+        windSpeed: bestForecast.wind?.speed,
+      });
+
+      return {
+        temperature: Math.round(bestForecast.main.temp),
+        condition: mapWeatherCondition(bestForecast.weather[0].description),
+        icon: mapWeatherIcon(bestForecast.weather[0].icon),
+        humidity: bestForecast.main.humidity || null,
+        windSpeed: bestForecast.wind?.speed ? Math.round(bestForecast.wind.speed * 3.6) : null, // Convert m/s to km/h
+        forecastTime: selectedTime.toISOString(), // Include for debugging
+      };
+    } else if (isPast) {
+      // Historical data requires paid plan or we can return cached data only
+      console.log('[fetchWeatherFromAPI] Historical data requested, returning null');
+      return null;
+    }
+
+    return null;
+  } catch (error: any) {
+    console.error('[fetchWeatherFromAPI] Error:', error);
+    if (error.response) {
+      console.error('[fetchWeatherFromAPI] API Error:', { 
+        status: error.response.status, 
+        data: error.response.data 
+      });
+    }
+    return null;
   }
 }
 
@@ -2590,6 +3237,57 @@ AKTUELLES DATUM: ${currentDate} (Schweizer Zeit, Europe/Zurich)
 BENUTZER-ID: ${firebaseUserId || 'unbekannt'}
 
 ═══════════════════════════════════════════════════════════════
+KALENDER-EVENTS & TERMINE - VOLLSTÄNDIGER ZUGRIFF!
+═══════════════════════════════════════════════════════════════
+
+WICHTIG: Du hast VOLLSTÄNDIGEN ZUGRIFF auf ALLE Termine und Events des angemeldeten Benutzers!
+
+Verwende die getCalendarEvents Function, um:
+- ALLE Termine (type: 'termin') des Benutzers abzurufen
+- ALLE Erinnerungen (type: 'reminder') des Benutzers abzurufen
+- ALLE Fälligkeiten (type: 'due') von Rechnungen abzurufen
+- ALLE Ferien (type: 'vacation') des Benutzers abzurufen
+- ALLE Arbeitspläne (type: 'work') abzurufen
+- ALLE Schulpläne (type: 'school') abzurufen
+
+Die Events werden AUTOMATISCH synchronisiert und sind IMMER aktuell!
+Wenn ein Benutzer einen Termin erstellt, ist er SOFORT über getCalendarEvents verfügbar.
+
+BEISPIEL-NUTZUNG:
+- "Welche Termine habe ich diese Woche?" → getCalendarEvents(startDate="2025-12-15", endDate="2025-12-21", type="all")
+- "Zeige mir alle Termine im Dezember" → getCalendarEvents(startDate="2025-12-01", endDate="2025-12-31", type="reminders")
+- "Habe ich heute etwas?" → getCalendarEvents(startDate="${currentDate.split('T')[0]}", endDate="${currentDate.split('T')[0]}", type="all")
+
+═══════════════════════════════════════════════════════════════
+WETTER-INTEGRATION (Phase 1-4) - WICHTIG!
+═══════════════════════════════════════════════════════════════
+
+Wenn ein Benutzer einen Termin, eine Erinnerung oder eine Aktivität erwähnt, die draußen/im Freien stattfindet, rufe IMMER die getWeather Function auf!
+
+ERKENNE OUTDOOR-AKTIVITÄTEN an folgenden Begriffen:
+- "spazieren gehen", "Spaziergang", "laufen", "joggen", "wandern"
+- "im Park", "draußen", "outdoor", "im Freien", "außen"
+- "Fahrrad fahren", "radfahren", "biken"
+- "Picknick", "Grillen", "Camping"
+- "Sport", "Training" (wenn im Freien)
+- Jede Aktivität, die offensichtlich draußen stattfindet
+
+GIB HILFREICHE WARNUNGEN basierend auf Wetterdaten:
+- Temperaturen unter 5°C: "⚠️ Es wird sehr kalt sein. Zieh dich warm an - Jacke, Schal und Handschuhe sind empfohlen!"
+- Temperaturen 5-10°C: "🌡️ Es wird kühl sein. Eine warme Jacke wäre sinnvoll."
+- Regen/Niederschlag: "☔ Es wird regnen! Nimm unbedingt einen Regenschirm oder Regenjacke mit."
+- Wind über 20 km/h: "💨 Es wird windig sein. Pass auf und halte dich warm."
+- Wind über 40 km/h: "🌪️ Starker Wind erwartet! Vorsicht bei Outdoor-Aktivitäten."
+- Hohe Luftfeuchtigkeit (>80%): "💧 Die Luftfeuchtigkeit ist hoch. Es könnte sich feucht anfühlen."
+
+WICHTIG - WENN KEINE WETTERDATEN VERFÜGBAR SIND:
+- Wenn die getWeather Function einen Fehler mit "forecast_limit" zurückgibt, bedeutet das, dass das Datum mehr als 5 Tage in der Zukunft liegt.
+- In diesem Fall: Erstelle den Termin trotzdem, aber gib eine freundliche Nachricht wie: "Ich habe den Termin erstellt. Da die Wettervorhersage nur für die nächsten 5 Tage verfügbar ist, empfehle ich dir, das Wetter kurz vor dem Termin zu prüfen, um dich passend vorzubereiten."
+- Wenn die getWeather Function einen anderen Fehler zurückgibt, erstelle den Termin trotzdem und erwähne, dass die Wetterdaten aktuell nicht verfügbar sind.
+
+Verwende die tatsächlichen Werte aus den Wetterdaten (temperature, windSpeed, humidity) in deinen Antworten, WENN sie verfügbar sind!
+
+═══════════════════════════════════════════════════════════════
 STIL UND FORMAT - PROFESSIONELL MIT APP-ICONS!
 ═══════════════════════════════════════════════════════════════
 
@@ -2666,12 +3364,40 @@ WICHTIG: Bei JEDER Frage zu Schulden oder Raten ZUERST getPersonInstallments auf
 Dies zeigt die aktuellen, korrekten Daten aus der Datenbank.
 
 ═══════════════════════════════════════════════════════════════
-TERMINE - DATUM PRÜFEN!
+TERMINE & ERINNERUNGEN - INTELLIGENTE ERSTELLUNG!
 ═══════════════════════════════════════════════════════════════
 
-1. Rufe ZUERST getCurrentDateTime auf
-2. Das Datum für createReminder MUSS nach ${currentDate} liegen!
-3. Vergangenheitsdaten werden abgelehnt
+1. STANDARD-ERINNERUNG (createReminder):
+   - Für Termine mit spezifischem Datum/Zeit
+   - Rufe ZUERST getCurrentDateTime auf
+   - Das dueDate MUSS nach ${currentDate} liegen!
+   - Beispiel: "Erinnerung für morgen um 14:00"
+
+2. KURZFRISTIGE ERINNERUNG (createQuickReminder):
+   - Für sofortige/kurzfristige Erinnerungen
+   - Beispiel: "Erinnere mich in 5 Minuten an den Kochherd"
+   - Beispiel: "Erinnere mich in 15 Minuten an die Wäsche"
+   - Verwende IMMER createQuickReminder wenn der Benutzer sagt:
+     * "Erinnere mich in X Minuten an..."
+     * "In X Minuten erinnern"
+     * "Erinnerung in X Minuten"
+   - minutesFromNow: Anzahl Minuten (1-1440)
+   - title: Woran erinnert werden soll
+
+3. FOLLOW-UP-ERINNERUNG (createFollowUpReminder):
+   - Wenn der Benutzer nach einer Erinnerung gefragt wird, ob er nochmal erinnert werden soll
+   - Wird automatisch verwendet, wenn der Benutzer "Ja" auf die Follow-up-Frage antwortet
+   - Die Erinnerungsnachricht enthält die reminderId im Text oder Kontext
+   - originalReminderId: ID der ursprünglichen Erinnerung (aus dem Kontext der Erinnerungsnachricht)
+   - minutesFromNow: Standard 15 Minuten, kann angepasst werden
+   - Wenn der Benutzer "Ja", "ja", "Ja bitte", "Gerne", "Ok" oder ähnlich antwortet:
+     → Rufe createFollowUpReminder mit der reminderId aus der letzten Erinnerungsnachricht auf
+   - Wenn der Benutzer "Nein", "nein", "Nein danke" oder ähnlich antwortet:
+     → Antworte einfach freundlich, dass keine weitere Erinnerung erstellt wird
+
+WICHTIG: 
+- Verwende createQuickReminder für natürliche Sprache wie "Erinnere mich in X Minuten"!
+- Wenn eine Erinnerungsnachricht eine Follow-up-Frage enthält und der Benutzer "Ja" sagt, rufe createFollowUpReminder auf!
 
 ═══════════════════════════════════════════════════════════════
 `,
@@ -2892,20 +3618,35 @@ TERMINE - DATUM PRÜFEN!
     // Extract text content from the message
     // Handle both single text content and array of content items
     let content = '';
+    console.log('[AI Chat] Assistant message structure:', JSON.stringify({
+      role: assistantMessage.role,
+      contentType: Array.isArray(assistantMessage.content) ? 'array' : typeof assistantMessage.content,
+      contentLength: Array.isArray(assistantMessage.content) ? assistantMessage.content.length : 1,
+    }));
+    
     if (Array.isArray(assistantMessage.content)) {
       // Find text content items
       const textContent = assistantMessage.content.find((item: any) => item.type === 'text');
       if (textContent) {
-        content = textContent.text?.value || '';
+        content = textContent.text?.value || textContent.text || '';
+        console.log('[AI Chat] Extracted text content from array:', content.substring(0, 100) + '...');
+      } else {
+        console.warn('[AI Chat] No text content found in array, items:', assistantMessage.content.map((item: any) => item.type));
       }
     } else if (assistantMessage.content?.type === 'text') {
-      content = assistantMessage.content.text?.value || '';
+      content = assistantMessage.content.text?.value || assistantMessage.content.text || '';
+      console.log('[AI Chat] Extracted text content from single:', content.substring(0, 100) + '...');
+    } else if (typeof assistantMessage.content === 'string') {
+      content = assistantMessage.content;
+      console.log('[AI Chat] Content is direct string:', content.substring(0, 100) + '...');
     }
     
-    if (!content) {
-      console.warn('No text content found in assistant message, content structure:', JSON.stringify(assistantMessage.content));
+    if (!content || content.trim().length === 0) {
+      console.warn('[AI Chat] No text content found in assistant message, full structure:', JSON.stringify(assistantMessage, null, 2));
       content = 'Entschuldigung, ich konnte keine Antwort generieren. Bitte versuchen Sie es erneut.';
     }
+    
+    console.log('[AI Chat] Final content length:', content.length);
     
     return {
       choices: [{
@@ -3131,7 +3872,7 @@ export const trpc = onRequest(
   {
     cors: true,
     maxInstances: 10,
-    secrets: [openaiApiKeySecret], // Include the secret in the function configuration
+    secrets: [openaiApiKeySecret, openWeatherMapApiKey], // Include secrets for OpenAI and OpenWeatherMap
   },
   async (req, res) => {
     try {
@@ -3206,9 +3947,27 @@ export const trpc = onRequest(
       const text = await responseClone.text();
       res.send(text);
     } catch (error) {
+      // Extract Firebase request ID from headers if available
+      const requestId = req.get('x-cloud-trace-context')?.split('/')[0] || 
+                       req.get('x-goog-request-id') ||
+                       'unknown';
+      
+      // Log error with Request ID for debugging
+      console.error('[tRPC] Unhandled error:', {
+        requestId,
+        method: req.method,
+        url: req.url,
+        error: error instanceof Error ? {
+          message: error.message,
+          stack: error.stack,
+          name: error.name,
+        } : error,
+      });
+      
       res.status(500).json({
         error: 'Internal server error',
         message: error instanceof Error ? error.message : 'Unknown error',
+        requestId, // Include Request ID in response for debugging
       });
     }
   }

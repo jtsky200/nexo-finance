@@ -13,9 +13,68 @@ import { getLoginUrl } from "./const";
 import "./index.css";
 
 import { auth } from "./lib/firebase";
-import './lib/i18n'; 
+import './lib/i18n';
 
-const queryClient = new QueryClient();
+// Initialize background systems
+import './lib/backgroundTaskManager';
+import './lib/backgroundSync'; // Background Sync Manager
+import './lib/websocketClient'; // WebSocket Client
+import './lib/workflowOrchestrator';
+import './lib/debugWorkflow'; // Debug utilities 
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) => {
+        // Don't retry on 4xx errors (client errors)
+        if (error instanceof TRPCClientError) {
+          const status = (error as any).data?.httpStatus;
+          if (status >= 400 && status < 500) {
+            return false;
+          }
+        }
+        // Retry up to 2 times for other errors
+        return failureCount < 2;
+      },
+    },
+  },
+});
+
+// Subscribe to query cache updates to log errors with Request IDs
+queryClient.getQueryCache().subscribe((event) => {
+  if (event?.type === 'updated' && event?.query?.state?.error) {
+    const error = event.query.state.error;
+    if (error instanceof TRPCClientError) {
+      const requestId = (error as any).data?.requestId || 
+                      (error as any).meta?.requestId ||
+                      null;
+      console.error('[Query Error]', {
+        message: error.message,
+        code: error.data?.code,
+        requestId,
+        path: error.data?.path,
+      });
+    }
+  }
+});
+
+// Subscribe to mutation cache updates to log errors with Request IDs
+queryClient.getMutationCache().subscribe((event) => {
+  if (event?.type === 'updated' && event?.mutation?.state?.error) {
+    const error = event.mutation.state.error;
+    if (error instanceof TRPCClientError) {
+      const requestId = (error as any).data?.requestId || 
+                      (error as any).meta?.requestId ||
+                      null;
+      console.error('[Mutation Error]', {
+        message: error.message,
+        code: error.data?.code,
+        requestId,
+        path: error.data?.path,
+      });
+    }
+  }
+});
 
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
@@ -67,11 +126,38 @@ const trpcClient = trpc.createClient({
           headers.set('Authorization', `Bearer ${authToken}`);
         }
 
-        return globalThis.fetch(input, {
-          ...(init ?? {}),
-          headers,
-          credentials: "include",
-        });
+        try {
+          const response = await globalThis.fetch(input, {
+            ...(init ?? {}),
+            headers,
+            credentials: "include",
+          });
+
+          // Capture Request ID from response headers for error tracking
+          const requestId = response.headers.get('x-goog-request-id') || 
+                          response.headers.get('x-cloud-trace-context')?.split('/')[0] ||
+                          null;
+          
+          if (requestId && !response.ok) {
+            const url = typeof input === 'string' ? input : (input instanceof Request ? input.url : String(input));
+            console.error('[tRPC] Request failed with Request ID:', {
+              requestId,
+              status: response.status,
+              statusText: response.statusText,
+              url,
+            });
+          }
+
+          return response;
+        } catch (error) {
+          // Log network errors with context
+          const url = typeof input === 'string' ? input : (input instanceof Request ? input.url : String(input));
+          console.error('[tRPC] Network error:', {
+            error: error instanceof Error ? error.message : String(error),
+            url,
+          });
+          throw error;
+        }
       },
     }),
   ],

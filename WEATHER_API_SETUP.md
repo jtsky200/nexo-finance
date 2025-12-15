@@ -43,21 +43,25 @@ firebase deploy --only functions
 
 ### 5. Fehlerbehebung
 
-**Fehler: "OpenWeatherMap API key not configured"**
+**Fehler: "OpenWeatherMap API key not configured"
+
 - Stellen Sie sicher, dass der API-Key korrekt gesetzt wurde
 - Überprüfen Sie mit: `firebase functions:config:get` oder `firebase functions:secrets:access OPENWEATHERMAP_API_KEY`
 
-**Fehler: "Invalid OpenWeatherMap API key"**
+**Fehler: "Invalid OpenWeatherMap API key"
+
 - Überprüfen Sie, ob der API-Key korrekt ist
 - Warten Sie einige Minuten nach der Erstellung des API-Keys (Aktivierung kann dauern)
 
-**Fehler: "Location not found"**
+**Fehler: "Location not found"
+
 - Stellen Sie sicher, dass der Ortsname korrekt ist (z.B. "Zurich, CH" oder "Berlin, DE")
 - Verwenden Sie englische Ortsnamen oder ISO-Codes für Länder
 
 ### 6. Location-Format
 
 Die Location sollte im Format `"Stadt, Land"` oder `"Stadt, Ländercode"` angegeben werden:
+
 - `"Zurich, CH"` ✅
 - `"Berlin, DE"` ✅
 - `"New York, US"` ✅
@@ -66,6 +70,7 @@ Die Location sollte im Format `"Stadt, Land"` oder `"Stadt, Ländercode"` angege
 ### 7. Caching
 
 Wetterdaten werden automatisch in Firestore gecacht, um API-Aufrufe zu reduzieren:
+
 - Daten werden pro Tag und Location gespeichert
 - Bei wiederholten Anfragen werden gecachte Daten verwendet
 - Historische Daten werden nur aus dem Cache geladen (keine API-Aufrufe für vergangene Daten)

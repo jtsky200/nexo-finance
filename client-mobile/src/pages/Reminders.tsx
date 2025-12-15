@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { 
   Plus, Calendar, Banknote, CheckSquare, Trash2, Edit2, 
-  Clock, AlertTriangle, CheckCircle2, Filter, Search
+  Clock, AlertTriangle, CheckCircle2, Search
 } from 'lucide-react';
 import { useReminders, createReminder, updateReminder, deleteReminder, Reminder } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';

@@ -22,9 +22,11 @@ const SYSTEM_MESSAGE: Message = {
 interface AIChatDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  pendingReminder?: { message: string; reminderTitle: string } | null;
+  onReminderProcessed?: () => void;
 }
 
-export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) {
+export default function AIChatDialog({ open, onOpenChange, pendingReminder, onReminderProcessed }: AIChatDialogProps) {
   const { t } = useTranslation();
   
   // Refs für flüssige Drag-Performance (direkte DOM-Manipulation)
@@ -142,6 +144,36 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
     }
   }, [open]);
 
+  // Add pending reminder message when dialog opens with a reminder
+  useEffect(() => {
+    if (open && pendingReminder && pendingReminder.message) {
+      // Check if this reminder message was already added
+      const reminderAlreadyAdded = messages.some(
+        m => m.role === 'assistant' && m.content.includes(pendingReminder.reminderTitle)
+      );
+      
+      if (!reminderAlreadyAdded) {
+        // Add the reminder as an assistant message
+        const reminderMessage: Message = {
+          role: 'assistant',
+          content: pendingReminder.message,
+        };
+        
+        setMessages(prev => {
+          // Ensure system message is first
+          const systemMsg = prev.find(m => m.role === 'system') || SYSTEM_MESSAGE;
+          const otherMessages = prev.filter(m => m.role !== 'system');
+          return [systemMsg, ...otherMessages, reminderMessage];
+        });
+        
+        // Mark reminder as processed
+        if (onReminderProcessed) {
+          onReminderProcessed();
+        }
+      }
+    }
+  }, [open, pendingReminder, messages, onReminderProcessed]);
+
   // Speichere Nachrichten in LocalStorage bei jeder Änderung
   useEffect(() => {
     try {
@@ -167,37 +199,88 @@ export default function AIChatDialog({ open, onOpenChange }: AIChatDialogProps) 
       setMessages((prev) => [...prev, aiResponse]);
     },
     onError: (error) => {
+      // Better error handling for different error types
       let errorMessage = 'Ein unbekannter Fehler ist aufgetreten.';
       
-      if (error.message.includes('<!doctype') || error.message.includes('Unexpected token')) {
-        errorMessage = 'Der Server ist nicht erreichbar oder gibt eine ungültige Antwort zurück.';
-      } else if (error.message.includes('Unable to transform')) {
-        errorMessage = 'Fehler bei der Datenübertragung. Bitte versuche es erneut.';
-      } else if (error.data?.code === 'UNAUTHORIZED') {
+      // Netzwerk-Fehler
+      if (error.message.includes('<!doctype') || error.message.includes('Unexpected token') || error.message.includes('Failed to fetch')) {
+        errorMessage = 'Der Server ist nicht erreichbar oder gibt eine ungültige Antwort zurück. Bitte stelle sicher, dass der Server läuft und du eine Internetverbindung hast.';
+      } else if (error.message.includes('Unable to transform') || error.message.includes('NetworkError')) {
+        errorMessage = 'Fehler bei der Datenübertragung. Bitte überprüfe deine Internetverbindung und versuche es erneut.';
+      } 
+      // Authentifizierungs-Fehler
+      else if (error.data?.code === 'UNAUTHORIZED' || error.message.includes('unauthenticated')) {
         errorMessage = 'Du bist nicht angemeldet. Bitte melde dich an.';
-      } else if (error.data?.code === 'INTERNAL_SERVER_ERROR') {
+      } 
+      // Server-Fehler
+      else if (error.data?.code === 'INTERNAL_SERVER_ERROR' || error.message.includes('500')) {
         errorMessage = 'Ein Serverfehler ist aufgetreten. Bitte versuche es später erneut.';
-      } else {
+      } 
+      // Timeout-Fehler
+      else if (error.message.includes('timeout') || error.message.includes('Timeout')) {
+        errorMessage = 'Die Anfrage hat zu lange gedauert. Bitte versuche es erneut.';
+      }
+      // Rate-Limiting
+      else if (error.message.includes('rate limit') || error.message.includes('429')) {
+        errorMessage = 'Zu viele Anfragen. Bitte warte einen Moment und versuche es erneut.';
+      }
+      // Andere Fehler
+      else {
         errorMessage = error.message || 'Ein Fehler ist aufgetreten.';
       }
       
       const errorResponse: Message = {
         role: 'assistant',
-        content: `Entschuldigung, es ist ein Fehler aufgetreten: ${errorMessage}`,
+        content: `**Fehler aufgetreten**\n\n${errorMessage}\n\nBitte versuche es erneut oder starte eine neue Konversation.`,
       };
-      setMessages((prev) => [...prev, errorResponse]);
+      // Remove the last user message since the request failed
+      setMessages((prev) => {
+        const filtered = prev.filter((msg, index) => {
+          // Keep all messages except the last user message
+          if (index === prev.length - 1 && msg.role === 'user') {
+            return false;
+          }
+          return true;
+        });
+        return [...filtered, errorResponse];
+      });
       toast.error('Fehler beim Senden der Nachricht');
+      
+      // Log für Debugging
+      console.error('AI Chat Error:', {
+        message: error.message,
+        code: error.data?.code,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
     },
   });
 
   const handleSendMessage = useCallback((content: string) => {
-    const userMessage: Message = { role: 'user', content };
-    const newMessages: Message[] = [...messages, userMessage];
-    setMessages(newMessages);
+    // Validierung: Maximal 10000 Zeichen pro Nachricht
+    if (content.length > 10000) {
+      toast.error('Nachricht ist zu lang. Bitte kürze sie auf maximal 10.000 Zeichen.');
+      return;
+    }
+    
+    // Validierung: Maximal 50 Nachrichten in der Historie
+    const userMessages = messages.filter(m => m.role === 'user');
+    if (userMessages.length >= 50) {
+      toast.warning('Zu viele Nachrichten in dieser Konversation. Bitte starte eine neue Konversation.');
+      return;
+    }
+    
+    try {
+      const userMessage: Message = { role: 'user', content };
+      const newMessages: Message[] = [...messages, userMessage];
+      setMessages(newMessages);
 
-    chatMutation.mutate({
-      messages: newMessages,
-    });
+      chatMutation.mutate({
+        messages: newMessages,
+      });
+    } catch (error) {
+      console.error('Error in handleSendMessage:', error);
+      toast.error('Fehler beim Senden der Nachricht. Bitte versuche es erneut.');
+    }
   }, [messages, chatMutation]);
 
   const hasUserMessages = messages.some(m => m.role === 'user');

@@ -183,7 +183,7 @@ export interface TaxProfile {
   updatedAt: Date;
 }
 
-export function useTaxProfiles() {
+export function useTaxProfiles(refreshKey?: number) {
   const [profiles, setProfiles] = useState<TaxProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -192,27 +192,29 @@ export function useTaxProfiles() {
     const fetchProfiles = async () => {
       try {
         setIsLoading(true);
+        setError(null);
         const getProfilesFunc = httpsCallable(functions, 'getTaxProfiles');
         const result = await getProfilesFunc({});
         const data = result.data as { profiles: any[] };
         
-        const mappedProfiles = data.profiles.map((p: any) => ({
+        const mappedProfiles = (data.profiles || []).map((p: any) => ({
           ...p,
-          createdAt: p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.createdAt),
-          updatedAt: p.updatedAt?.toDate ? p.updatedAt.toDate() : new Date(p.updatedAt),
+          createdAt: p.createdAt?.toDate ? p.createdAt.toDate() : (p.createdAt ? new Date(p.createdAt) : new Date()),
+          updatedAt: p.updatedAt?.toDate ? p.updatedAt.toDate() : (p.updatedAt ? new Date(p.updatedAt) : new Date()),
         }));
         
         setProfiles(mappedProfiles);
-        setError(null);
       } catch (err) {
+        console.error('Error fetching tax profiles:', err);
         setError(err as Error);
+        setProfiles([]);
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchProfiles();
-  }, []);
+  }, [refreshKey]);
 
   return { data: profiles, isLoading, error };
 }

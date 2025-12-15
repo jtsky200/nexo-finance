@@ -7,7 +7,8 @@ import {
   ShoppingCart,
   MessageSquare,
   ClipboardList,
-  ScanLine
+  ScanLine,
+  Menu
 } from 'lucide-react';
 import { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -55,7 +56,7 @@ export default function QuickActions({ currentPath, customActions }: QuickAction
           aria-controls="sidebar-menu"
           title="Menü öffnen"
         >
-          <LayoutDashboard className="w-5 h-5 text-foreground" />
+          <Menu className="w-5 h-5 text-foreground" />
         </button>
         
         {actions.map((action) => {

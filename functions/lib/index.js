@@ -48,8 +48,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createSchoolSchedule = exports.getChildren = exports.deleteVacation = exports.updateVacation = exports.createVacation = exports.getVacations = exports.deleteWorkSchedule = exports.updateWorkSchedule = exports.createWorkSchedule = exports.getWorkSchedules = exports.deleteBudget = exports.updateBudget = exports.createBudget = exports.getBudgets = exports.processRecurringInvoices = exports.processRecurringEntries = exports.markShoppingItemAsBought = exports.deleteShoppingItem = exports.updateShoppingItem = exports.createShoppingItem = exports.getShoppingList = exports.getCalendarEvents = exports.getAllBills = exports.convertToInstallmentPlan = exports.updateInstallmentPlan = exports.recordInstallmentPayment = exports.deleteInvoice = exports.updateInvoiceStatus = exports.updateInvoice = exports.createInvoice = exports.getPersonInvoices = exports.getPersonDebts = exports.deletePerson = exports.updatePerson = exports.createPerson = exports.getPeople = exports.updateUserPreferences = exports.deleteTaxProfile = exports.updateTaxProfile = exports.createTaxProfile = exports.getTaxProfileByYear = exports.getTaxProfiles = exports.deleteFinanceEntry = exports.updateFinanceEntry = exports.createFinanceEntry = exports.getFinanceEntries = exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
-exports.saveWeather = exports.getWeather = exports.deleteChatConversation = exports.updateChatConversation = exports.createChatConversation = exports.getChatConversations = exports.migrateUserIds = exports.debugUserData = exports.clearChatHistory = exports.getChatThread = exports.getChatHistory = exports.chat = exports.scheduledDailyBackup = exports.markChatReminderAsRead = exports.getChatReminders = exports.createFollowUpReminder = exports.fixReminderTimes = exports.createQuickReminder = exports.checkReminderNotifications = exports.restoreFromBackup = exports.listAllBackups = exports.createManualBackup = exports.transcribeAIChatAudio = exports.uploadAIChatImage = exports.uploadAIChatFile = exports.getReceipts = exports.getStores = exports.getStoreItems = exports.saveReceipt = exports.analyzeSingleLine = exports.analyzeReceipt = exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = void 0;
-exports.trpc = exports.getWeatherHistory = void 0;
+exports.getWeather = exports.clearAllChatConversations = exports.deleteChatConversation = exports.updateChatConversation = exports.createChatConversation = exports.getChatConversations = exports.migrateUserIds = exports.debugUserData = exports.clearChatHistory = exports.getChatThread = exports.getChatHistory = exports.chat = exports.scheduledDailyBackup = exports.markChatReminderAsRead = exports.getChatReminders = exports.createFollowUpReminder = exports.fixReminderTimes = exports.createQuickReminder = exports.checkReminderNotifications = exports.restoreFromBackup = exports.listAllBackups = exports.createManualBackup = exports.transcribeAIChatAudio = exports.uploadAIChatImage = exports.uploadAIChatFile = exports.getReceipts = exports.getStores = exports.getStoreItems = exports.saveReceipt = exports.analyzeSingleLine = exports.analyzeReceipt = exports.useShoppingListTemplate = exports.deleteShoppingListTemplate = exports.getShoppingListTemplates = exports.saveShoppingListTemplate = exports.analyzeShoppingList = exports.getAllDocuments = exports.processDocument = exports.deleteDocument = exports.updateDocument = exports.getPersonDocuments = exports.analyzeDocument = exports.uploadDocument = exports.updateUserSettings = exports.getUserSettings = exports.deleteSchoolHoliday = exports.getSchoolHolidays = exports.createSchoolHoliday = exports.deleteSchoolSchedule = exports.getSchoolSchedules = void 0;
+exports.trpc = exports.getWeatherHistory = exports.saveWeather = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const admin = __importStar(require("firebase-admin"));
@@ -5598,6 +5598,43 @@ exports.deleteChatConversation = (0, https_1.onCall)(async (request) => {
     }
     await docRef.delete();
     return { success: true };
+});
+// Clear all chat conversations for the current user
+exports.clearAllChatConversations = (0, https_1.onCall)(async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    const userId = request.auth.uid;
+    // Get all chat conversations for this user
+    const snapshot = await db.collection('chatConversations')
+        .where('userId', '==', userId)
+        .get();
+    // Delete all conversations in batches (Firestore batch limit is 500)
+    const batch = db.batch();
+    let deletedCount = 0;
+    snapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+        deletedCount++;
+    });
+    if (deletedCount > 0) {
+        await batch.commit();
+    }
+    // Also clear old chatHistory collection for backward compatibility
+    const oldHistorySnapshot = await db.collection('chatHistory')
+        .where('userId', '==', userId)
+        .get();
+    if (oldHistorySnapshot.size > 0) {
+        const oldBatch = db.batch();
+        oldHistorySnapshot.docs.forEach(doc => {
+            oldBatch.delete(doc.ref);
+            deletedCount++;
+        });
+        await oldBatch.commit();
+    }
+    return {
+        success: true,
+        deletedCount,
+    };
 });
 // ========== Weather Functions (Phase 3: API Integration) ==========
 // Helper function to map OpenWeatherMap icon codes to our icon names

@@ -22,7 +22,7 @@ interface QuickAction {
 }
 
 const defaultQuickActions: QuickAction[] = [
-  { id: 'dashboard', label: 'Dashboard', path: '/', icon: LayoutDashboard },
+  { id: 'dashboard', label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { id: 'calendar', label: 'Kalender', path: '/calendar', icon: Calendar },
   { id: 'reminders', label: 'Erinnerungen', path: '/reminders', icon: Bell },
   { id: 'finance', label: 'Finanzen', path: '/finance', icon: Wallet },

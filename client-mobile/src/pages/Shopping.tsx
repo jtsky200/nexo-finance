@@ -24,7 +24,7 @@ import {
   Package
 } from 'lucide-react';
 import MobileLayout from '@/components/MobileLayout';
-import { useShoppingList, createShoppingItem, markShoppingItemAsBought, deleteShoppingItem, createFinanceEntry, updateShoppingItem } from '@/lib/firebaseHooks';
+import { useShoppingList, useShoppingLists, createShoppingList, updateShoppingList, deleteShoppingList, createShoppingItem, markShoppingItemAsBought, deleteShoppingItem, createFinanceEntry, updateShoppingItem } from '@/lib/firebaseHooks';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -98,7 +98,26 @@ export default function MobileShopping() {
       }
     };
   }, []);
-  const { data: items = [], isLoading, refetch } = useShoppingList();
+  
+  // Shopping Lists Management
+  const { data: lists = [], isLoading: listsLoading } = useShoppingLists();
+  const [selectedListId, setSelectedListId] = useState<string | null>(null);
+  const [showListDialog, setShowListDialog] = useState(false);
+  const [showCreateListDialog, setShowCreateListDialog] = useState(false);
+  const [newListName, setNewListName] = useState('');
+  const [editingListId, setEditingListId] = useState<string | null>(null);
+  
+  // Initialize with default list
+  useEffect(() => {
+    if (lists.length > 0 && !selectedListId) {
+      const defaultList = lists.find(l => l.isDefault) || lists[0];
+      if (defaultList) {
+        setSelectedListId(defaultList.id);
+      }
+    }
+  }, [lists, selectedListId]);
+  
+  const { data: items = [], isLoading, refetch } = useShoppingList(selectedListId || undefined);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showMultiAddDialog, setShowMultiAddDialog] = useState(false);
   const [newItem, setNewItem] = useState({
@@ -180,6 +199,7 @@ export default function MobileShopping() {
 
     try {
       await createShoppingItem({
+        listId: selectedListId || undefined,
         item: newItem.name.trim(),
         quantity: parseInt(newItem.quantity) || 1,
         category: newItem.category,
@@ -486,6 +506,7 @@ export default function MobileShopping() {
           }
           
           await createShoppingItem({
+            listId: selectedListId || undefined,
             item: item.name.trim(),
             quantity: parseInt(item.quantity) || 1,
             category: item.category,
@@ -505,6 +526,56 @@ export default function MobileShopping() {
       setShowMultiAddDialog(false);
       setStoreGroups([]);
       await refetch();
+    } catch (error) {
+      toast.error('Fehler: ' + formatErrorForDisplay(error));
+      hapticError();
+    }
+  };
+
+  // List Management Handlers
+  const handleCreateList = async () => {
+    if (!newListName.trim()) {
+      toast.error('Bitte Listenname eingeben');
+      return;
+    }
+    try {
+      const result = await createShoppingList(newListName.trim(), lists.length === 0);
+      toast.success('Liste erstellt');
+      hapticSuccess();
+      setShowCreateListDialog(false);
+      setNewListName('');
+      setSelectedListId((result as any).id);
+    } catch (error) {
+      toast.error('Fehler: ' + formatErrorForDisplay(error));
+      hapticError();
+    }
+  };
+
+  const handleDeleteList = async (listId: string) => {
+    if (lists.length <= 1) {
+      toast.error('Mindestens eine Liste muss vorhanden sein');
+      return;
+    }
+    try {
+      await deleteShoppingList(listId);
+      toast.success('Liste gelöscht');
+      hapticSuccess();
+      if (selectedListId === listId) {
+        const remainingList = lists.find(l => l.id !== listId);
+        setSelectedListId(remainingList?.id || null);
+      }
+    } catch (error) {
+      toast.error('Fehler: ' + formatErrorForDisplay(error));
+      hapticError();
+    }
+  };
+
+  const handleUpdateList = async (listId: string, name: string, isDefault?: boolean) => {
+    try {
+      await updateShoppingList(listId, { name, isDefault });
+      toast.success('Liste aktualisiert');
+      hapticSuccess();
+      setEditingListId(null);
     } catch (error) {
       toast.error('Fehler: ' + formatErrorForDisplay(error));
       hapticError();
@@ -1448,6 +1519,7 @@ export default function MobileShopping() {
     try {
       for (const item of liveScannedItems) {
         await createShoppingItem({
+          listId: selectedListId || undefined,
           item: item.name,
           quantity: item.quantity || 1,
           category: categorizeItem(item.name),
@@ -1477,6 +1549,7 @@ export default function MobileShopping() {
     try {
       for (const item of selected) {
         await createShoppingItem({
+          listId: selectedListId || undefined,
           item: item.name,
           quantity: item.quantity || 1,
           category: categorizeItem(item.name),
@@ -1585,11 +1658,41 @@ export default function MobileShopping() {
 
   return (
     <MobileLayout title={t('nav.shopping', 'Einkaufsliste')} showSidebar={true}>
+      {/* List Selector */}
+      <div className="mb-4 flex items-center gap-2">
+        <Select
+          value={selectedListId || ''}
+          onValueChange={(value) => setSelectedListId(value)}
+          disabled={listsLoading}
+        >
+          <SelectTrigger className="flex-1 h-11">
+            <SelectValue placeholder="Liste wählen" />
+          </SelectTrigger>
+          <SelectContent>
+            {lists.map((list) => (
+              <SelectItem key={list.id} value={list.id}>
+                {list.name} {list.isDefault && '(Standard)'}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setShowListDialog(true)}
+          className="h-11 w-11"
+        >
+          <FileText className="w-5 h-5" />
+        </Button>
+      </div>
+
       {/* Summary - Clean design */}
       <div className="mobile-card mb-4 bg-primary text-primary-foreground">
         <div className="flex items-center gap-3 mb-3">
           <ShoppingCart className="w-6 h-6 opacity-70" />
-          <p className="text-sm opacity-70 font-medium">{t('shopping.list', 'Einkaufsliste')}</p>
+          <p className="text-sm opacity-70 font-medium">
+            {lists.find(l => l.id === selectedListId)?.name || t('shopping.list', 'Einkaufsliste')}
+          </p>
         </div>
         <p className="text-3xl font-semibold mb-2">{openItems.length}</p>
         <p className="text-sm opacity-60">
@@ -2703,6 +2806,138 @@ export default function MobileShopping() {
           </div>
         </div>
       )}
+
+      {/* Lists Management Dialog */}
+      <Dialog open={showListDialog} onOpenChange={setShowListDialog}>
+        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-[90vh] !rounded-3xl !m-0 !overflow-hidden !shadow-2xl !flex !flex-col">
+          <DialogHeader className="px-5 pt-5 pb-3 flex-shrink-0">
+            <DialogTitle className="text-lg font-semibold">Einkaufslisten</DialogTitle>
+            <DialogDescription className="sr-only">
+              Verwalten Sie Ihre Einkaufslisten
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="px-5 pb-2 overflow-y-auto flex-1 min-h-0 space-y-2">
+            {lists.map((list) => (
+              <div key={list.id} className="flex items-center gap-2 p-3 border rounded-lg">
+                {editingListId === list.id ? (
+                  <div className="flex-1 flex items-center gap-2">
+                    <Input
+                      value={newListName}
+                      onChange={(e) => setNewListName(e.target.value)}
+                      className="flex-1 h-9"
+                      placeholder="Listenname"
+                      autoFocus
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => handleUpdateList(list.id, newListName)}
+                      className="h-9"
+                    >
+                      <Check className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setEditingListId(null);
+                        setNewListName('');
+                      }}
+                      className="h-9"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex-1">
+                      <p className="font-medium">{list.name}</p>
+                      {list.isDefault && (
+                        <p className="text-xs text-muted-foreground">Standard</p>
+                      )}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setEditingListId(list.id);
+                        setNewListName(list.name);
+                      }}
+                      className="h-9 w-9 p-0"
+                    >
+                      <FileText className="w-4 h-4" />
+                    </Button>
+                    {!list.isDefault && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteList(list.id)}
+                        className="h-9 w-9 p-0 text-red-500"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter className="px-5 pb-3 pt-2 gap-2.5 flex-shrink-0">
+            <Button variant="outline" onClick={() => setShowListDialog(false)} className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium">
+              Schließen
+            </Button>
+            <Button onClick={() => {
+              setShowListDialog(false);
+              setShowCreateListDialog(true);
+            }} className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium">
+              <Plus className="w-4 h-4 mr-2" />
+              Neue Liste
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create List Dialog */}
+      <Dialog open={showCreateListDialog} onOpenChange={setShowCreateListDialog}>
+        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl !flex !flex-col">
+          <DialogHeader className="px-5 pt-5 pb-3 flex-shrink-0">
+            <DialogTitle className="text-lg font-semibold">Neue Liste erstellen</DialogTitle>
+            <DialogDescription className="sr-only">
+              Erstellen Sie eine neue Einkaufsliste
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-3 px-5 pb-2 overflow-y-auto flex-1 min-h-0">
+            <div className="w-full">
+              <Label className="text-sm font-medium">Listenname *</Label>
+              <Input
+                value={newListName}
+                onChange={(e) => setNewListName(e.target.value)}
+                placeholder="z.B. Wochenendeinkauf"
+                className="h-11 min-h-[44px] mt-1.5 rounded-xl w-full"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleCreateList();
+                  }
+                }}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="px-5 pb-3 pt-2 gap-2.5 flex-shrink-0">
+            <Button variant="outline" onClick={() => {
+              setShowCreateListDialog(false);
+              setNewListName('');
+            }} className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium">
+              Abbrechen
+            </Button>
+            <Button onClick={handleCreateList} disabled={!newListName.trim()} className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium">
+              Erstellen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* FABs */}
       {!showAddDialog && !showScanner && !showMultiAddDialog && !showBarcodeScanner && !showProductInfoScanner && (

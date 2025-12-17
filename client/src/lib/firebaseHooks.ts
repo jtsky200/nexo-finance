@@ -1051,9 +1051,19 @@ export function usePersonDebts(personId: string) {
 
 // ========== Shopping List Hooks ==========
 
+export interface ShoppingList {
+  id: string;
+  userId: string;
+  name: string;
+  isDefault?: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface ShoppingItem {
   id: string;
   userId: string;
+  listId?: string; // ID der Einkaufsliste (optional, wird automatisch auf Standardliste gesetzt)
   item: string;
   quantity: number;
   unit?: string | null;
@@ -1115,7 +1125,23 @@ export function useShoppingList(status?: string) {
   return { data: items, isLoading, error, refetch };
 }
 
-export async function createShoppingItem(data: Omit<ShoppingItem, 'id' | 'userId' | 'status' | 'boughtAt' | 'linkedExpenseId' | 'createdAt' | 'updatedAt'>) {
+export async function createShoppingList(name: string, isDefault?: boolean) {
+  const createListFunc = httpsCallable(functions, 'createShoppingList');
+  const result = await createListFunc({ name, isDefault });
+  return result.data;
+}
+
+export async function updateShoppingList(listId: string, data: { name?: string; isDefault?: boolean }) {
+  const updateListFunc = httpsCallable(functions, 'updateShoppingList');
+  await updateListFunc({ listId, ...data });
+}
+
+export async function deleteShoppingList(listId: string) {
+  const deleteListFunc = httpsCallable(functions, 'deleteShoppingList');
+  await deleteListFunc({ listId });
+}
+
+export async function createShoppingItem(data: Omit<ShoppingItem, 'id' | 'userId' | 'status' | 'boughtAt' | 'linkedExpenseId' | 'createdAt' | 'updatedAt'> & { listId?: string }) {
   const createItemFunc = httpsCallable(functions, 'createShoppingItem');
   const result = await createItemFunc(data);
   return result.data;

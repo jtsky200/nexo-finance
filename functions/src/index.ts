@@ -2142,9 +2142,13 @@ export const getShoppingList = onCall(async (request) => {
   }
 
   const userId = request.auth.uid;
-  const { status } = request.data;
+  const { listId, status } = request.data || {};
 
   let query: admin.firestore.Query = db.collection('shoppingList').where('userId', '==', userId);
+
+  if (listId) {
+    query = query.where('listId', '==', listId);
+  }
 
   if (status) {
     query = query.where('status', '==', status);
@@ -2176,10 +2180,36 @@ export const createShoppingItem = onCall(async (request) => {
   }
 
   const userId = request.auth.uid;
-  const { item, quantity, unit, category, estimatedPrice, currency, store, articleNumber, productInfo, saveToDatabase } = request.data;
+  const { listId, item, quantity, unit, category, estimatedPrice, currency, store, articleNumber, productInfo, saveToDatabase } = request.data;
+
+  // If no listId provided, get or create default list
+  let finalListId = listId;
+  if (!finalListId) {
+    const defaultList = await db.collection('shoppingLists')
+      .where('userId', '==', userId)
+      .where('isDefault', '==', true)
+      .limit(1)
+      .get();
+    
+    if (!defaultList.empty) {
+      finalListId = defaultList.docs[0].id;
+    } else {
+      // Create default list
+      const defaultListData = {
+        userId,
+        name: 'Hauptliste',
+        isDefault: true,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+      const newListRef = await db.collection('shoppingLists').add(defaultListData);
+      finalListId = newListRef.id;
+    }
+  }
 
   const itemData = {
     userId,
+    listId: finalListId,
     item,
     quantity: quantity || 1,
     unit: unit || null,

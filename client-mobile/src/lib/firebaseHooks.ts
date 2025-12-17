@@ -681,9 +681,19 @@ export function usePersonDebts(personId: string) {
 
 // ========== Shopping List Hooks ==========
 
+export interface ShoppingList {
+  id: string;
+  userId: string;
+  name: string;
+  isDefault?: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface ShoppingItem {
   id: string;
   userId: string;
+  listId?: string; // ID der Einkaufsliste (optional, wird automatisch auf Standardliste gesetzt)
   item: string;
   quantity: number;
   unit?: string | null;
@@ -707,7 +717,68 @@ export interface ShoppingItem {
   updatedAt: Date;
 }
 
-export function useShoppingList(status?: string) {
+export function useShoppingLists() {
+  const [lists, setLists] = useState<ShoppingList[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user) {
+      setLists([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    
+    const q = query(
+      collection(db, 'shoppingLists'),
+      where('userId', '==', user.uid),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot: QuerySnapshot) => {
+        try {
+          const mappedLists = snapshot.docs.map((doc: DocumentSnapshot) => {
+            const data = doc.data();
+            if (!data) return null;
+            
+            return {
+              id: doc.id,
+              userId: data.userId,
+              name: data.name,
+              isDefault: data.isDefault || false,
+              createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+              updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
+            };
+          }).filter((l): l is ShoppingList => l !== null);
+          
+          setLists(mappedLists);
+          setError(null);
+        } catch (err) {
+          console.error('[useShoppingLists] Error mapping lists:', err);
+          setError(err as Error);
+        } finally {
+          setIsLoading(false);
+        }
+      },
+      (err) => {
+        console.error('[useShoppingLists] Snapshot error:', err);
+        setError(err);
+        setIsLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  return { data: lists, isLoading, error };
+}
+
+export function useShoppingList(listId?: string, status?: string) {
   const [items, setItems] = useState<ShoppingItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -718,7 +789,7 @@ export function useShoppingList(status?: string) {
       try {
         setIsLoading(true);
         const getItemsFunc = httpsCallable(functions, 'getShoppingList');
-        const result = await getItemsFunc({ status });
+        const result = await getItemsFunc({ listId, status });
         const data = result.data as { items: any[] };
         
         const mappedItems = data.items.map((i: any) => ({
@@ -737,15 +808,36 @@ export function useShoppingList(status?: string) {
       }
     };
 
-    fetchItems();
-  }, [status, refreshKey]);
+    if (listId) {
+      fetchItems();
+    } else {
+      setItems([]);
+      setIsLoading(false);
+    }
+  }, [listId, status, refreshKey]);
 
   const refetch = () => setRefreshKey(prev => prev + 1);
 
   return { data: items, isLoading, error, refetch };
 }
 
-export async function createShoppingItem(data: Omit<ShoppingItem, 'id' | 'userId' | 'status' | 'boughtAt' | 'linkedExpenseId' | 'createdAt' | 'updatedAt'>) {
+export async function createShoppingList(name: string, isDefault?: boolean) {
+  const createListFunc = httpsCallable(functions, 'createShoppingList');
+  const result = await createListFunc({ name, isDefault });
+  return result.data;
+}
+
+export async function updateShoppingList(listId: string, data: { name?: string; isDefault?: boolean }) {
+  const updateListFunc = httpsCallable(functions, 'updateShoppingList');
+  await updateListFunc({ listId, ...data });
+}
+
+export async function deleteShoppingList(listId: string) {
+  const deleteListFunc = httpsCallable(functions, 'deleteShoppingList');
+  await deleteListFunc({ listId });
+}
+
+export async function createShoppingItem(data: Omit<ShoppingItem, 'id' | 'userId' | 'status' | 'boughtAt' | 'linkedExpenseId' | 'createdAt' | 'updatedAt'> & { listId?: string }) {
   const createItemFunc = httpsCallable(functions, 'createShoppingItem');
   const result = await createItemFunc(data);
   return result.data;

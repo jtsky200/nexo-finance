@@ -652,22 +652,22 @@ export default function AIChat() {
           });
         }
       }}>
-        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-[90vh] !rounded-3xl !m-0 !overflow-hidden !shadow-2xl !flex !flex-col">
-          <DialogHeader className="px-4 pt-2 pb-1.5 flex-shrink-0">
-            <DialogTitle className="text-base font-semibold">Erinnerung erstellen</DialogTitle>
+        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
+          <DialogHeader className="px-5 pt-5 pb-3">
+            <DialogTitle className="text-lg font-semibold">Erinnerung erstellen</DialogTitle>
             <DialogDescription className="sr-only">
               Erstellen Sie eine neue Erinnerung basierend auf der Chat-Konversation
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-1.5 px-4 pb-1.5 overflow-y-auto flex-1 min-h-0">
+          <div className="space-y-3 px-5 pb-2">
             <div className="w-full">
               <Label className="text-sm font-medium">Titel *</Label>
               <Input
                 value={reminderForm.title}
                 onChange={(e) => setReminderForm({ ...reminderForm, title: e.target.value })}
                 placeholder="Titel"
-                className="h-11 min-h-[44px] mt-1 rounded-xl w-full"
+                className="h-11 min-h-[44px] mt-1.5 rounded-xl w-full"
               />
             </div>
             
@@ -679,7 +679,7 @@ export default function AIChat() {
                   setReminderForm({ ...reminderForm, type: value })
                 }
               >
-                <SelectTrigger className="h-11 min-h-[44px] mt-0.5 rounded-xl w-full">
+                <SelectTrigger className="h-11 min-h-[44px] mt-1.5 rounded-xl w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -692,7 +692,7 @@ export default function AIChat() {
             
             <div className="w-full">
               <Label className="text-sm font-medium">Datum & Uhrzeit *</Label>
-              <div className="relative w-full mt-0.5">
+              <div className="relative w-full mt-1.5">
                 <Input
                   type="datetime-local"
                   placeholder="Datum & Uhrzeit auswählen"
@@ -735,7 +735,7 @@ export default function AIChat() {
                     value={reminderForm.amount}
                     onChange={(e) => setReminderForm({ ...reminderForm, amount: e.target.value })}
                     placeholder="0.00"
-                    className="h-11 min-h-[44px] mt-1 rounded-xl w-full"
+                    className="h-11 min-h-[44px] mt-1.5 rounded-xl w-full"
                   />
                 </div>
                 
@@ -745,7 +745,7 @@ export default function AIChat() {
                     value={reminderForm.currency}
                     onValueChange={(value) => setReminderForm({ ...reminderForm, currency: value })}
                   >
-                    <SelectTrigger className="h-11 min-h-[44px] mt-0.5 rounded-xl w-full">
+                    <SelectTrigger className="h-11 min-h-[44px] mt-1.5 rounded-xl w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -764,12 +764,12 @@ export default function AIChat() {
                 value={reminderForm.notes}
                 onChange={(e) => setReminderForm({ ...reminderForm, notes: e.target.value })}
                 placeholder="Notizen..."
-                className="mt-0.5 min-h-[60px] rounded-xl w-full"
+                className="mt-1.5 min-h-[80px] rounded-xl w-full"
               />
             </div>
           </div>
           
-          <DialogFooter className="px-4 pb-2 pt-1.5 gap-1.5 flex-shrink-0">
+          <DialogFooter className="px-5 pb-3 pt-2 gap-2.5">
             <Button variant="outline" onClick={() => setShowReminderModal(false)} className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium">
               Abbrechen
             </Button>

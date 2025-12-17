@@ -652,15 +652,15 @@ export default function AIChat() {
           });
         }
       }}>
-        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-hidden !shadow-2xl !flex !flex-col">
-          <DialogHeader className="px-4 pt-4 pb-2 flex-shrink-0">
+        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-[90vh] !rounded-3xl !m-0 !overflow-hidden !shadow-2xl !flex !flex-col">
+          <DialogHeader className="px-5 pt-4 pb-3 flex-shrink-0">
             <DialogTitle className="text-lg font-semibold">Erinnerung erstellen</DialogTitle>
             <DialogDescription className="sr-only">
               Erstellen Sie eine neue Erinnerung basierend auf der Chat-Konversation
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-2.5 px-4 pb-2 overflow-y-auto flex-1 min-h-0">
+          <div className="space-y-3 px-5 pb-3 overflow-y-auto flex-1 min-h-0">
             <div className="w-full">
               <Label className="text-sm font-medium">Titel *</Label>
               <Input
@@ -769,7 +769,7 @@ export default function AIChat() {
             </div>
           </div>
           
-          <DialogFooter className="px-4 pb-3 pt-2 gap-2.5 flex-shrink-0">
+          <DialogFooter className="px-5 pb-4 pt-3 gap-2.5 flex-shrink-0">
             <Button variant="outline" onClick={() => setShowReminderModal(false)} className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium">
               Abbrechen
             </Button>

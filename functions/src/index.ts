@@ -3667,54 +3667,105 @@ export const processDocument = onCall(async (request) => {
 
 // Get All Documents (across all persons for the user)
 export const getAllDocuments = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'User must be authenticated');
-  }
+  try {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'User must be authenticated');
+    }
 
-  const userId = request.auth.uid;
-  const { folder, limit: queryLimit } = request.data || {};
+    const userId = request.auth.uid;
+    const { folder, limit: queryLimit } = request.data || {};
 
-  // Get all people for this user
-  const peopleSnapshot = await db.collection('people').where('userId', '==', userId).get();
-  
-  const allDocuments: any[] = [];
-  
-  for (const personDoc of peopleSnapshot.docs) {
-    const personData = personDoc.data();
-    
-    let docsQuery: admin.firestore.Query = personDoc.ref.collection('documents');
-    
-    if (folder && folder !== 'all') {
-      docsQuery = docsQuery.where('folder', '==', folder);
+    // Get all people for this user
+    let peopleSnapshot;
+    try {
+      peopleSnapshot = await db.collection('people').where('userId', '==', userId).get();
+    } catch (error: any) {
+      console.error('[getAllDocuments] Error fetching people:', error);
+      throw new HttpsError('internal', 'Failed to fetch people: ' + (error.message || 'Unknown error'));
     }
     
-    // Don't use orderBy in query to avoid index requirement - sort in code instead
-    const docsSnapshot = await docsQuery.get();
+    const allDocuments: any[] = [];
     
-    for (const doc of docsSnapshot.docs) {
-      const data = doc.data();
-      allDocuments.push({
-        id: doc.id,
-        personId: personDoc.id,
-        personName: personData.name,
-        ...data,
-        createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
-        updatedAt: data.updatedAt?.toDate?.()?.toISOString() || null,
+    for (const personDoc of peopleSnapshot.docs) {
+      try {
+        const personData = personDoc.data();
+        if (!personData) {
+          console.warn('[getAllDocuments] Person data is null for personId:', personDoc.id);
+          continue;
+        }
+        
+        let docsQuery: admin.firestore.Query = personDoc.ref.collection('documents');
+        
+        if (folder && folder !== 'all') {
+          docsQuery = docsQuery.where('folder', '==', folder);
+        }
+        
+        // Don't use orderBy in query to avoid index requirement - sort in code instead
+        let docsSnapshot;
+        try {
+          docsSnapshot = await docsQuery.get();
+        } catch (error: any) {
+          console.error(`[getAllDocuments] Error fetching documents for person ${personDoc.id}:`, error);
+          // Continue with next person instead of failing completely
+          continue;
+        }
+        
+        for (const doc of docsSnapshot.docs) {
+          try {
+            const data = doc.data();
+            if (!data) {
+              console.warn('[getAllDocuments] Document data is null for docId:', doc.id);
+              continue;
+            }
+            
+            allDocuments.push({
+              id: doc.id,
+              personId: personDoc.id,
+              personName: personData.name || 'Unbekannt',
+              ...data,
+              createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
+              updatedAt: data.updatedAt?.toDate?.()?.toISOString() || null,
+            });
+          } catch (error: any) {
+            console.error(`[getAllDocuments] Error processing document ${doc.id}:`, error);
+            // Continue with next document
+            continue;
+          }
+        }
+      } catch (error: any) {
+        console.error(`[getAllDocuments] Error processing person ${personDoc.id}:`, error);
+        // Continue with next person
+        continue;
+      }
+    }
+    
+    // Sort by createdAt descending
+    try {
+      allDocuments.sort((a, b) => {
+        try {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return dateB - dateA;
+        } catch {
+          return 0;
+        }
       });
+    } catch (error: any) {
+      console.error('[getAllDocuments] Error sorting documents:', error);
+      // Continue without sorting
     }
+    
+    // Apply limit if specified
+    const limitedDocs = queryLimit ? allDocuments.slice(0, queryLimit) : allDocuments;
+    
+    return { documents: limitedDocs, total: allDocuments.length };
+  } catch (error: any) {
+    console.error('[getAllDocuments] Unexpected error:', error);
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    throw new HttpsError('internal', 'Failed to fetch documents: ' + (error.message || 'Unknown error'));
   }
-  
-  // Sort by createdAt descending
-  allDocuments.sort((a, b) => {
-    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-    return dateB - dateA;
-  });
-  
-  // Apply limit if specified
-  const limitedDocs = queryLimit ? allDocuments.slice(0, queryLimit) : allDocuments;
-  
-  return { documents: limitedDocs, total: allDocuments.length };
 });
 
 // ============================================

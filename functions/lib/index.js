@@ -3229,36 +3229,93 @@ exports.processDocument = (0, https_1.onCall)(async (request) => {
 // Get All Documents (across all persons for the user)
 exports.getAllDocuments = (0, https_1.onCall)(async (request) => {
     var _a, _b, _c, _d, _e, _f;
-    if (!request.auth) {
-        throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
-    }
-    const userId = request.auth.uid;
-    const { folder, limit: queryLimit } = request.data || {};
-    // Get all people for this user
-    const peopleSnapshot = await db.collection('people').where('userId', '==', userId).get();
-    const allDocuments = [];
-    for (const personDoc of peopleSnapshot.docs) {
-        const personData = personDoc.data();
-        let docsQuery = personDoc.ref.collection('documents');
-        if (folder && folder !== 'all') {
-            docsQuery = docsQuery.where('folder', '==', folder);
+    try {
+        if (!request.auth) {
+            throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
         }
-        // Don't use orderBy in query to avoid index requirement - sort in code instead
-        const docsSnapshot = await docsQuery.get();
-        for (const doc of docsSnapshot.docs) {
-            const data = doc.data();
-            allDocuments.push(Object.assign(Object.assign({ id: doc.id, personId: personDoc.id, personName: personData.name }, data), { createdAt: ((_c = (_b = (_a = data.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null, updatedAt: ((_f = (_e = (_d = data.updatedAt) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null }));
+        const userId = request.auth.uid;
+        const { folder, limit: queryLimit } = request.data || {};
+        // Get all people for this user
+        let peopleSnapshot;
+        try {
+            peopleSnapshot = await db.collection('people').where('userId', '==', userId).get();
         }
+        catch (error) {
+            console.error('[getAllDocuments] Error fetching people:', error);
+            throw new https_1.HttpsError('internal', 'Failed to fetch people: ' + (error.message || 'Unknown error'));
+        }
+        const allDocuments = [];
+        for (const personDoc of peopleSnapshot.docs) {
+            try {
+                const personData = personDoc.data();
+                if (!personData) {
+                    console.warn('[getAllDocuments] Person data is null for personId:', personDoc.id);
+                    continue;
+                }
+                let docsQuery = personDoc.ref.collection('documents');
+                if (folder && folder !== 'all') {
+                    docsQuery = docsQuery.where('folder', '==', folder);
+                }
+                // Don't use orderBy in query to avoid index requirement - sort in code instead
+                let docsSnapshot;
+                try {
+                    docsSnapshot = await docsQuery.get();
+                }
+                catch (error) {
+                    console.error(`[getAllDocuments] Error fetching documents for person ${personDoc.id}:`, error);
+                    // Continue with next person instead of failing completely
+                    continue;
+                }
+                for (const doc of docsSnapshot.docs) {
+                    try {
+                        const data = doc.data();
+                        if (!data) {
+                            console.warn('[getAllDocuments] Document data is null for docId:', doc.id);
+                            continue;
+                        }
+                        allDocuments.push(Object.assign(Object.assign({ id: doc.id, personId: personDoc.id, personName: personData.name || 'Unbekannt' }, data), { createdAt: ((_c = (_b = (_a = data.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null, updatedAt: ((_f = (_e = (_d = data.updatedAt) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null }));
+                    }
+                    catch (error) {
+                        console.error(`[getAllDocuments] Error processing document ${doc.id}:`, error);
+                        // Continue with next document
+                        continue;
+                    }
+                }
+            }
+            catch (error) {
+                console.error(`[getAllDocuments] Error processing person ${personDoc.id}:`, error);
+                // Continue with next person
+                continue;
+            }
+        }
+        // Sort by createdAt descending
+        try {
+            allDocuments.sort((a, b) => {
+                try {
+                    const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                    const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                    return dateB - dateA;
+                }
+                catch (_a) {
+                    return 0;
+                }
+            });
+        }
+        catch (error) {
+            console.error('[getAllDocuments] Error sorting documents:', error);
+            // Continue without sorting
+        }
+        // Apply limit if specified
+        const limitedDocs = queryLimit ? allDocuments.slice(0, queryLimit) : allDocuments;
+        return { documents: limitedDocs, total: allDocuments.length };
     }
-    // Sort by createdAt descending
-    allDocuments.sort((a, b) => {
-        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return dateB - dateA;
-    });
-    // Apply limit if specified
-    const limitedDocs = queryLimit ? allDocuments.slice(0, queryLimit) : allDocuments;
-    return { documents: limitedDocs, total: allDocuments.length };
+    catch (error) {
+        console.error('[getAllDocuments] Unexpected error:', error);
+        if (error instanceof https_1.HttpsError) {
+            throw error;
+        }
+        throw new https_1.HttpsError('internal', 'Failed to fetch documents: ' + (error.message || 'Unknown error'));
+    }
 });
 // ============================================
 // SHOPPING LIST SCANNER & ARCHIVE

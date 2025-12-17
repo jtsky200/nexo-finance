@@ -84,14 +84,6 @@ const categoryConfig: Record<string, { icon: any; color: string; bg: string; cha
   'Sonstiges': { icon: Package, color: 'text-gray-600', bg: 'bg-gray-100 dark:bg-gray-900/30', chartColor: '#6b7280' },
 };
 
-// Quick add template type
-interface QuickAddTemplate {
-  id: string;
-  name: string;
-  category: string;
-  price: number;
-}
-
 // Default quick add templates
 const defaultQuickAddTemplates: QuickAddTemplate[] = [
   { id: '1', name: 'Milch', category: 'Lebensmittel', price: 1.80 },
@@ -303,6 +295,10 @@ export default function Shopping() {
 
   const boughtItems = useMemo(() => 
     items.filter(i => i.status === 'bought'), [items]);
+
+  // Multi-select state for deletion
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
 
   const totalEstimated = notBoughtItems.reduce((sum, i) => sum + (i.estimatedPrice * i.quantity), 0) / 100;
   const totalSpent = boughtItems.reduce((sum, i) => sum + ((i.actualPrice || i.estimatedPrice) * i.quantity), 0) / 100;
@@ -629,6 +625,51 @@ export default function Shopping() {
       toast.error('Fehler: ' + error.message);
       setDeleteItemId(null);
     }
+  };
+
+  // Multi-select functions
+  const handleDeleteMultipleItems = async () => {
+    if (selectedItemIds.size === 0) {
+      toast.error('Bitte wählen Sie mindestens einen Artikel aus');
+      return;
+    }
+
+    try {
+      const deletePromises = Array.from(selectedItemIds).map(id => deleteShoppingItem(id));
+      await Promise.all(deletePromises);
+      toast.success(`${selectedItemIds.size} Artikel gelöscht`);
+      setSelectedItemIds(new Set());
+      setSelectionMode(false);
+      refetch();
+    } catch (error: any) {
+      toast.error('Fehler: ' + error.message);
+    }
+  };
+
+  const toggleItemSelection = (itemId: string) => {
+    setSelectedItemIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId);
+      } else {
+        newSet.add(itemId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const allItemIds = new Set([...notBoughtItems.map(i => i.id), ...boughtItems.map(i => i.id)]);
+    if (selectedItemIds.size === allItemIds.size) {
+      setSelectedItemIds(new Set());
+    } else {
+      setSelectedItemIds(allItemIds);
+    }
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedItemIds(new Set());
   };
 
   const handleApplyTemplate = async () => {
@@ -1644,20 +1685,63 @@ export default function Shopping() {
               Filter zurücksetzen
             </Button>
           )}
-          {notBoughtItems.length > 0 && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-              onClick={() => {
-                if (confirm(`Alle ${notBoughtItems.length} Artikel löschen?`)) {
-                  handleClearAllItems();
-                }
-              }}
-            >
-              <Trash2 className="w-4 h-4 mr-1" />
-              Alle löschen
-            </Button>
+          {!selectionMode ? (
+            <>
+              {notBoughtItems.length > 0 && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={() => {
+                    if (confirm(`Alle ${notBoughtItems.length} Artikel löschen?`)) {
+                      handleClearAllItems();
+                    }
+                  }}
+                >
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  Alle löschen
+                </Button>
+              )}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setSelectionMode(true)}
+              >
+                <Check className="w-4 h-4 mr-1" />
+                Auswählen
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={toggleSelectAll}
+              >
+                {selectedItemIds.size === notBoughtItems.length + boughtItems.length ? 'Alle abwählen' : 'Alle auswählen'}
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {selectedItemIds.size} ausgewählt
+              </span>
+              {selectedItemIds.size > 0 && (
+                <Button 
+                  variant="destructive" 
+                  size="sm" 
+                  onClick={handleDeleteMultipleItems}
+                >
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  Löschen ({selectedItemIds.size})
+                </Button>
+              )}
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={exitSelectionMode}
+              >
+                <X className="w-4 h-4 mr-1" />
+                Abbrechen
+              </Button>
+            </>
           )}
         </div>
 
@@ -1707,13 +1791,23 @@ export default function Shopping() {
                             return (
                               <div
                                 key={item.id}
-                                className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 group"
+                                className={`flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 group ${selectionMode && selectedItemIds.has(item.id) ? 'ring-2 ring-primary bg-primary/5' : ''}`}
+                                onClick={selectionMode ? () => toggleItemSelection(item.id) : undefined}
                               >
-                                <Checkbox
-                                  checked={false}
-                                  onCheckedChange={() => handleMarkAsBought(item.id, item.estimatedPrice)}
-                                  className="h-5 w-5"
-                                />
+                                {selectionMode ? (
+                                  <Checkbox
+                                    checked={selectedItemIds.has(item.id)}
+                                    onCheckedChange={() => toggleItemSelection(item.id)}
+                                    className="h-5 w-5"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                ) : (
+                                  <Checkbox
+                                    checked={false}
+                                    onCheckedChange={() => handleMarkAsBought(item.id, item.estimatedPrice)}
+                                    className="h-5 w-5"
+                                  />
+                                )}
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2">
                                     <p className="font-medium truncate">{item.item}</p>
@@ -1729,14 +1823,16 @@ export default function Shopping() {
                                     {formatPrice(item.estimatedPrice)}
                                   </p>
                                 </div>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="opacity-0 group-hover:opacity-100 h-8 w-8"
-                                  onClick={() => handleDelete(item.id)}
-                                >
-                                  <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
-                                </Button>
+                                {!selectionMode && (
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                                    onClick={() => handleDelete(item.id)}
+                                  >
+                                    <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                                  </Button>
+                                )}
                               </div>
                             );
                           })}
@@ -1758,7 +1854,7 @@ export default function Shopping() {
                     <Check className="w-4 h-4 text-green-600" />
                     Eingekauft ({boughtItems.length})
                   </CardTitle>
-                  {boughtItems.length > 0 && (
+                  {boughtItems.length > 0 && !selectionMode && (
                     <Button variant="ghost" size="sm" onClick={() => setShowClearConfirm(true)}>
                       Leeren
                     </Button>
@@ -1777,9 +1873,19 @@ export default function Shopping() {
                     {boughtItems.map((item) => (
                       <div
                         key={item.id}
-                        className="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-muted/50 group"
+                        className={`flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-muted/50 group ${selectionMode && selectedItemIds.has(item.id) ? 'ring-2 ring-primary bg-primary/5' : ''}`}
+                        onClick={selectionMode ? () => toggleItemSelection(item.id) : undefined}
                       >
-                        <Check className="w-4 h-4 text-green-600 shrink-0" />
+                        {selectionMode ? (
+                          <Checkbox
+                            checked={selectedItemIds.has(item.id)}
+                            onCheckedChange={() => toggleItemSelection(item.id)}
+                            className="h-4 w-4 shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <Check className="w-4 h-4 text-green-600 shrink-0" />
+                        )}
                         <span className="flex-1 text-sm line-through text-muted-foreground truncate">
                           {item.item}
                         </span>

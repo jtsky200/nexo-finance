@@ -13,6 +13,46 @@
 - After successful deployment, ALWAYS push changes to Git with an appropriate commit message
 - Use `git add .`, `git commit -m "message"`, and `git push` after deployment is confirmed successful
 
+## Dialog Styling Rules
+
+**CRITICAL: All dialogs must use consistent styling to avoid excessive white space**
+
+When creating or modifying dialogs (DialogContent components), ALWAYS use these exact classes:
+
+- **DialogContent**: `!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl`
+  - NEVER use `max-h-[90vh]` or `!overflow-hidden` or `!flex !flex-col` on DialogContent
+  - ALWAYS use `max-h-fit` and `!overflow-visible` for compact, content-fitting dialogs
+
+- **DialogHeader**: `px-5 pt-5 pb-3`
+  - Standard padding for all dialog headers
+
+- **Content Container**: `space-y-3 px-5 pb-2`
+  - Standard spacing and padding for dialog content areas
+
+- **Input Fields**: `mt-1.5` for spacing between label and input
+  - Use `h-11 min-h-[44px]` for input height
+  - Use `rounded-xl` for border radius
+
+- **Textarea**: `mt-1.5 min-h-[80px]` for spacing and minimum height
+
+- **DialogFooter**: `px-5 pb-3 pt-2 gap-2.5`
+  - Standard padding and gap for footer buttons
+
+**Examples of correct dialog structure:**
+```tsx
+<DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
+  <DialogHeader className="px-5 pt-5 pb-3">
+    <DialogTitle>Dialog Title</DialogTitle>
+  </DialogHeader>
+  <div className="space-y-3 px-5 pb-2">
+    {/* Content */}
+  </div>
+  <DialogFooter className="px-5 pb-3 pt-2 gap-2.5">
+    {/* Buttons */}
+  </DialogFooter>
+</DialogContent>
+```
+
 ## General Development Rules
 
 - Always test changes locally when possible before suggesting deployment

@@ -732,11 +732,18 @@ export function useShoppingLists() {
 
     setIsLoading(true);
     
-    const q = query(
+    // Build query with error handling for missing index
+    let q: any = query(
       collection(db, 'shoppingLists'),
-      where('userId', '==', user.uid),
-      orderBy('createdAt', 'desc')
+      where('userId', '==', user.uid)
     );
+
+    // Try to add orderBy, but handle index errors gracefully
+    try {
+      q = query(q, orderBy('createdAt', 'desc'));
+    } catch (err) {
+      console.warn('[useShoppingLists] Index missing for createdAt, using unsorted query');
+    }
 
     const unsubscribe = onSnapshot(
       q,
@@ -756,6 +763,9 @@ export function useShoppingLists() {
             };
           }).filter((l): l is ShoppingList => l !== null);
           
+          // Sort manually if orderBy failed
+          mappedLists.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+          
           setLists(mappedLists);
           setError(null);
         } catch (err) {
@@ -765,10 +775,57 @@ export function useShoppingLists() {
           setIsLoading(false);
         }
       },
-      (err) => {
+      (err: any) => {
         console.error('[useShoppingLists] Snapshot error:', err);
-        setError(err);
-        setIsLoading(false);
+        // Handle missing index error gracefully
+        if (err?.code === 'failed-precondition') {
+          console.warn('[useShoppingLists] Index missing, trying without orderBy');
+          // Retry without orderBy
+          const fallbackQ = query(
+            collection(db, 'shoppingLists'),
+            where('userId', '==', user.uid)
+          );
+          const fallbackUnsubscribe = onSnapshot(
+            fallbackQ,
+            (snapshot: QuerySnapshot) => {
+              try {
+                const mappedLists = snapshot.docs.map((doc: DocumentSnapshot) => {
+                  const data = doc.data();
+                  if (!data) return null;
+                  
+                  return {
+                    id: doc.id,
+                    userId: data.userId,
+                    name: data.name,
+                    isDefault: data.isDefault || false,
+                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.createdAt),
+                    updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt),
+                  };
+                }).filter((l): l is ShoppingList => l !== null);
+                
+                // Sort manually
+                mappedLists.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+                
+                setLists(mappedLists);
+                setError(null);
+              } catch (mapErr) {
+                console.error('[useShoppingLists] Error mapping lists (fallback):', mapErr);
+                setError(mapErr as Error);
+              } finally {
+                setIsLoading(false);
+              }
+            },
+            (fallbackErr) => {
+              console.error('[useShoppingLists] Fallback snapshot error:', fallbackErr);
+              setError(fallbackErr);
+              setIsLoading(false);
+            }
+          );
+          return () => fallbackUnsubscribe();
+        } else {
+          setError(err);
+          setIsLoading(false);
+        }
       }
     );
 

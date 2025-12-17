@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import MobileLayout from '@/components/MobileLayout';
 import { Card, CardContent } from '@/components/ui/card';
@@ -53,7 +53,22 @@ interface AnalysisResult {
 
 export default function MobileDocuments() {
   const { t } = useTranslation();
-  const { data: people = [], isLoading: peopleLoading, error: peopleError } = usePeople();
+  let peopleData: any[] = [];
+  let peopleLoading = false;
+  let peopleError: Error | null = null;
+  
+  try {
+    const peopleHook = usePeople();
+    peopleData = Array.isArray(peopleHook.data) ? peopleHook.data : [];
+    peopleLoading = peopleHook.isLoading || false;
+    peopleError = peopleHook.error || null;
+  } catch (error) {
+    console.error('[Documents] Error in usePeople hook:', error);
+    peopleData = [];
+    peopleLoading = false;
+    peopleError = error as Error;
+  }
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Handle people loading error
@@ -381,32 +396,8 @@ export default function MobileDocuments() {
     return <File className="w-5 h-5" />;
   };
 
-  // Safety check - ensure we have valid data
-  useEffect(() => {
-    if (!Array.isArray(documents)) {
-      console.error('[Documents] documents is not an array, resetting:', documents);
-      setDocuments([]);
-    }
-  }, [documents]);
-
-  // Ensure filteredDocuments is always an array and safe to render
-  const safeFilteredDocuments = useMemo(() => {
-    try {
-      if (!Array.isArray(filteredDocuments)) {
-        console.warn('[Documents] filteredDocuments is not an array, returning empty array');
-        return [];
-      }
-      return filteredDocuments.filter((doc): doc is Document => {
-        if (!doc || !doc.id || typeof doc.id !== 'string') {
-          return false;
-        }
-        return true;
-      });
-    } catch (error) {
-      console.error('[Documents] Error in safeFilteredDocuments:', error);
-      return [];
-    }
-  }, [filteredDocuments]);
+  // Ensure filteredDocuments is always safe to render (no separate safeFilteredDocuments needed)
+  // filteredDocuments already has all safety checks
 
   return (
     <MobileLayout title="Dokumente" showSidebar={true}>
@@ -435,11 +426,14 @@ export default function MobileDocuments() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Alle</SelectItem>
-                  {people.map((person) => (
-                    <SelectItem key={person.id} value={person.id}>
-                      {person.name}
-                    </SelectItem>
-                  ))}
+                  {Array.isArray(peopleData) && peopleData.map((person) => {
+                    if (!person || !person.id) return null;
+                    return (
+                      <SelectItem key={person.id} value={person.id}>
+                        {person.name || 'Unbekannt'}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -523,13 +517,13 @@ export default function MobileDocuments() {
             </Card>
           ))}
         </div>
-      ) : safeFilteredDocuments.length === 0 ? (
+      ) : filteredDocuments.length === 0 ? (
         <div className="mobile-card text-center py-8">
           <p className="text-muted-foreground">Keine Dokumente gefunden</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {safeFilteredDocuments.map((doc) => {
+          {filteredDocuments.map((doc) => {
             if (!doc || !doc.id) {
               console.warn('[Documents] Skipping invalid document in render:', doc);
               return null;

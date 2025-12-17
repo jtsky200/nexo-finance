@@ -145,6 +145,23 @@ export default function MobileShopping() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
 
+  // Barcode Scanner state for individual items
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [barcodeScannerTarget, setBarcodeScannerTarget] = useState<{groupIndex: number, itemId: string} | null>(null);
+  const [barcodeScanning, setBarcodeScanning] = useState(false);
+  const barcodeVideoRef = useRef<HTMLVideoElement>(null);
+  const barcodeCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [barcodeCameraStream, setBarcodeCameraStream] = useState<MediaStream | null>(null);
+  const barcodeScanIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Product Info Scanner state
+  const [showProductInfoScanner, setShowProductInfoScanner] = useState(false);
+  const [productInfoScannerTarget, setProductInfoScannerTarget] = useState<{groupIndex: number, itemId: string} | null>(null);
+  const [productInfoScanning, setProductInfoScanning] = useState(false);
+  const productInfoVideoRef = useRef<HTMLVideoElement>(null);
+  const productInfoCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [productInfoCameraStream, setProductInfoCameraStream] = useState<MediaStream | null>(null);
+
   const openItems = useMemo(
     () => items.filter(i => i.status === 'not_bought'),
     [items]
@@ -231,24 +248,227 @@ export default function MobileShopping() {
     }
   };
 
-  const handleScanItemBarcode = async (groupIndex: number, itemId: string) => {
+  // Barcode Scanner Functions
+  const openBarcodeScanner = (groupIndex: number, itemId: string) => {
+    setBarcodeScannerTarget({ groupIndex, itemId });
+    setShowBarcodeScanner(true);
+    setTimeout(() => startBarcodeCamera(), 100);
+  };
+
+  const startBarcodeCamera = async () => {
     try {
-      // TODO: Implementiere Barcode-Scanner
-      toast.info('Barcode-Scanner wird geöffnet...');
-      // Placeholder für Barcode-Scan
-      const scannedData = {
-        articleNumber: '1234567890123',
-        productInfo: {
-          brand: 'Beispiel Marke',
-          description: 'Gescanntes Produkt'
-        }
-      };
-      updateItemInStoreGroup(groupIndex, itemId, 'articleNumber', scannedData.articleNumber);
-      updateItemInStoreGroup(groupIndex, itemId, 'productInfo', scannedData.productInfo);
-      toast.success('Artikel gescannt');
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast.error('Kamera wird nicht unterstützt');
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
+      });
+      setBarcodeCameraStream(stream);
+      if (barcodeVideoRef.current) {
+        barcodeVideoRef.current.srcObject = stream;
+        await barcodeVideoRef.current.play();
+      }
+      setBarcodeScanning(true);
+      startBarcodeDetection();
+      hapticSuccess();
     } catch (error) {
-      toast.error('Fehler beim Scannen: ' + formatErrorForDisplay(error));
+      toast.error('Kamera-Fehler: ' + formatErrorForDisplay(error));
+      hapticError();
     }
+  };
+
+  const startBarcodeDetection = () => {
+    if (!('BarcodeDetector' in window)) {
+      toast.error('Barcode-Erkennung nicht unterstützt');
+      return;
+    }
+
+    const barcodeDetector = new (window as any).BarcodeDetector({
+      formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e']
+    });
+
+    barcodeScanIntervalRef.current = setInterval(async () => {
+      if (!barcodeVideoRef.current || !barcodeCanvasRef.current || !barcodeScanning) return;
+
+      const video = barcodeVideoRef.current;
+      const canvas = barcodeCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (!ctx || video.readyState !== 4) return;
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+
+      try {
+        const barcodes = await barcodeDetector.detect(canvas);
+        if (barcodes.length > 0) {
+          const barcode = barcodes[0].rawValue;
+          stopBarcodeCamera();
+          if (barcodeScannerTarget) {
+            updateItemInStoreGroup(barcodeScannerTarget.groupIndex, barcodeScannerTarget.itemId, 'articleNumber', barcode);
+            toast.success(`Barcode gescannt: ${barcode}`);
+            hapticSuccess();
+            // Try to fetch product info
+            await fetchProductInfoByBarcode(barcodeScannerTarget.groupIndex, barcodeScannerTarget.itemId, barcode);
+          }
+          setShowBarcodeScanner(false);
+          setBarcodeScannerTarget(null);
+        }
+      } catch (err) {
+        // Silently ignore scan errors
+      }
+    }, 500);
+  };
+
+  const stopBarcodeCamera = () => {
+    if (barcodeScanIntervalRef.current) {
+      clearInterval(barcodeScanIntervalRef.current);
+      barcodeScanIntervalRef.current = null;
+    }
+    if (barcodeCameraStream) {
+      barcodeCameraStream.getTracks().forEach(track => track.stop());
+      setBarcodeCameraStream(null);
+    }
+    if (barcodeVideoRef.current) {
+      barcodeVideoRef.current.srcObject = null;
+    }
+    setBarcodeScanning(false);
+  };
+
+  const closeBarcodeScanner = () => {
+    stopBarcodeCamera();
+    setShowBarcodeScanner(false);
+    setBarcodeScannerTarget(null);
+  };
+
+  // Product Info Scanner Functions
+  const openProductInfoScanner = (groupIndex: number, itemId: string) => {
+    setProductInfoScannerTarget({ groupIndex, itemId });
+    setShowProductInfoScanner(true);
+    setTimeout(() => startProductInfoCamera(), 100);
+  };
+
+  const startProductInfoCamera = async () => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast.error('Kamera wird nicht unterstützt');
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
+      });
+      setProductInfoCameraStream(stream);
+      if (productInfoVideoRef.current) {
+        productInfoVideoRef.current.srcObject = stream;
+        await productInfoVideoRef.current.play();
+      }
+      hapticSuccess();
+    } catch (error) {
+      toast.error('Kamera-Fehler: ' + formatErrorForDisplay(error));
+      hapticError();
+    }
+  };
+
+  const captureProductImage = async () => {
+    if (!productInfoVideoRef.current || !productInfoCanvasRef.current || !productInfoScannerTarget) return;
+
+    setProductInfoScanning(true);
+    try {
+      const video = productInfoVideoRef.current;
+      const canvas = productInfoCanvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0);
+        const imageData = canvas.toDataURL('image/jpeg');
+        
+        // Analyze product image
+        await analyzeProductImage(productInfoScannerTarget.groupIndex, productInfoScannerTarget.itemId, imageData);
+        
+        stopProductInfoCamera();
+        setShowProductInfoScanner(false);
+        setProductInfoScannerTarget(null);
+      }
+    } catch (error) {
+      toast.error('Fehler beim Erfassen: ' + formatErrorForDisplay(error));
+      hapticError();
+    } finally {
+      setProductInfoScanning(false);
+    }
+  };
+
+  const stopProductInfoCamera = () => {
+    if (productInfoCameraStream) {
+      productInfoCameraStream.getTracks().forEach(track => track.stop());
+      setProductInfoCameraStream(null);
+    }
+    if (productInfoVideoRef.current) {
+      productInfoVideoRef.current.srcObject = null;
+    }
+  };
+
+  const closeProductInfoScanner = () => {
+    stopProductInfoCamera();
+    setShowProductInfoScanner(false);
+    setProductInfoScannerTarget(null);
+  };
+
+  // Fetch product info by barcode
+  const fetchProductInfoByBarcode = async (groupIndex: number, itemId: string, barcode: string) => {
+    try {
+      const item = storeGroups[groupIndex]?.items.find(i => i.id === itemId);
+      if (!item) return;
+
+      const store = storeGroups[groupIndex]?.store || '';
+      const searchProductFunc = httpsCallable(functions, 'searchProductInfo');
+      const result = await searchProductFunc({ articleNumber: barcode, store });
+      
+      if (result.data && (result.data as any).productInfo) {
+        updateItemInStoreGroup(groupIndex, itemId, 'productInfo', (result.data as any).productInfo);
+        toast.success('Produktinformationen gefunden');
+      }
+    } catch (error) {
+      // Silently fail - product info is optional
+      console.log('Product info fetch failed:', error);
+    }
+  };
+
+  // Analyze product image
+  const analyzeProductImage = async (groupIndex: number, itemId: string, imageData: string) => {
+    try {
+      const item = storeGroups[groupIndex]?.items.find(i => i.id === itemId);
+      if (!item) return;
+
+      const store = storeGroups[groupIndex]?.store || '';
+      const analyzeProductFunc = httpsCallable(functions, 'analyzeProductImage');
+      const result = await analyzeProductFunc({ imageData, store, articleNumber: item.articleNumber });
+      
+      if (result.data && (result.data as any).productInfo) {
+        updateItemInStoreGroup(groupIndex, itemId, 'productInfo', (result.data as any).productInfo);
+        if ((result.data as any).articleNumber && !item.articleNumber) {
+          updateItemInStoreGroup(groupIndex, itemId, 'articleNumber', (result.data as any).articleNumber);
+        }
+        toast.success('Produktinformationen erkannt');
+        hapticSuccess();
+      } else {
+        toast.info('Keine Produktinformationen erkannt');
+      }
+    } catch (error) {
+      toast.error('Fehler bei Analyse: ' + formatErrorForDisplay(error));
+      hapticError();
+    }
+  };
+
+  const handleScanItemBarcode = async (groupIndex: number, itemId: string) => {
+    openBarcodeScanner(groupIndex, itemId);
+  };
+
+  const handleScanProductInfo = async (groupIndex: number, itemId: string) => {
+    openProductInfoScanner(groupIndex, itemId);
   };
 
   const handleSaveMultiItems = async () => {
@@ -1644,8 +1864,18 @@ export default function MobileShopping() {
                               size="sm"
                               onClick={() => handleScanItemBarcode(groupIndex, item.id)}
                               className="h-9"
+                              title="Barcode scannen"
                             >
                               <Barcode className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleScanProductInfo(groupIndex, item.id)}
+                              className="h-9"
+                              title="Produktinfo scannen"
+                            >
+                              <Camera className="w-4 h-4" />
                             </Button>
                           </div>
 
@@ -1653,6 +1883,10 @@ export default function MobileShopping() {
                             <div className="bg-muted/50 rounded p-2 text-xs space-y-1">
                               {item.productInfo.brand && <p><strong>Marke:</strong> {item.productInfo.brand}</p>}
                               {item.productInfo.description && <p><strong>Beschreibung:</strong> {item.productInfo.description}</p>}
+                              {item.productInfo.price && <p><strong>Preis:</strong> CHF {item.productInfo.price}</p>}
+                              {item.productInfo.imageUrl && (
+                                <img src={item.productInfo.imageUrl} alt="Produkt" className="w-full h-24 object-contain mt-2 rounded" />
+                              )}
                             </div>
                           )}
 
@@ -2395,8 +2629,83 @@ export default function MobileShopping() {
         </div>
       )}
 
+      {/* Barcode Scanner Dialog */}
+      {showBarcodeScanner && (
+        <div className="fixed inset-0 z-[100] bg-black flex flex-col">
+          <div className="flex items-center justify-between p-4 bg-black/50">
+            <h2 className="text-white font-semibold">Barcode scannen</h2>
+            <button
+              onClick={closeBarcodeScanner}
+              className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center"
+            >
+              <X className="w-5 h-5 text-white" />
+            </button>
+          </div>
+          <div className="flex-1 relative flex items-center justify-center">
+            <video
+              ref={barcodeVideoRef}
+              autoPlay
+              playsInline
+              className="w-full h-full object-cover"
+            />
+            <canvas ref={barcodeCanvasRef} className="hidden" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-64 h-32 border-2 border-white rounded-lg" />
+            </div>
+            {barcodeScanning && (
+              <div className="absolute bottom-20 left-0 right-0 text-center">
+                <p className="text-white bg-black/50 px-4 py-2 rounded-lg inline-block">
+                  Barcode in den Rahmen positionieren
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Product Info Scanner Dialog */}
+      {showProductInfoScanner && (
+        <div className="fixed inset-0 z-[100] bg-black flex flex-col">
+          <div className="flex items-center justify-between p-4 bg-black/50">
+            <h2 className="text-white font-semibold">Produkt fotografieren</h2>
+            <button
+              onClick={closeProductInfoScanner}
+              className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center"
+            >
+              <X className="w-5 h-5 text-white" />
+            </button>
+          </div>
+          <div className="flex-1 relative flex items-center justify-center">
+            <video
+              ref={productInfoVideoRef}
+              autoPlay
+              playsInline
+              className="w-full h-full object-cover"
+            />
+            <canvas ref={productInfoCanvasRef} className="hidden" />
+            {productInfoScanning && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                <div className="text-center">
+                  <div className="w-12 h-12 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4" />
+                  <p className="text-white">Analysiere Produkt...</p>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="p-4 bg-black/50">
+            <Button
+              onClick={captureProductImage}
+              disabled={productInfoScanning}
+              className="w-full bg-primary text-primary-foreground"
+            >
+              {productInfoScanning ? 'Analysiere...' : 'Foto aufnehmen'}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* FABs */}
-      {!showAddDialog && !showScanner && !showMultiAddDialog && (
+      {!showAddDialog && !showScanner && !showMultiAddDialog && !showBarcodeScanner && !showProductInfoScanner && (
         <div className="fixed right-4 bottom-20 flex flex-col gap-3 safe-bottom">
           <button 
             onClick={openScanner}

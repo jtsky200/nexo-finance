@@ -7076,5 +7076,260 @@ export const getWeatherHistory = onCall(async (request) => {
   return { weatherHistory };
 });
 
+// Search product info by article number and store
+export const searchProductInfo = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { articleNumber, store } = request.data;
+  const validatedArticleNumber = validateString(articleNumber, 'articleNumber', 50, true);
+  const validatedStore = validateString(store, 'store', 100, false);
+
+  try {
+    // Try to find product in database first
+    const productQuery = await db.collection('productDatabase')
+      .where('articleNumber', '==', validatedArticleNumber)
+      .where('store', '==', validatedStore || '')
+      .limit(1)
+      .get();
+
+    if (!productQuery.empty) {
+      const productData = productQuery.docs[0].data();
+      return {
+        productInfo: {
+          brand: productData.brand || null,
+          description: productData.description || null,
+          price: productData.price || null,
+          imageUrl: productData.imageUrl || null,
+          store: productData.store || validatedStore,
+          articleNumber: validatedArticleNumber
+        }
+      };
+    }
+
+    // If not found, try to search store website or external APIs
+    const storeUrls: Record<string, string> = {
+      'Migros': 'https://www.migros.ch',
+      'Coop': 'https://www.coop.ch',
+      'Aldi': 'https://www.aldi.ch',
+      'Lidl': 'https://www.lidl.ch',
+      'Denner': 'https://www.denner.ch'
+    };
+
+    const storeUrl = validatedStore ? storeUrls[validatedStore] || null : null;
+    const searchUrl = storeUrl ? `${storeUrl}/search?q=${encodeURIComponent(validatedArticleNumber)}` : null;
+
+    // Try to fetch from Open Product Data API (EAN database)
+    let externalProductInfo = null;
+    try {
+      const eanApiResponse = await axios.get(`https://api.upcitemdb.com/prod/trial/lookup`, {
+        params: { upc: validatedArticleNumber },
+        timeout: 5000
+      });
+      
+      if (eanApiResponse.data && eanApiResponse.data.items && eanApiResponse.data.items.length > 0) {
+        const item = eanApiResponse.data.items[0];
+        externalProductInfo = {
+          brand: item.brand || null,
+          description: item.title || item.description || null,
+          price: null, // API doesn't provide price
+          imageUrl: item.images && item.images.length > 0 ? item.images[0] : null,
+          store: validatedStore,
+          articleNumber: validatedArticleNumber,
+          searchUrl: searchUrl
+        };
+      }
+    } catch (apiError: any) {
+      console.log('[searchProductInfo] External API error:', apiError.message);
+      // Continue without external data
+    }
+
+    // If external API provided info, use it; otherwise return basic structure
+    if (externalProductInfo) {
+      // Save to database for future use
+      try {
+        await db.collection('productDatabase').add({
+          articleNumber: validatedArticleNumber,
+          store: validatedStore || '',
+          brand: externalProductInfo.brand,
+          description: externalProductInfo.description,
+          price: null,
+          imageUrl: externalProductInfo.imageUrl,
+          searchUrl: searchUrl,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } catch (dbError) {
+        console.log('[searchProductInfo] Database save error:', dbError);
+      }
+      
+      return { productInfo: externalProductInfo };
+    }
+
+    return {
+      productInfo: {
+        brand: null,
+        description: null,
+        price: null,
+        imageUrl: null,
+        store: validatedStore,
+        articleNumber: validatedArticleNumber,
+        searchUrl: searchUrl
+      }
+    };
+  } catch (error: any) {
+    console.error('[searchProductInfo] Error:', error);
+    throw new HttpsError('internal', 'Failed to search product info: ' + error.message);
+  }
+});
+
+// Analyze product image to extract product info
+export const analyzeProductImage = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated');
+  }
+
+  const { imageData, store, articleNumber } = request.data;
+  const validatedImageData = validateString(imageData, 'imageData', 10000000, true); // ~10MB base64
+  const validatedStore = validateString(store, 'store', 100, false);
+  const validatedArticleNumber = validateString(articleNumber, 'articleNumber', 50, false);
+
+  try {
+    const buffer = Buffer.from(validatedImageData.split(',')[1] || validatedImageData, 'base64');
+    let extractedText = '';
+    let detectedBarcode = validatedArticleNumber || null;
+    let productName = null;
+    let productPrice = null;
+    let productBrand = null;
+
+    // Step 1: Extract text using Google Vision OCR
+    try {
+      const vision = require('@google-cloud/vision');
+      const client = new vision.ImageAnnotatorClient();
+      
+      // Text detection
+      const [textResult] = await client.textDetection(buffer);
+      const textAnnotations = textResult.textAnnotations;
+      if (textAnnotations && textAnnotations.length > 0) {
+        extractedText = textAnnotations[0].description || '';
+        console.log('[analyzeProductImage] OCR text extracted:', extractedText.length, 'chars');
+      }
+
+      // Barcode detection
+      const [barcodeResult] = await client.barcodeDetection(buffer);
+      const barcodes = barcodeResult.barcodeAnnotations;
+      if (barcodes && barcodes.length > 0) {
+        detectedBarcode = barcodes[0].rawValue || detectedBarcode;
+        console.log('[analyzeProductImage] Barcode detected:', detectedBarcode);
+      }
+
+      // Label detection for product identification
+      const [labelResult] = await client.labelDetection(buffer);
+      const labels = labelResult.labelAnnotations;
+      if (labels && labels.length > 0) {
+        // Use top labels as product description
+        const topLabels = labels.slice(0, 3).map((l: any) => l.description).join(', ');
+        productName = topLabels;
+        console.log('[analyzeProductImage] Labels detected:', topLabels);
+      }
+    } catch (visionError: any) {
+      console.error('[analyzeProductImage] Vision API error:', visionError.message);
+      // Continue with basic info if Vision fails
+    }
+
+    // Step 2: Parse extracted text for product info
+    if (extractedText) {
+      const lines = extractedText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      
+      // Try to find product name (usually first meaningful line)
+      for (const line of lines.slice(0, 5)) {
+        if (line.length > 3 && !/^\d+$/.test(line) && !line.match(/^(CHF|Preis|Total)/i)) {
+          if (!productName) productName = line;
+          break;
+        }
+      }
+
+      // Try to find price
+      const priceMatch = extractedText.match(/(\d+[.,]\d{2})\s*(CHF|Fr\.?)?/i);
+      if (priceMatch) {
+        productPrice = parseFloat(priceMatch[1].replace(',', '.'));
+      }
+
+      // Try to find brand (look for common brand patterns)
+      const brandPatterns = /(Migros|Coop|Aldi|Lidl|Denner|Nestlé|Coca-Cola|Pepsi|Milka|Lindt|Toblerone)/i;
+      const brandMatch = extractedText.match(brandPatterns);
+      if (brandMatch) {
+        productBrand = brandMatch[1];
+      }
+    }
+
+    // Step 3: If barcode detected, try to fetch product info from database
+    if (detectedBarcode && !validatedArticleNumber) {
+      try {
+        const productQuery = await db.collection('productDatabase')
+          .where('articleNumber', '==', detectedBarcode)
+          .where('store', '==', validatedStore || '')
+          .limit(1)
+          .get();
+
+        if (!productQuery.empty) {
+          const productData = productQuery.docs[0].data();
+          return {
+            productInfo: {
+              brand: productBrand || productData.brand || null,
+              description: productName || productData.description || 'Produkt erkannt',
+              price: productPrice || productData.price || null,
+              imageUrl: validatedImageData,
+              store: validatedStore,
+              articleNumber: detectedBarcode
+            }
+          };
+        }
+
+        // Try external API
+        try {
+          const eanApiResponse = await axios.get(`https://api.upcitemdb.com/prod/trial/lookup`, {
+            params: { upc: detectedBarcode },
+            timeout: 5000
+          });
+          
+          if (eanApiResponse.data && eanApiResponse.data.items && eanApiResponse.data.items.length > 0) {
+            const item = eanApiResponse.data.items[0];
+            return {
+              productInfo: {
+                brand: productBrand || item.brand || null,
+                description: productName || item.title || item.description || 'Produkt erkannt',
+                price: productPrice || null,
+                imageUrl: validatedImageData,
+                store: validatedStore,
+                articleNumber: detectedBarcode
+              }
+            };
+          }
+        } catch (apiError) {
+          console.log('[analyzeProductImage] External API error:', apiError);
+        }
+      } catch (searchError) {
+        console.log('[analyzeProductImage] Product search failed:', searchError);
+      }
+    }
+
+    return {
+      productInfo: {
+        brand: productBrand || null,
+        description: productName || (extractedText ? 'Produktbild erkannt' : 'Produktbild gespeichert'),
+        price: productPrice || null,
+        imageUrl: validatedImageData,
+        store: validatedStore,
+        articleNumber: detectedBarcode
+      }
+    };
+  } catch (error: any) {
+    console.error('[analyzeProductImage] Error:', error);
+    throw new HttpsError('internal', 'Failed to analyze product image: ' + error.message);
+  }
+});
+
 // Export tRPC function
 export { trpc } from './trpc';

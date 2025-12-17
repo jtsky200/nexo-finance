@@ -94,29 +94,57 @@ export default function MobileDocuments() {
   const fetchDocuments = useCallback(async () => {
     try {
       setLoading(true);
-      const getDocumentsFunc = httpsCallable(functions, 'getDocuments');
-      const result = await getDocumentsFunc({});
-      const data = result.data as { documents: any[] };
+      const getAllDocumentsFunc = httpsCallable(functions, 'getAllDocuments');
+      const result = await getAllDocumentsFunc({ folder: selectedFolder === 'all' ? null : selectedFolder });
+      const data = result.data as { documents: any[], total?: number };
       
-      const mappedDocs = (data.documents || []).map((doc: any) => ({
-        ...doc,
-        createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : null,
-        updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : null,
-      }));
+      const mappedDocs = (data?.documents || []).map((doc: any) => {
+        try {
+          return {
+            ...doc,
+            id: doc.id || '',
+            personId: doc.personId || '',
+            personName: doc.personName || 'Unbekannt',
+            fileName: doc.fileName || 'Unbenannt',
+            fileType: doc.fileType || '',
+            fileUrl: doc.fileUrl || '',
+            folder: doc.folder || 'Sonstiges',
+            status: doc.status || 'uploaded',
+            createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : null,
+            updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : null,
+          };
+        } catch (err) {
+          console.error('Error mapping document:', err, doc);
+          return null;
+        }
+      }).filter((doc): doc is Document => doc !== null);
       
       setDocuments(mappedDocs);
     } catch (error: any) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Error fetching documents:', error);
       }
-      toast.error('Fehler beim Laden der Dokumente');
+      toast.error('Fehler beim Laden der Dokumente: ' + (error.message || 'Unbekannter Fehler'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedFolder]);
 
   useEffect(() => {
-    fetchDocuments();
+    let mounted = true;
+    const loadDocuments = async () => {
+      try {
+        await fetchDocuments();
+      } catch (error) {
+        if (mounted) {
+          console.error('Failed to load documents:', error);
+        }
+      }
+    };
+    loadDocuments();
+    return () => {
+      mounted = false;
+    };
   }, [fetchDocuments]);
 
   const filteredDocuments = useMemo(() => {
@@ -222,14 +250,13 @@ export default function MobileDocuments() {
     try {
       setIsSaving(true);
       
-      const saveDocumentFunc = httpsCallable(functions, 'saveDocument');
-      await saveDocumentFunc({
+      const uploadDocumentFunc = httpsCallable(functions, 'uploadDocument');
+      await uploadDocumentFunc({
         fileData: tempDocumentData,
         fileName: uploadedFile.name,
         fileType: uploadedFile.type,
         personId: assignPersonId,
         folder: assignFolder,
-        analysisResult: analysisResult,
       });
       
       toast.success('Dokument gespeichert');

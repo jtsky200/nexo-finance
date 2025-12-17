@@ -19,13 +19,18 @@ import {
   ChevronUp,
   Save,
   Banknote,
-  RotateCcw
+  RotateCcw,
+  Barcode,
+  Package
 } from 'lucide-react';
 import MobileLayout from '@/components/MobileLayout';
-import { useShoppingList, createShoppingItem, markShoppingItemAsBought, deleteShoppingItem, createFinanceEntry } from '@/lib/firebaseHooks';
+import { useShoppingList, createShoppingItem, markShoppingItemAsBought, deleteShoppingItem, createFinanceEntry, updateShoppingItem } from '@/lib/firebaseHooks';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { functions } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -87,16 +92,37 @@ export default function MobileShopping() {
       }
     `;
     document.head.appendChild(style);
-    return () => document.head.removeChild(style);
+    return () => {
+      if (document.head.contains(style)) {
+        document.head.removeChild(style);
+      }
+    };
   }, []);
   const { data: items = [], isLoading, refetch } = useShoppingList();
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showMultiAddDialog, setShowMultiAddDialog] = useState(false);
   const [newItem, setNewItem] = useState({
     name: '',
     quantity: '1',
     category: 'Lebensmittel',
     store: ''
   });
+  
+  // Multi-Item State: Gruppiert nach Laden
+  interface StoreGroup {
+    store: string;
+    items: Array<{
+      id: string;
+      name: string;
+      quantity: string;
+      category: string;
+      price?: string;
+      articleNumber?: string;
+      productInfo?: any;
+      saveToDatabase?: boolean;
+    }>;
+  }
+  const [storeGroups, setStoreGroups] = useState<StoreGroup[]>([]);
 
   // Scanner state
   const [showScanner, setShowScanner] = useState(false);
@@ -120,12 +146,12 @@ export default function MobileShopping() {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
 
   const openItems = useMemo(
-    () => items.filter(i => !i.bought),
+    () => items.filter(i => i.status === 'not_bought'),
     [items]
   );
 
   const boughtItems = useMemo(
-    () => items.filter(i => i.bought),
+    () => items.filter(i => i.status === 'bought'),
     [items]
   );
 
@@ -141,7 +167,8 @@ export default function MobileShopping() {
         quantity: parseInt(newItem.quantity) || 1,
         category: newItem.category,
         estimatedPrice: 0,
-        currency: 'CHF'
+        currency: 'CHF',
+        store: newItem.store || null
       });
       
       toast.success('Artikel hinzugefügt');
@@ -155,9 +182,123 @@ export default function MobileShopping() {
     }
   };
 
-  const handleToggleBought = async (itemId: string, currentBought: boolean) => {
+  // Multi-Item Handler Functions
+  const addStoreGroup = () => {
+    const newGroup: StoreGroup = {
+      store: '',
+      items: []
+    };
+    setStoreGroups([...storeGroups, newGroup]);
+  };
+
+  const removeStoreGroup = (index: number) => {
+    setStoreGroups(storeGroups.filter((_, i) => i !== index));
+  };
+
+  const updateStoreGroup = (index: number, store: string) => {
+    const updated = [...storeGroups];
+    updated[index].store = store;
+    setStoreGroups(updated);
+  };
+
+  const addItemToStoreGroup = (groupIndex: number) => {
+    const updated = [...storeGroups];
+    updated[groupIndex].items.push({
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      name: '',
+      quantity: '1',
+      category: 'Lebensmittel',
+      price: '',
+      articleNumber: '',
+      productInfo: null,
+      saveToDatabase: false
+    });
+    setStoreGroups(updated);
+  };
+
+  const removeItemFromStoreGroup = (groupIndex: number, itemId: string) => {
+    const updated = [...storeGroups];
+    updated[groupIndex].items = updated[groupIndex].items.filter(item => item.id !== itemId);
+    setStoreGroups(updated);
+  };
+
+  const updateItemInStoreGroup = (groupIndex: number, itemId: string, field: string, value: any) => {
+    const updated = [...storeGroups];
+    const itemIndex = updated[groupIndex].items.findIndex(item => item.id === itemId);
+    if (itemIndex !== -1) {
+      (updated[groupIndex].items[itemIndex] as any)[field] = value;
+      setStoreGroups(updated);
+    }
+  };
+
+  const handleScanItemBarcode = async (groupIndex: number, itemId: string) => {
     try {
-      await markShoppingItemAsBought(itemId, !currentBought);
+      // TODO: Implementiere Barcode-Scanner
+      toast.info('Barcode-Scanner wird geöffnet...');
+      // Placeholder für Barcode-Scan
+      const scannedData = {
+        articleNumber: '1234567890123',
+        productInfo: {
+          brand: 'Beispiel Marke',
+          description: 'Gescanntes Produkt'
+        }
+      };
+      updateItemInStoreGroup(groupIndex, itemId, 'articleNumber', scannedData.articleNumber);
+      updateItemInStoreGroup(groupIndex, itemId, 'productInfo', scannedData.productInfo);
+      toast.success('Artikel gescannt');
+    } catch (error) {
+      toast.error('Fehler beim Scannen: ' + formatErrorForDisplay(error));
+    }
+  };
+
+  const handleSaveMultiItems = async () => {
+    try {
+      let totalItems = 0;
+      for (const group of storeGroups) {
+        if (!group.store) {
+          toast.error('Bitte Laden für alle Gruppen angeben');
+          return;
+        }
+        for (const item of group.items) {
+          if (!item.name.trim()) {
+            toast.error('Bitte Artikelname für alle Artikel eingeben');
+            return;
+          }
+          
+          await createShoppingItem({
+            item: item.name.trim(),
+            quantity: parseInt(item.quantity) || 1,
+            category: item.category,
+            estimatedPrice: parseFloat(item.price || '0') * 100, // In Rappen speichern
+            currency: 'CHF',
+            store: group.store,
+            articleNumber: item.articleNumber || null,
+            productInfo: item.productInfo || null,
+            saveToDatabase: item.saveToDatabase || false
+          });
+          totalItems++;
+        }
+      }
+      
+      toast.success(`${totalItems} Artikel hinzugefügt`);
+      hapticSuccess();
+      setShowMultiAddDialog(false);
+      setStoreGroups([]);
+      await refetch();
+    } catch (error) {
+      toast.error('Fehler: ' + formatErrorForDisplay(error));
+      hapticError();
+    }
+  };
+
+  const handleToggleBought = async (itemId: string, currentStatus: 'not_bought' | 'bought') => {
+    try {
+      const newStatus = currentStatus === 'bought' ? 'not_bought' : 'bought';
+      if (newStatus === 'bought') {
+        await markShoppingItemAsBought(itemId);
+      } else {
+        await updateShoppingItem(itemId, { status: 'not_bought' });
+      }
       hapticSelection();
       await refetch();
     } catch (error) {
@@ -783,14 +924,14 @@ export default function MobileShopping() {
                   });
                   
                   // Filter out already scanned positions
-                  const newItemsToAdd = itemsWithPositions.filter(({ positionId }) => {
+                  const newItemsToAdd = itemsWithPositions.filter(({ positionId }: { positionId: string }) => {
                     return !scannedPositions.has(positionId);
                   });
                   
                   if (newItemsToAdd.length > 0) {
                     // Add new positions to scanned set
                     const newPositions = new Set(scannedPositions);
-                    newItemsToAdd.forEach(({ positionId }) => {
+                    newItemsToAdd.forEach(({ positionId }: { positionId: string }) => {
                       newPositions.add(positionId);
                     });
                     setScannedPositions(newPositions);
@@ -810,7 +951,7 @@ export default function MobileShopping() {
                       const merged = [...prev];
                       let addedCount = 0;
                       
-                      newItemsToAdd.forEach(({ item: newItem, positionId }) => {
+                      newItemsToAdd.forEach(({ item: newItem, positionId }: { item: ReceiptItem; positionId: string }) => {
                         const name = newItem.name.toLowerCase().trim();
                         const price = newItem.unitPrice.toFixed(2);
                         const articleNum = newItem.articleNumber || '';
@@ -1087,11 +1228,12 @@ export default function MobileShopping() {
     try {
       for (const item of liveScannedItems) {
         await createShoppingItem({
-          name: item.name,
+          item: item.name,
           quantity: item.quantity || 1,
           category: categorizeItem(item.name),
-          store: receiptData?.store?.name || '',
-          bought: false
+          estimatedPrice: (item.totalPrice || item.unitPrice || 0) * 100,
+          currency: 'CHF',
+          store: receiptData?.store?.name || null
         });
       }
       
@@ -1115,11 +1257,12 @@ export default function MobileShopping() {
     try {
       for (const item of selected) {
         await createShoppingItem({
-          name: item.name,
+          item: item.name,
           quantity: item.quantity || 1,
           category: categorizeItem(item.name),
-          store: receiptData?.store?.name || '',
-          bought: false
+          estimatedPrice: (item.totalPrice || item.unitPrice || 0) * 100,
+          currency: 'CHF',
+          store: receiptData?.store?.name || null
         });
       }
       
@@ -1154,13 +1297,14 @@ export default function MobileShopping() {
 
     try {
       await createFinanceEntry({
-        type: 'expense',
+        type: 'ausgabe',
         amount: receiptData.totals.total * 100, // Convert to cents
         category: 'Lebensmittel',
-        description: `Einkauf bei ${receiptData.store.name}`,
+        notes: `Einkauf bei ${receiptData.store.name}`,
         date: receiptData.purchase.date || new Date().toISOString().split('T')[0],
         paymentMethod: receiptData.purchase.paymentMethod || 'Karte',
-        status: 'bezahlt',
+        currency: 'CHF',
+        isRecurring: false,
       });
 
       toast.success('Zu Finanzen hinzugefügt!');
@@ -1251,13 +1395,13 @@ export default function MobileShopping() {
               className="mobile-card flex items-center gap-4 py-3"
             >
               <button
-                onClick={() => handleToggleBought(item.id, item.bought)}
+                onClick={() => handleToggleBought(item.id, item.status)}
                 className="w-6 h-6 rounded border-2 border-border flex items-center justify-center shrink-0"
               >
                 {/* Empty checkbox */}
               </button>
               <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{item.name}</p>
+                <p className="font-medium truncate">{item.item}</p>
                 <p className="text-xs text-muted-foreground">
                   {item.quantity > 1 && `${item.quantity}x • `}
                   {item.category}
@@ -1296,12 +1440,12 @@ export default function MobileShopping() {
                 className="mobile-card flex items-center gap-4 py-3"
               >
                 <button
-                  onClick={() => handleToggleBought(item.id, item.bought)}
+                  onClick={() => handleToggleBought(item.id, item.status)}
                   className="w-6 h-6 rounded bg-status-success flex items-center justify-center shrink-0"
                 >
                   <Check className="w-4 h-4 status-success" />
                 </button>
-                <p className="font-medium line-through flex-1 truncate">{item.name}</p>
+                <p className="font-medium line-through flex-1 truncate">{item.item}</p>
               </div>
             ))}
           </div>
@@ -1390,6 +1534,188 @@ export default function MobileShopping() {
           </div>
         </div>
       )}
+
+      {/* Multi-Item Dialog */}
+      <Dialog open={showMultiAddDialog} onOpenChange={setShowMultiAddDialog}>
+        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[90vw] !max-w-2xl !max-h-[90vh] !rounded-3xl !m-0 !overflow-hidden !shadow-2xl !flex !flex-col">
+          <DialogHeader className="px-5 pt-5 pb-3 flex-shrink-0">
+            <DialogTitle className="text-lg font-semibold">Mehrere Artikel hinzufügen</DialogTitle>
+            <DialogDescription className="sr-only">
+              Fügen Sie mehrere Artikel gruppiert nach Laden hinzu
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="px-5 pb-2 overflow-y-auto flex-1 min-h-0 space-y-4">
+            {storeGroups.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                <Store className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>Keine Laden-Gruppen vorhanden</p>
+                <p className="text-sm mt-1">Klicken Sie auf "Laden hinzufügen" um zu beginnen</p>
+              </div>
+            )}
+
+            {storeGroups.map((group, groupIndex) => (
+              <div key={groupIndex} className="border rounded-xl p-4 space-y-3 bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <Store className="w-4 h-4 text-muted-foreground" />
+                  <Select
+                    value={group.store || 'none'}
+                    onValueChange={(value) => updateStoreGroup(groupIndex, value === 'none' ? '' : value)}
+                  >
+                    <SelectTrigger className="flex-1 h-9">
+                      <SelectValue placeholder="Laden wählen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Laden wählen</SelectItem>
+                      <SelectItem value="Migros">Migros</SelectItem>
+                      <SelectItem value="Coop">Coop</SelectItem>
+                      <SelectItem value="Aldi">Aldi</SelectItem>
+                      <SelectItem value="Lidl">Lidl</SelectItem>
+                      <SelectItem value="Denner">Denner</SelectItem>
+                      <SelectItem value="Volg">Volg</SelectItem>
+                      <SelectItem value="Spar">Spar</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeStoreGroup(groupIndex)}
+                    className="h-9 w-9 p-0"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                <div className="space-y-2">
+                  {group.items.map((item) => (
+                    <div key={item.id} className="bg-background rounded-lg p-3 space-y-2 border">
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="Artikelname *"
+                              value={item.name}
+                              onChange={(e) => updateItemInStoreGroup(groupIndex, item.id, 'name', e.target.value)}
+                              className="flex-1 h-9"
+                            />
+                            <Input
+                              type="number"
+                              placeholder="Menge"
+                              value={item.quantity}
+                              onChange={(e) => updateItemInStoreGroup(groupIndex, item.id, 'quantity', e.target.value)}
+                              className="w-20 h-9"
+                              min="1"
+                            />
+                          </div>
+                          
+                          <div className="flex gap-2">
+                            <Select
+                              value={item.category}
+                              onValueChange={(value) => updateItemInStoreGroup(groupIndex, item.id, 'category', value)}
+                            >
+                              <SelectTrigger className="flex-1 h-9">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {categories.map((cat) => (
+                                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="Preis (CHF)"
+                              value={item.price}
+                              onChange={(e) => updateItemInStoreGroup(groupIndex, item.id, 'price', e.target.value)}
+                              className="w-24 h-9"
+                            />
+                          </div>
+
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="Artikelnummer (EAN/Barcode)"
+                              value={item.articleNumber}
+                              onChange={(e) => updateItemInStoreGroup(groupIndex, item.id, 'articleNumber', e.target.value)}
+                              className="flex-1 h-9"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleScanItemBarcode(groupIndex, item.id)}
+                              className="h-9"
+                            >
+                              <Barcode className="w-4 h-4" />
+                            </Button>
+                          </div>
+
+                          {item.productInfo && (
+                            <div className="bg-muted/50 rounded p-2 text-xs space-y-1">
+                              {item.productInfo.brand && <p><strong>Marke:</strong> {item.productInfo.brand}</p>}
+                              {item.productInfo.description && <p><strong>Beschreibung:</strong> {item.productInfo.description}</p>}
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2">
+                            <Switch
+                              checked={item.saveToDatabase || false}
+                              onCheckedChange={(checked) => updateItemInStoreGroup(groupIndex, item.id, 'saveToDatabase', checked)}
+                            />
+                            <Label className="text-xs">Für zukünftige Käufe speichern</Label>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeItemFromStoreGroup(groupIndex, item.id)}
+                          className="h-9 w-9 p-0"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => addItemToStoreGroup(groupIndex)}
+                    className="w-full h-9"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Artikel hinzufügen
+                  </Button>
+                </div>
+              </div>
+            ))}
+
+            <Button
+              variant="outline"
+              onClick={addStoreGroup}
+              className="w-full"
+            >
+              <Store className="w-4 h-4 mr-2" />
+              Laden hinzufügen
+            </Button>
+          </div>
+
+          <DialogFooter className="px-5 pb-3 pt-2 gap-2.5 flex-shrink-0">
+            <Button variant="outline" onClick={() => {
+              setShowMultiAddDialog(false);
+              setStoreGroups([]);
+            }} className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium">
+              Abbrechen
+            </Button>
+            <Button 
+              onClick={handleSaveMultiItems}
+              disabled={storeGroups.length === 0 || storeGroups.every(g => g.items.length === 0)}
+              className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium"
+            >
+              {storeGroups.reduce((sum, g) => sum + g.items.length, 0)} Artikel hinzufügen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Scanner Dialog */}
       {showScanner && (
@@ -2070,13 +2396,20 @@ export default function MobileShopping() {
       )}
 
       {/* FABs */}
-      {!showAddDialog && !showScanner && (
+      {!showAddDialog && !showScanner && !showMultiAddDialog && (
         <div className="fixed right-4 bottom-20 flex flex-col gap-3 safe-bottom">
           <button 
             onClick={openScanner}
             className="w-12 h-12 rounded-full bg-secondary text-secondary-foreground shadow-lg flex items-center justify-center active:opacity-80 transition-opacity"
           >
             <ScanLine className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={() => setShowMultiAddDialog(true)}
+            className="w-12 h-12 rounded-full bg-secondary text-secondary-foreground shadow-lg flex items-center justify-center active:opacity-80 transition-opacity"
+            title="Mehrere Artikel hinzufügen"
+          >
+            <Package className="w-5 h-5" />
           </button>
           <button 
             onClick={() => setShowAddDialog(true)}

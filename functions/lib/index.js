@@ -1967,7 +1967,7 @@ exports.createShoppingItem = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('unauthenticated', 'User must be authenticated');
     }
     const userId = request.auth.uid;
-    const { item, quantity, unit, category, estimatedPrice, currency } = request.data;
+    const { item, quantity, unit, category, estimatedPrice, currency, store, articleNumber, productInfo, saveToDatabase } = request.data;
     const itemData = {
         userId,
         item,
@@ -1977,6 +1977,10 @@ exports.createShoppingItem = (0, https_1.onCall)(async (request) => {
         estimatedPrice: estimatedPrice || 0,
         actualPrice: null,
         currency: currency || 'CHF',
+        store: store || null,
+        articleNumber: articleNumber || null,
+        productInfo: productInfo || null,
+        saveToDatabase: saveToDatabase || false,
         status: 'not_bought',
         boughtAt: null,
         linkedExpenseId: null,

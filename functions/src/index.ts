@@ -2176,7 +2176,7 @@ export const createShoppingItem = onCall(async (request) => {
   }
 
   const userId = request.auth.uid;
-  const { item, quantity, unit, category, estimatedPrice, currency } = request.data;
+  const { item, quantity, unit, category, estimatedPrice, currency, store, articleNumber, productInfo, saveToDatabase } = request.data;
 
   const itemData = {
     userId,
@@ -2187,6 +2187,10 @@ export const createShoppingItem = onCall(async (request) => {
     estimatedPrice: estimatedPrice || 0,
     actualPrice: null,
     currency: currency || 'CHF',
+    store: store || null,
+    articleNumber: articleNumber || null,
+    productInfo: productInfo || null,
+    saveToDatabase: saveToDatabase || false,
     status: 'not_bought',
     boughtAt: null,
     linkedExpenseId: null,

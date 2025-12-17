@@ -691,6 +691,15 @@ export interface ShoppingItem {
   estimatedPrice: number;
   actualPrice?: number | null;
   currency: string;
+  store?: string | null;
+  articleNumber?: string | null; // Artikelnummer (EAN, Barcode, etc.)
+  productInfo?: {
+    brand?: string;
+    description?: string;
+    imageUrl?: string;
+    scannedData?: any;
+  } | null;
+  saveToDatabase?: boolean; // Für zukünftige Käufe speichern
   status: 'not_bought' | 'bought';
   boughtAt?: Date | null;
   linkedExpenseId?: string | null;

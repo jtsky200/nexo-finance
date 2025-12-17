@@ -137,11 +137,11 @@ export default function MobileShopping() {
 
     try {
       await createShoppingItem({
-        name: newItem.name.trim(),
+        item: newItem.name.trim(),
         quantity: parseInt(newItem.quantity) || 1,
         category: newItem.category,
-        store: newItem.store || undefined,
-        bought: false
+        estimatedPrice: 0,
+        currency: 'CHF'
       });
       
       toast.success('Artikel hinzugefügt');
@@ -150,7 +150,7 @@ export default function MobileShopping() {
       setNewItem({ name: '', quantity: '1', category: 'Lebensmittel', store: '' });
       await refetch();
     } catch (error) {
-      toast.error('Fehler: ' + (error as any).message);
+      toast.error('Fehler: ' + formatErrorForDisplay(error));
       hapticError();
     }
   };

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
   ShoppingCart, 
@@ -24,7 +24,7 @@ import {
   Package
 } from 'lucide-react';
 import MobileLayout from '@/components/MobileLayout';
-import { useShoppingList, useShoppingLists, createShoppingList, updateShoppingList, deleteShoppingList, createShoppingItem, markShoppingItemAsBought, deleteShoppingItem, createFinanceEntry, updateShoppingItem } from '@/lib/firebaseHooks';
+import { useShoppingList, useShoppingLists, createShoppingList, updateShoppingList, deleteShoppingList, createShoppingItem, markShoppingItemAsBought, deleteShoppingItem, createFinanceEntry, updateShoppingItem, type ShoppingItem } from '@/lib/firebaseHooks';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -118,6 +118,18 @@ export default function MobileShopping() {
   }, [lists, selectedListId]);
   
   const { data: items = [], isLoading, refetch } = useShoppingList(selectedListId || undefined);
+  const [optimisticItems, setOptimisticItems] = useState<ShoppingItem[]>([]);
+  const [isDeleting, setIsDeleting] = useState<Set<string>>(new Set());
+  
+  // Sync optimistic items with actual items
+  useEffect(() => {
+    if (items.length > 0 || optimisticItems.length === 0) {
+      setOptimisticItems(items);
+    }
+  }, [items]);
+  
+  // Use optimistic items for display
+  const displayItems = optimisticItems.length > 0 ? optimisticItems : items;
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showMultiAddDialog, setShowMultiAddDialog] = useState(false);
   const [newItem, setNewItem] = useState({
@@ -586,54 +598,100 @@ export default function MobileShopping() {
     }
   };
 
-  const handleToggleBought = async (itemId: string, currentStatus: 'not_bought' | 'bought') => {
+  const handleToggleBought = useCallback(async (itemId: string, currentStatus: 'not_bought' | 'bought') => {
+    const newStatus = currentStatus === 'bought' ? 'not_bought' : 'bought';
+    
+    // Optimistic update
+    setOptimisticItems(prev => prev.map(item => 
+      item.id === itemId 
+        ? { ...item, status: newStatus, boughtAt: newStatus === 'bought' ? new Date() : null }
+        : item
+    ));
+    hapticSelection();
+    
     try {
-      const newStatus = currentStatus === 'bought' ? 'not_bought' : 'bought';
       if (newStatus === 'bought') {
         await markShoppingItemAsBought(itemId);
       } else {
         await updateShoppingItem(itemId, { status: 'not_bought' });
       }
-      hapticSelection();
-      await refetch();
+      // Refetch in background
+      setTimeout(() => refetch(), 100);
     } catch (error) {
+      // Rollback on error
+      refetch();
       toast.error(formatErrorForDisplay(error));
       hapticError();
     }
-  };
+  }, [refetch]);
 
-  const handleDeleteItem = async (itemId: string) => {
+  const handleDeleteItem = useCallback(async (itemId: string) => {
+    // Optimistic update - remove immediately
+    setOptimisticItems(prev => prev.filter(item => item.id !== itemId));
+    setIsDeleting(prev => new Set(prev).add(itemId));
+    hapticSuccess();
+    
     try {
       await deleteShoppingItem(itemId);
-      hapticSuccess();
-      await refetch();
+      // Refetch in background
+      setTimeout(() => refetch(), 100);
     } catch (error) {
+      // Rollback on error
+      refetch();
       toast.error(formatErrorForDisplay(error));
       hapticError();
+    } finally {
+      setIsDeleting(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(itemId);
+        return newSet;
+      });
     }
-  };
+  }, [refetch]);
 
-  const handleDeleteMultipleItems = async () => {
+  const handleDeleteMultipleItems = useCallback(async () => {
     if (selectedItemIds.size === 0) {
       toast.error('Bitte wählen Sie mindestens einen Artikel aus');
       return;
     }
 
+    const idsToDelete = Array.from(selectedItemIds);
+    
+    // Optimistic update - remove immediately
+    setOptimisticItems(prev => prev.filter(item => !selectedItemIds.has(item.id)));
+    setIsDeleting(prev => {
+      const newSet = new Set(prev);
+      idsToDelete.forEach(id => newSet.add(id));
+      return newSet;
+    });
+    
+    // Clear selection immediately for better UX
+    setSelectedItemIds(new Set());
+    setSelectionMode(false);
+    hapticSuccess();
+
     try {
-      const deletePromises = Array.from(selectedItemIds).map(id => deleteShoppingItem(id));
+      // Delete in background
+      const deletePromises = idsToDelete.map(id => deleteShoppingItem(id));
       await Promise.all(deletePromises);
-      toast.success(`${selectedItemIds.size} Artikel gelöscht`);
-      hapticSuccess();
-      setSelectedItemIds(new Set());
-      setSelectionMode(false);
-      await refetch();
+      toast.success(`${idsToDelete.length} Artikel gelöscht`);
+      // Refetch in background
+      setTimeout(() => refetch(), 100);
     } catch (error) {
+      // Rollback on error
+      refetch();
       toast.error(formatErrorForDisplay(error));
       hapticError();
+    } finally {
+      setIsDeleting(prev => {
+        const newSet = new Set(prev);
+        idsToDelete.forEach(id => newSet.delete(id));
+        return newSet;
+      });
     }
-  };
+  }, [selectedItemIds, refetch]);
 
-  const toggleItemSelection = (itemId: string) => {
+  const toggleItemSelection = useCallback((itemId: string) => {
     setSelectedItemIds(prev => {
       const newSet = new Set(prev);
       if (newSet.has(itemId)) {
@@ -644,9 +702,9 @@ export default function MobileShopping() {
       return newSet;
     });
     hapticSelection();
-  };
+  }, []);
 
-  const toggleSelectAll = () => {
+  const toggleSelectAll = useCallback(() => {
     const allItemIds = new Set([...openItems.map(i => i.id), ...boughtItems.map(i => i.id)]);
     if (selectedItemIds.size === allItemIds.size) {
       setSelectedItemIds(new Set());
@@ -654,26 +712,45 @@ export default function MobileShopping() {
       setSelectedItemIds(allItemIds);
     }
     hapticSelection();
-  };
+  }, [openItems, boughtItems, selectedItemIds.size]);
 
-  const exitSelectionMode = () => {
+  const exitSelectionMode = useCallback(() => {
     setSelectionMode(false);
     setSelectedItemIds(new Set());
-  };
+  }, []);
 
-  const handleClearBought = async () => {
+  const handleClearBought = useCallback(async () => {
+    const boughtItemIds = boughtItems.map(item => item.id);
+    
+    // Optimistic update
+    setOptimisticItems(prev => prev.filter(item => !boughtItemIds.includes(item.id)));
+    setIsDeleting(prev => {
+      const newSet = new Set(prev);
+      boughtItemIds.forEach(id => newSet.add(id));
+      return newSet;
+    });
+    hapticSuccess();
+    
     try {
-      for (const item of boughtItems) {
-        await deleteShoppingItem(item.id);
-      }
+      // Delete in parallel for better performance
+      const deletePromises = boughtItemIds.map(id => deleteShoppingItem(id));
+      await Promise.all(deletePromises);
       toast.success('Eingekaufte Artikel gelöscht');
-      hapticSuccess();
-      await refetch();
+      // Refetch in background
+      setTimeout(() => refetch(), 100);
     } catch (error) {
+      // Rollback on error
+      refetch();
       toast.error(formatErrorForDisplay(error));
       hapticError();
+    } finally {
+      setIsDeleting(prev => {
+        const newSet = new Set(prev);
+        boughtItemIds.forEach(id => newSet.delete(id));
+        return newSet;
+      });
     }
-  };
+  }, [boughtItems, refetch]);
 
   // Scanner state
   const [scannerStatus, setScannerStatus] = useState<'idle' | 'scanning' | 'detected' | 'capturing' | 'adjusting'>('idle');

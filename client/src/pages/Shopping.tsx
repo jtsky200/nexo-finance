@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -122,6 +122,18 @@ const listTemplates = [
 export default function Shopping() {
   const { t } = useTranslation();
   const { data: items = [], isLoading, refetch } = useShoppingList();
+  const [optimisticItems, setOptimisticItems] = useState<ShoppingItem[]>([]);
+  const [isDeleting, setIsDeleting] = useState<Set<string>>(new Set());
+  
+  // Sync optimistic items with actual items
+  useEffect(() => {
+    if (items.length > 0 || optimisticItems.length === 0) {
+      setOptimisticItems(items);
+    }
+  }, [items]);
+  
+  // Use optimistic items for display
+  const displayItems = optimisticItems.length > 0 ? optimisticItems : items;
   const { data: userStores = [] } = useStores();
   const { data: receipts = [] } = useReceipts(10);
   const { settings, isLoading: isLoadingSettings, updateSettings } = useUserSettings();
@@ -277,7 +289,7 @@ export default function Shopping() {
 
   // Computed values
   const notBoughtItems = useMemo(() => {
-    let filtered = items.filter(i => i.status === 'not_bought');
+    let filtered = displayItems.filter(i => i.status === 'not_bought');
     if (filterCategory !== 'all') {
       filtered = filtered.filter(i => i.category === filterCategory);
     }
@@ -294,7 +306,7 @@ export default function Shopping() {
   }, [items, filterCategory, filterStore, sortBy]);
 
   const boughtItems = useMemo(() => 
-    items.filter(i => i.status === 'bought'), [items]);
+    displayItems.filter(i => i.status === 'bought'), [displayItems]);
 
   // Multi-select state for deletion
   const [selectionMode, setSelectionMode] = useState(false);
@@ -558,7 +570,7 @@ export default function Shopping() {
     loadTemplates();
   }, []);
 
-  const handleAddItem = async () => {
+  const handleAddItem = useCallback(async () => {
     if (!newItem.item.trim()) {
       toast.error('Bitte Artikel eingeben');
       return;
@@ -578,11 +590,12 @@ export default function Shopping() {
         currency: 'CHF',
         store: '',
       });
-      refetch();
+      // Refetch in background
+      setTimeout(() => refetch(), 100);
     } catch (error: any) {
       toast.error('Fehler: ' + error.message);
     }
-  };
+  }, [newItem, refetch]);
 
   const handleQuickAdd = async (template: typeof quickAddTemplates[0]) => {
     try {
@@ -600,53 +613,98 @@ export default function Shopping() {
     }
   };
 
-  const handleMarkAsBought = async (itemId: string, estimatedPrice: number) => {
+  const handleMarkAsBought = useCallback(async (itemId: string, estimatedPrice: number) => {
+    // Optimistic update
+    setOptimisticItems(prev => prev.map(item => 
+      item.id === itemId 
+        ? { ...item, status: 'bought' as const, actualPrice: estimatedPrice, boughtAt: new Date() }
+        : item
+    ));
+    
     try {
       await markShoppingItemAsBought(itemId, estimatedPrice, true);
       toast.success('Als eingekauft markiert ✓');
-      refetch();
+      // Refetch in background
+      setTimeout(() => refetch(), 100);
     } catch (error: any) {
+      // Rollback on error
+      refetch();
       toast.error('Fehler: ' + error.message);
     }
-  };
+  }, [refetch]);
 
   const handleDelete = (itemId: string) => {
     setDeleteItemId(itemId);
   };
 
-  const confirmDeleteItem = async () => {
+  const confirmDeleteItem = useCallback(async () => {
     if (!deleteItemId) return;
+    
+    // Optimistic update - remove immediately
+    setOptimisticItems(prev => prev.filter(item => item.id !== deleteItemId));
+    setIsDeleting(prev => new Set(prev).add(deleteItemId));
+    
     try {
       await deleteShoppingItem(deleteItemId);
       toast.success('Artikel entfernt');
-      refetch();
-      setDeleteItemId(null);
+      // Refetch in background to ensure sync
+      setTimeout(() => refetch(), 100);
     } catch (error: any) {
+      // Rollback on error
+      refetch();
       toast.error('Fehler: ' + error.message);
+    } finally {
+      setIsDeleting(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(deleteItemId);
+        return newSet;
+      });
       setDeleteItemId(null);
     }
-  };
+  }, [deleteItemId, refetch]);
 
   // Multi-select functions
-  const handleDeleteMultipleItems = async () => {
+  const handleDeleteMultipleItems = useCallback(async () => {
     if (selectedItemIds.size === 0) {
       toast.error('Bitte wählen Sie mindestens einen Artikel aus');
       return;
     }
 
-    try {
-      const deletePromises = Array.from(selectedItemIds).map(id => deleteShoppingItem(id));
-      await Promise.all(deletePromises);
-      toast.success(`${selectedItemIds.size} Artikel gelöscht`);
-      setSelectedItemIds(new Set());
-      setSelectionMode(false);
-      refetch();
-    } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
-    }
-  };
+    const idsToDelete = Array.from(selectedItemIds);
+    
+    // Optimistic update - remove immediately
+    setOptimisticItems(prev => prev.filter(item => !selectedItemIds.has(item.id)));
+    setIsDeleting(prev => {
+      const newSet = new Set(prev);
+      idsToDelete.forEach(id => newSet.add(id));
+      return newSet;
+    });
+    
+    // Clear selection immediately for better UX
+    setSelectedItemIds(new Set());
+    setSelectionMode(false);
 
-  const toggleItemSelection = (itemId: string) => {
+    try {
+      // Delete in background
+      const deletePromises = idsToDelete.map(id => deleteShoppingItem(id));
+      await Promise.all(deletePromises);
+      toast.success(`${idsToDelete.length} Artikel gelöscht`);
+      // Refetch in background to ensure sync
+      setTimeout(() => refetch(), 100);
+    } catch (error: any) {
+      // Rollback on error
+      refetch();
+      toast.error('Fehler: ' + error.message);
+    } finally {
+      setIsDeleting(prev => {
+        const newSet = new Set(prev);
+        idsToDelete.forEach(id => newSet.delete(id));
+        return newSet;
+      });
+    }
+  }, [selectedItemIds, refetch]);
+
+  const toggleItemSelection = useCallback((itemId: string) => {
     setSelectedItemIds(prev => {
       const newSet = new Set(prev);
       if (newSet.has(itemId)) {
@@ -656,21 +714,21 @@ export default function Shopping() {
       }
       return newSet;
     });
-  };
+  }, []);
 
-  const toggleSelectAll = () => {
+  const toggleSelectAll = useCallback(() => {
     const allItemIds = new Set([...notBoughtItems.map(i => i.id), ...boughtItems.map(i => i.id)]);
     if (selectedItemIds.size === allItemIds.size) {
       setSelectedItemIds(new Set());
     } else {
       setSelectedItemIds(allItemIds);
     }
-  };
+  }, [notBoughtItems, boughtItems, selectedItemIds.size]);
 
-  const exitSelectionMode = () => {
+  const exitSelectionMode = useCallback(() => {
     setSelectionMode(false);
     setSelectedItemIds(new Set());
-  };
+  }, []);
 
   const handleApplyTemplate = async () => {
     if (!selectedTemplate) return;
@@ -695,18 +753,37 @@ export default function Shopping() {
     }
   };
 
-  const handleClearBought = async () => {
+  const handleClearBought = useCallback(async () => {
+    const boughtItemIds = boughtItems.map(item => item.id);
+    
+    // Optimistic update
+    setOptimisticItems(prev => prev.filter(item => !boughtItemIds.includes(item.id)));
+    setIsDeleting(prev => {
+      const newSet = new Set(prev);
+      boughtItemIds.forEach(id => newSet.add(id));
+      return newSet;
+    });
+    setShowClearConfirm(false);
+    
     try {
-      for (const item of boughtItems) {
-        await deleteShoppingItem(item.id);
-      }
+      // Delete in parallel for better performance
+      const deletePromises = boughtItemIds.map(id => deleteShoppingItem(id));
+      await Promise.all(deletePromises);
       toast.success('Eingekaufte Artikel gelöscht');
-      refetch();
-      setShowClearConfirm(false);
+      // Refetch in background
+      setTimeout(() => refetch(), 100);
     } catch (error: any) {
+      // Rollback on error
+      refetch();
       toast.error('Fehler: ' + error.message);
+    } finally {
+      setIsDeleting(prev => {
+        const newSet = new Set(prev);
+        boughtItemIds.forEach(id => newSet.delete(id));
+        return newSet;
+      });
     }
-  };
+  }, [boughtItems, refetch]);
 
   // Finance integration
   const handleSyncToFinance = () => {
@@ -822,22 +899,41 @@ export default function Shopping() {
   };
 
   // Delete all not bought items
-  const handleClearAllItems = async () => {
+  const handleClearAllItems = useCallback(async () => {
     if (notBoughtItems.length === 0) {
       toast.error('Keine Artikel zum Löschen');
       return;
     }
     
+    const itemIds = notBoughtItems.map(item => item.id);
+    
+    // Optimistic update
+    setOptimisticItems(prev => prev.filter(item => !itemIds.includes(item.id)));
+    setIsDeleting(prev => {
+      const newSet = new Set(prev);
+      itemIds.forEach(id => newSet.add(id));
+      return newSet;
+    });
+    
     try {
-      for (const item of notBoughtItems) {
-        await deleteShoppingItem(item.id);
-      }
-      toast.success(`${notBoughtItems.length} Artikel gelöscht`);
-      refetch();
+      // Delete in parallel for better performance
+      const deletePromises = itemIds.map(id => deleteShoppingItem(id));
+      await Promise.all(deletePromises);
+      toast.success(`${itemIds.length} Artikel gelöscht`);
+      // Refetch in background
+      setTimeout(() => refetch(), 100);
     } catch (error: any) {
+      // Rollback on error
+      refetch();
       toast.error('Fehler: ' + error.message);
+    } finally {
+      setIsDeleting(prev => {
+        const newSet = new Set(prev);
+        itemIds.forEach(id => newSet.delete(id));
+        return newSet;
+      });
     }
-  };
+  }, [notBoughtItems, refetch]);
 
   // Re-add bought items back to list
   const handleReAddBoughtItems = async () => {

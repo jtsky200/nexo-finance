@@ -191,6 +191,10 @@ export default function MobileShopping() {
     [items]
   );
 
+  // Multi-select state for deletion
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+
   const handleAddItem = async () => {
     if (!newItem.name.trim()) {
       toast.error('Bitte Artikelname eingeben');
@@ -607,6 +611,54 @@ export default function MobileShopping() {
       toast.error(formatErrorForDisplay(error));
       hapticError();
     }
+  };
+
+  const handleDeleteMultipleItems = async () => {
+    if (selectedItemIds.size === 0) {
+      toast.error('Bitte wählen Sie mindestens einen Artikel aus');
+      return;
+    }
+
+    try {
+      const deletePromises = Array.from(selectedItemIds).map(id => deleteShoppingItem(id));
+      await Promise.all(deletePromises);
+      toast.success(`${selectedItemIds.size} Artikel gelöscht`);
+      hapticSuccess();
+      setSelectedItemIds(new Set());
+      setSelectionMode(false);
+      await refetch();
+    } catch (error) {
+      toast.error(formatErrorForDisplay(error));
+      hapticError();
+    }
+  };
+
+  const toggleItemSelection = (itemId: string) => {
+    setSelectedItemIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId);
+      } else {
+        newSet.add(itemId);
+      }
+      return newSet;
+    });
+    hapticSelection();
+  };
+
+  const toggleSelectAll = () => {
+    const allItemIds = new Set([...openItems.map(i => i.id), ...boughtItems.map(i => i.id)]);
+    if (selectedItemIds.size === allItemIds.size) {
+      setSelectedItemIds(new Set());
+    } else {
+      setSelectedItemIds(allItemIds);
+    }
+    hapticSelection();
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedItemIds(new Set());
   };
 
   const handleClearBought = async () => {
@@ -1660,30 +1712,76 @@ export default function MobileShopping() {
     <MobileLayout title={t('nav.shopping', 'Einkaufsliste')} showSidebar={true}>
       {/* List Selector */}
       <div className="mb-4 flex items-center gap-2">
-        <Select
-          value={selectedListId || ''}
-          onValueChange={(value) => setSelectedListId(value)}
-          disabled={listsLoading}
-        >
-          <SelectTrigger className="flex-1 h-11">
-            <SelectValue placeholder="Liste wählen" />
-          </SelectTrigger>
-          <SelectContent>
-            {lists.map((list) => (
-              <SelectItem key={list.id} value={list.id}>
-                {list.name} {list.isDefault && '(Standard)'}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => setShowListDialog(true)}
-          className="h-11 w-11"
-        >
-          <FileText className="w-5 h-5" />
-        </Button>
+        {!selectionMode ? (
+          <>
+            <Select
+              value={selectedListId || ''}
+              onValueChange={(value) => setSelectedListId(value)}
+              disabled={listsLoading}
+            >
+              <SelectTrigger className="flex-1 h-11">
+                <SelectValue placeholder="Liste wählen" />
+              </SelectTrigger>
+              <SelectContent>
+                {lists.map((list) => (
+                  <SelectItem key={list.id} value={list.id}>
+                    {list.name} {list.isDefault && '(Standard)'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setShowListDialog(true)}
+              className="h-11 w-11"
+            >
+              <FileText className="w-5 h-5" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setSelectionMode(true)}
+              className="h-11 w-11"
+            >
+              <Check className="w-5 h-5" />
+            </Button>
+          </>
+        ) : (
+          <>
+            <div className="flex-1 flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={toggleSelectAll}
+                className="h-11"
+              >
+                {selectedItemIds.size === openItems.length + boughtItems.length ? 'Alle abwählen' : 'Alle auswählen'}
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {selectedItemIds.size} ausgewählt
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={exitSelectionMode}
+              className="h-11 w-11"
+            >
+              <X className="w-5 h-5" />
+            </Button>
+            {selectedItemIds.size > 0 && (
+              <Button
+                variant="destructive"
+                size="icon"
+                onClick={handleDeleteMultipleItems}
+                className="h-11 w-11"
+              >
+                <Trash2 className="w-5 h-5" />
+              </Button>
+            )}
+          </>
+        )}
       </div>
 
       {/* Summary - Clean design */}
@@ -1715,14 +1813,23 @@ export default function MobileShopping() {
           {openItems.map((item) => (
             <div
               key={item.id}
-              className="mobile-card flex items-center gap-4 py-3"
+              className={`mobile-card flex items-center gap-4 py-3 ${selectionMode && selectedItemIds.has(item.id) ? 'ring-2 ring-primary' : ''}`}
+              onClick={selectionMode ? () => toggleItemSelection(item.id) : undefined}
             >
-              <button
-                onClick={() => handleToggleBought(item.id, item.status)}
-                className="w-6 h-6 rounded border-2 border-border flex items-center justify-center shrink-0"
-              >
-                {/* Empty checkbox */}
-              </button>
+              {selectionMode ? (
+                <div className="w-6 h-6 rounded border-2 border-border flex items-center justify-center shrink-0">
+                  {selectedItemIds.has(item.id) && (
+                    <Check className="w-4 h-4 text-primary" />
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={() => handleToggleBought(item.id, item.status)}
+                  className="w-6 h-6 rounded border-2 border-border flex items-center justify-center shrink-0"
+                >
+                  {/* Empty checkbox */}
+                </button>
+              )}
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{item.item}</p>
                 <p className="text-xs text-muted-foreground">
@@ -1731,12 +1838,14 @@ export default function MobileShopping() {
                   {item.store && ` • ${item.store}`}
                 </p>
               </div>
-              <button
-                onClick={() => handleDeleteItem(item.id)}
-                className="w-10 h-10 rounded-lg flex items-center justify-center text-muted-foreground active:opacity-80"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              {!selectionMode && (
+                <button
+                  onClick={() => handleDeleteItem(item.id)}
+                  className="w-10 h-10 rounded-lg flex items-center justify-center text-muted-foreground active:opacity-80"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -1749,25 +1858,36 @@ export default function MobileShopping() {
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               {t('shopping.bought', 'Eingekauft')} ({boughtItems.length})
             </p>
-            <button
-              onClick={handleClearBought}
-              className="text-xs status-error active:opacity-80"
-            >
-              {t('shopping.clearBought', 'Löschen')}
-            </button>
+            {!selectionMode && (
+              <button
+                onClick={handleClearBought}
+                className="text-xs status-error active:opacity-80"
+              >
+                {t('shopping.clearBought', 'Löschen')}
+              </button>
+            )}
           </div>
           <div className="space-y-3 opacity-60">
             {boughtItems.map((item) => (
               <div
                 key={item.id}
-                className="mobile-card flex items-center gap-4 py-3"
+                className={`mobile-card flex items-center gap-4 py-3 ${selectionMode && selectedItemIds.has(item.id) ? 'ring-2 ring-primary opacity-100' : ''}`}
+                onClick={selectionMode ? () => toggleItemSelection(item.id) : undefined}
               >
-                <button
-                  onClick={() => handleToggleBought(item.id, item.status)}
-                  className="w-6 h-6 rounded bg-status-success flex items-center justify-center shrink-0"
-                >
-                  <Check className="w-4 h-4 status-success" />
-                </button>
+                {selectionMode ? (
+                  <div className="w-6 h-6 rounded border-2 border-border flex items-center justify-center shrink-0">
+                    {selectedItemIds.has(item.id) && (
+                      <Check className="w-4 h-4 text-primary" />
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleToggleBought(item.id, item.status)}
+                    className="w-6 h-6 rounded bg-status-success flex items-center justify-center shrink-0"
+                  >
+                    <Check className="w-4 h-4 status-success" />
+                  </button>
+                )}
                 <p className="font-medium line-through flex-1 truncate">{item.item}</p>
               </div>
             ))}
@@ -2940,7 +3060,7 @@ export default function MobileShopping() {
       </Dialog>
 
       {/* FABs */}
-      {!showAddDialog && !showScanner && !showMultiAddDialog && !showBarcodeScanner && !showProductInfoScanner && (
+      {!showAddDialog && !showScanner && !showMultiAddDialog && !showBarcodeScanner && !showProductInfoScanner && !selectionMode && (
         <div className="fixed right-4 bottom-20 flex flex-col gap-3 safe-bottom">
           <button 
             onClick={openScanner}

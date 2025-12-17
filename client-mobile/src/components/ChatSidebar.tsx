@@ -101,6 +101,7 @@ export default function ChatSidebar({
                 onClick={onClose}
                 className="p-2 hover:bg-muted rounded-lg transition-colors"
                 aria-label="Menü schließen"
+                tabIndex={open ? 0 : -1}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -134,6 +135,7 @@ export default function ChatSidebar({
                         aria-pressed={isActive}
                         type="button"
                         role="menuitem"
+                        tabIndex={open ? 0 : -1}
                       >
                         <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
                         <span className="text-sm">{item.label}</span>

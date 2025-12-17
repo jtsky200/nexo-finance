@@ -1,0 +1,23 @@
+# Cursor Rules for Nexo Project
+
+## Build and Deployment Rules
+
+**CRITICAL: DO NOT BUILD OR DEPLOY WITHOUT USER CONFIRMATION**
+
+- NEVER run `npm run build:mobile` or `npm run build` without explicit user confirmation
+- NEVER run `firebase deploy` or any deployment commands without explicit user confirmation
+- ALWAYS ask the user "Soll ich die Änderungen jetzt bauen?" or "Should I build the changes now?" before building
+- ALWAYS ask the user "Soll ich die Änderungen jetzt deployen?" or "Should I deploy the changes now?" before deploying
+- Wait for the user's explicit "yes", "ja", "build", "deploy", or similar confirmation before executing any build or deployment
+- If the user says "build again", "deploy again" or similar, that counts as confirmation
+- After successful deployment, ALWAYS push changes to Git with an appropriate commit message
+- Use `git add .`, `git commit -m "message"`, and `git push` after deployment is confirmed successful
+
+## General Development Rules
+
+- Always test changes locally when possible before suggesting deployment
+- Provide clear explanations of what will be deployed
+- Use German language for user-facing messages when the user communicates in German
+- Follow existing code patterns and conventions in the codebase
+- Ensure all linter errors are resolved before suggesting deployment
+

@@ -21,7 +21,7 @@ import {
   RotateCcw, ListChecks, Tag, Banknote, ScanLine,
   Apple, Home as HomeIcon, Shirt, Cpu, Heart, MoreHorizontal, ChevronRight
 } from 'lucide-react';
-import { useShoppingList, createShoppingItem, deleteShoppingItem, markShoppingItemAsBought, createFinanceEntry, useStores, useStoreItems, useReceipts } from '@/lib/firebaseHooks';
+import { useShoppingList, createShoppingItem, deleteShoppingItem, markShoppingItemAsBought, createFinanceEntry, useStores, useStoreItems, useReceipts, useUserSettings, type QuickAddTemplate, type ShoppingBudget } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
 import { functions } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -127,15 +127,12 @@ const listTemplates = [
   },
 ];
 
-// Local storage keys
-const BUDGET_KEY = 'shopping_budget';
-const QUICK_ADD_KEY = 'shopping_quick_add';
-
 export default function Shopping() {
   const { t } = useTranslation();
   const { data: items = [], isLoading, refetch } = useShoppingList();
   const { data: userStores = [] } = useStores();
   const { data: receipts = [] } = useReceipts(10);
+  const { settings, isLoading: isLoadingSettings, updateSettings } = useUserSettings();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   
@@ -143,19 +140,14 @@ export default function Shopping() {
   const [selectedStoreForSuggestions, setSelectedStoreForSuggestions] = useState<string>('');
   const { data: storeItems = [] } = useStoreItems(undefined, selectedStoreForSuggestions);
   
-  // Budget state
-  const [budget, setBudget] = useState(() => {
-    const saved = localStorage.getItem(BUDGET_KEY);
-    return saved ? JSON.parse(saved) : { amount: 0, isSet: false };
-  });
+  // Budget state - from Firebase UserSettings with localStorage migration
+  const [budget, setBudget] = useState<{ amount: number; isSet: boolean }>({ amount: 0, isSet: false });
   const [showBudgetDialog, setShowBudgetDialog] = useState(false);
   const [budgetInput, setBudgetInput] = useState('');
   
-  // Quick add templates state
-  const [quickAddTemplates, setQuickAddTemplates] = useState<QuickAddTemplate[]>(() => {
-    const saved = localStorage.getItem(QUICK_ADD_KEY);
-    return saved ? JSON.parse(saved) : defaultQuickAddTemplates;
-  });
+  // Quick add templates state - from Firebase UserSettings with localStorage migration
+  const [quickAddTemplates, setQuickAddTemplates] = useState<QuickAddTemplate[]>(defaultQuickAddTemplates);
+  const [hasMigrated, setHasMigrated] = useState(false);
   const [showQuickAddManager, setShowQuickAddManager] = useState(false);
   const [editingQuickAdd, setEditingQuickAdd] = useState<typeof quickAddTemplates[0] | null>(null);
   const [newQuickAdd, setNewQuickAdd] = useState({ name: '', category: 'Lebensmittel', price: 0 });
@@ -214,10 +206,69 @@ export default function Shopping() {
 
   const categories = ['Lebensmittel', 'Haushalt', 'Hygiene', 'Elektronik', 'Kleidung', 'Sonstiges'];
 
-  // Save budget to localStorage
+  // Migrate from localStorage to Firebase UserSettings on first load
   useEffect(() => {
-    localStorage.setItem(BUDGET_KEY, JSON.stringify(budget));
-  }, [budget]);
+    if (!isLoadingSettings && settings && !hasMigrated) {
+      const migratedBudget: ShoppingBudget = settings.shoppingBudget || { amount: 0, isSet: false };
+      const migratedTemplates: QuickAddTemplate[] = settings.quickAddTemplates || [];
+      
+      // Check if we need to migrate from localStorage
+      const localBudget = localStorage.getItem('shopping_budget');
+      const localTemplates = localStorage.getItem('shopping_quick_add');
+      
+      if (localBudget && !migratedBudget.isSet) {
+        try {
+          const parsed = JSON.parse(localBudget);
+          migratedBudget.amount = parsed.amount || 0;
+          migratedBudget.isSet = parsed.isSet || false;
+        } catch (e) {
+          console.error('Error parsing local budget:', e);
+        }
+      }
+      
+      if (localTemplates && migratedTemplates.length === 0) {
+        try {
+          const parsed = JSON.parse(localTemplates);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            migratedTemplates.push(...parsed);
+          }
+        } catch (e) {
+          console.error('Error parsing local templates:', e);
+        }
+      }
+      
+      // Update Firebase if we migrated data
+      if (localBudget || localTemplates) {
+        updateSettings({
+          shoppingBudget: migratedBudget,
+          quickAddTemplates: migratedTemplates.length > 0 ? migratedTemplates : defaultQuickAddTemplates,
+        }).then(() => {
+          // Clear localStorage after successful migration
+          localStorage.removeItem('shopping_budget');
+          localStorage.removeItem('shopping_quick_add');
+        }).catch(console.error);
+      }
+      
+      setBudget(migratedBudget);
+      setQuickAddTemplates(migratedTemplates.length > 0 ? migratedTemplates : defaultQuickAddTemplates);
+      setHasMigrated(true);
+    } else if (!isLoadingSettings && settings && hasMigrated) {
+      // Load from Firebase UserSettings
+      if (settings.shoppingBudget) {
+        setBudget(settings.shoppingBudget);
+      }
+      if (settings.quickAddTemplates && settings.quickAddTemplates.length > 0) {
+        setQuickAddTemplates(settings.quickAddTemplates);
+      }
+    }
+  }, [settings, isLoadingSettings, hasMigrated, updateSettings]);
+
+  // Save budget to Firebase UserSettings
+  useEffect(() => {
+    if (hasMigrated && !isLoadingSettings) {
+      updateSettings({ shoppingBudget: budget }).catch(console.error);
+    }
+  }, [budget, hasMigrated, isLoadingSettings, updateSettings]);
 
   // Sync store selection for item suggestions
   useEffect(() => {
@@ -225,10 +276,12 @@ export default function Shopping() {
     setSelectedStoreForSuggestions(storeName);
   }, [newItem.store]);
 
-  // Save quick add templates to localStorage
+  // Save quick add templates to Firebase UserSettings
   useEffect(() => {
-    localStorage.setItem(QUICK_ADD_KEY, JSON.stringify(quickAddTemplates));
-  }, [quickAddTemplates]);
+    if (hasMigrated && !isLoadingSettings) {
+      updateSettings({ quickAddTemplates: quickAddTemplates }).catch(console.error);
+    }
+  }, [quickAddTemplates, hasMigrated, isLoadingSettings, updateSettings]);
 
   // Computed values
   const notBoughtItems = useMemo(() => {

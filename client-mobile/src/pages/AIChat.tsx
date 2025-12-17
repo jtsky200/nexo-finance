@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { Bell, ScanLine, Wallet, ShoppingCart, LayoutGrid, Camera, X, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -15,6 +15,7 @@ import { Switch } from '@/components/ui/switch';
 import { createReminder, createFinanceEntry, createShoppingItem } from '@/lib/firebaseHooks';
 import { formatErrorForDisplay } from '@/lib/errorHandler';
 import { hapticSuccess, hapticError } from '@/lib/hapticFeedback';
+import { formatDateLocal, formatDateGerman, parseDateGerman, formatDateTimeGerman, parseDateTimeGerman, dateToDateTimeLocal } from '@/lib/dateTimeUtils';
 import { 
   useChatHistory,
   saveChatConversation, 
@@ -53,11 +54,11 @@ export default function AIChat() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   
-  // Reminder form state
+  // Reminder form state - store date in YYYY-MM-DDTHH:mm format internally for datetime-local input
   const [reminderForm, setReminderForm] = useState({
     title: '',
     type: 'termin' as 'termin' | 'zahlung' | 'aufgabe',
-    dueDate: '',
+    dueDate: '', // Empty by default - user must select date/time
     isAllDay: false,
     amount: '',
     currency: 'CHF',
@@ -65,15 +66,18 @@ export default function AIChat() {
   });
   const [isSubmittingReminder, setIsSubmittingReminder] = useState(false);
   
-  // Finance form state
+  // Finance form state - store date in YYYY-MM-DD format internally, display as DD.MM.YYYY
   const [financeForm, setFinanceForm] = useState({
     type: 'ausgabe' as 'einnahme' | 'ausgabe',
     amount: '',
     category: '',
     description: '',
-    date: new Date().toISOString().split('T')[0],
+    date: formatDateLocal(new Date()), // Internal format: YYYY-MM-DD
     paymentMethod: 'Karte',
   });
+  
+  // Display date in German format (DD.MM.YYYY)
+  const [financeDateDisplay, setFinanceDateDisplay] = useState(formatDateGerman(new Date()));
   const [isSubmittingFinance, setIsSubmittingFinance] = useState(false);
   
   // Shopping form state
@@ -152,15 +156,17 @@ export default function AIChat() {
       } as any);
       
       toast.success(financeForm.type === 'einnahme' ? 'Einnahme hinzugefügt' : 'Ausgabe hinzugefügt');
+      const today = formatDateLocal(new Date());
       setShowFinanceModal(false);
       setFinanceForm({
         type: 'ausgabe',
         amount: '',
         category: '',
         description: '',
-        date: new Date().toISOString().split('T')[0],
+        date: today,
         paymentMethod: 'Karte',
       });
+      setFinanceDateDisplay(formatDateGerman(today));
     } catch (error) {
       toast.error('Fehler beim Erstellen des Eintrags');
       console.error(error);
@@ -169,18 +175,14 @@ export default function AIChat() {
     }
   };
   
-  // Initialize with most recent chat or create new one
+  // Initialize with most recent chat (don't create new one automatically)
   useEffect(() => {
     if (!isLoadingHistory && chatHistory.length > 0 && !currentChatId) {
+      // Load the most recent chat if available
       setCurrentChatId(chatHistory[0].id);
-    } else if (!isLoadingHistory && chatHistory.length === 0 && !currentChatId) {
-      const newChat = createNewChat();
-      saveChatConversation(newChat).then(() => {
-        refetchHistory();
-        setCurrentChatId(newChat.id);
-      });
     }
-  }, [isLoadingHistory, chatHistory, currentChatId, refetchHistory]);
+    // Don't create a new chat automatically - only when user sends a message or clicks "New Conversation"
+  }, [isLoadingHistory, chatHistory, currentChatId]);
   
   const [messages, setMessages] = useState<Message[]>([SYSTEM_MESSAGE]);
   const lastChatIdRef = useRef<string | null>(null);
@@ -325,10 +327,23 @@ export default function AIChat() {
     },
   });
 
-  const handleSendMessage = useCallback((content: string) => {
+  const handleSendMessage = useCallback(async (content: string) => {
     if (content.length > 10000) {
       toast.error('Nachricht ist zu lang. Bitte kürze sie auf maximal 10.000 Zeichen.');
       return;
+    }
+    
+    // Create a new chat if none exists
+    if (!currentChatId) {
+      try {
+        const newChat = createNewChat();
+        await saveChatConversation(newChat);
+        setCurrentChatId(newChat.id);
+        await refetchHistory();
+      } catch (error) {
+        toast.error('Fehler beim Erstellen der Konversation');
+        return;
+      }
     }
     
     const userMessages = messages.filter(m => m.role === 'user');
@@ -352,7 +367,7 @@ export default function AIChat() {
       }
       toast.error('Fehler beim Senden der Nachricht. Bitte versuche es erneut.');
     }
-  }, [messages, chatMutation]);
+  }, [messages, chatMutation, currentChatId, refetchHistory]);
 
   const suggestedPrompts = useMemo(() => [
     { 
@@ -455,7 +470,7 @@ export default function AIChat() {
       setReminderForm({
         title: '',
         type: 'termin',
-        dueDate: '',
+        dueDate: '', // Empty - user must select
         isAllDay: false,
         amount: '',
         currency: 'CHF',
@@ -622,24 +637,41 @@ export default function AIChat() {
       </div>
       
       {/* Reminder Modal */}
-      <Dialog open={showReminderModal} onOpenChange={setShowReminderModal}>
-        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
-          <DialogHeader className="px-5 pt-5 pb-3">
+      <Dialog open={showReminderModal} onOpenChange={(open) => {
+        setShowReminderModal(open);
+        if (!open) {
+          // Reset form when closing
+          setReminderForm({
+            title: '',
+            type: 'termin',
+            dueDate: '', // Empty - user must select
+            isAllDay: false,
+            amount: '',
+            currency: 'CHF',
+            notes: '',
+          });
+        }
+      }}>
+        <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-hidden !shadow-2xl !flex !flex-col">
+          <DialogHeader className="px-4 pt-4 pb-2 flex-shrink-0">
             <DialogTitle className="text-lg font-semibold">Erinnerung erstellen</DialogTitle>
+            <DialogDescription className="sr-only">
+              Erstellen Sie eine neue Erinnerung basierend auf der Chat-Konversation
+            </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-3 px-5 pb-2">
-            <div>
+          <div className="space-y-2.5 px-4 pb-2 overflow-y-auto flex-1 min-h-0">
+            <div className="w-full">
               <Label className="text-sm font-medium">Titel *</Label>
               <Input
                 value={reminderForm.title}
                 onChange={(e) => setReminderForm({ ...reminderForm, title: e.target.value })}
                 placeholder="Titel"
-                className="h-11 min-h-[44px] mt-1.5 rounded-xl"
+                className="h-11 min-h-[44px] mt-1.5 rounded-xl w-full"
               />
             </div>
             
-            <div>
+            <div className="w-full">
               <Label className="text-sm font-medium">Typ *</Label>
               <Select
                 value={reminderForm.type}
@@ -647,7 +679,7 @@ export default function AIChat() {
                   setReminderForm({ ...reminderForm, type: value })
                 }
               >
-                <SelectTrigger className="h-11 min-h-[44px] mt-1.5 rounded-xl">
+                <SelectTrigger className="h-11 min-h-[44px] mt-1.5 rounded-xl w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -658,14 +690,31 @@ export default function AIChat() {
               </Select>
             </div>
             
-            <div>
+            <div className="w-full">
               <Label className="text-sm font-medium">Datum & Uhrzeit *</Label>
-              <Input
-                type="datetime-local"
-                value={reminderForm.dueDate}
-                onChange={(e) => setReminderForm({ ...reminderForm, dueDate: e.target.value })}
-                className="h-11 min-h-[44px] mt-1.5 rounded-xl"
-              />
+              <div className="relative w-full mt-1.5">
+                <Input
+                  type="datetime-local"
+                  placeholder="Datum & Uhrzeit auswählen"
+                  value={reminderForm.dueDate}
+                  onChange={(e) => {
+                    setReminderForm({ ...reminderForm, dueDate: e.target.value });
+                  }}
+                  className="h-11 min-h-[44px] rounded-xl w-full"
+                  style={{
+                    boxSizing: 'border-box',
+                    fontSize: '16px', // Prevents zoom on iOS
+                    height: '44px',
+                    minHeight: '44px',
+                    maxHeight: '44px',
+                    padding: '0.5rem 0.75rem',
+                    lineHeight: '1.5rem',
+                    appearance: 'none',
+                    WebkitAppearance: 'none',
+                    MozAppearance: 'textfield',
+                  }}
+                />
+              </div>
             </div>
             
             <div className="flex items-center gap-2">
@@ -678,25 +727,25 @@ export default function AIChat() {
             
             {reminderForm.type === 'zahlung' && (
               <>
-                <div>
-                  <Label>Betrag</Label>
+                <div className="w-full">
+                  <Label className="text-sm font-medium">Betrag</Label>
                   <Input
                     type="number"
                     step="0.01"
                     value={reminderForm.amount}
                     onChange={(e) => setReminderForm({ ...reminderForm, amount: e.target.value })}
                     placeholder="0.00"
-                    className="h-10 min-h-[44px] mt-1"
+                    className="h-11 min-h-[44px] mt-1.5 rounded-xl w-full"
                   />
                 </div>
                 
-                <div>
+                <div className="w-full">
                   <Label className="text-sm font-medium">Währung</Label>
                   <Select
                     value={reminderForm.currency}
                     onValueChange={(value) => setReminderForm({ ...reminderForm, currency: value })}
                   >
-                    <SelectTrigger className="h-10 min-h-[44px] mt-1">
+                    <SelectTrigger className="h-11 min-h-[44px] mt-1.5 rounded-xl w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -709,18 +758,18 @@ export default function AIChat() {
               </>
             )}
             
-            <div>
+            <div className="w-full">
               <Label className="text-sm font-medium">Notizen</Label>
               <Textarea
                 value={reminderForm.notes}
                 onChange={(e) => setReminderForm({ ...reminderForm, notes: e.target.value })}
                 placeholder="Notizen..."
-                className="mt-1.5 min-h-[90px] rounded-xl"
+                className="mt-1.5 min-h-[90px] rounded-xl w-full"
               />
             </div>
           </div>
           
-          <DialogFooter className="px-5 pb-3 pt-2 gap-2.5">
+          <DialogFooter className="px-4 pb-3 pt-2 gap-2.5 flex-shrink-0">
             <Button variant="outline" onClick={() => setShowReminderModal(false)} className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium">
               Abbrechen
             </Button>
@@ -746,6 +795,9 @@ export default function AIChat() {
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-lg font-semibold">Rechnung scannen</DialogTitle>
+            <DialogDescription className="sr-only">
+              Scannen Sie eine Rechnung mit der Kamera oder laden Sie ein Bild hoch
+            </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-3 px-5 pb-2">
@@ -859,20 +911,33 @@ export default function AIChat() {
       {/* Finance Modal */}
       <Dialog open={showFinanceModal} onOpenChange={(open) => {
         setShowFinanceModal(open);
-        if (!open) {
+        if (open) {
+          // Update date when dialog opens to ensure correct date
+          const today = formatDateLocal(new Date());
+          setFinanceForm(prev => ({
+            ...prev,
+            date: today,
+          }));
+          setFinanceDateDisplay(formatDateGerman(today));
+        } else {
+          const today = formatDateLocal(new Date());
           setFinanceForm({
             type: 'ausgabe',
             amount: '',
             category: '',
             description: '',
-            date: new Date().toISOString().split('T')[0],
+            date: today,
             paymentMethod: 'Karte',
           });
+          setFinanceDateDisplay(formatDateGerman(today));
         }
       }}>
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-lg font-semibold">Einnahme / Ausgabe</DialogTitle>
+            <DialogDescription className="sr-only">
+              Erstellen Sie einen neuen Finanz-Eintrag für Einnahmen oder Ausgaben
+            </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-3 px-5 pb-2">
@@ -926,9 +991,30 @@ export default function AIChat() {
             <div>
               <Label className="text-sm font-medium">Datum *</Label>
               <Input
-                type="date"
-                value={financeForm.date}
-                onChange={(e) => setFinanceForm({ ...financeForm, date: e.target.value })}
+                type="text"
+                placeholder="DD.MM.YYYY"
+                value={financeDateDisplay}
+                onChange={(e) => {
+                  const inputValue = e.target.value;
+                  setFinanceDateDisplay(inputValue);
+                  
+                  // Try to parse the German date format
+                  const parsed = parseDateGerman(inputValue);
+                  if (parsed) {
+                    setFinanceForm({ ...financeForm, date: parsed });
+                  }
+                }}
+                onBlur={(e) => {
+                  // Validate and format on blur
+                  const parsed = parseDateGerman(e.target.value);
+                  if (parsed) {
+                    setFinanceForm({ ...financeForm, date: parsed });
+                    setFinanceDateDisplay(formatDateGerman(parsed));
+                  } else if (e.target.value) {
+                    // If invalid, try to keep current valid date
+                    setFinanceDateDisplay(formatDateGerman(financeForm.date));
+                  }
+                }}
                 className="h-11 min-h-[44px] mt-1.5 rounded-xl"
               />
             </div>
@@ -992,6 +1078,9 @@ export default function AIChat() {
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-lg font-semibold">Artikel zur Einkaufsliste hinzufügen</DialogTitle>
+            <DialogDescription className="sr-only">
+              Fügen Sie einen neuen Artikel zur Einkaufsliste hinzu
+            </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-3 px-5 pb-2">

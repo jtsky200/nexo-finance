@@ -304,21 +304,22 @@ export function AIChatBox({
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
 
-  // Navigation Handler - speichert Nachrichten und öffnet Popup nach Navigation
-  const handleNavigate = useCallback((route: string, tutorialSteps?: Array<{ selector: string; title: string; description: string }>) => {
-    // Speichere aktuelle Nachrichten im localStorage für Popup-Kontinuität
-    localStorage.setItem('nexo_chat_messages', JSON.stringify(messages));
-    localStorage.setItem('nexo_chat_open_popup', 'true');
-    localStorage.setItem('nexo_chat_from_route', route);
+  // Navigation Handler - öffnet Popup nach Navigation via Event Bus
+  const handleNavigate = useCallback(async (route: string, tutorialSteps?: Array<{ selector: string; title: string; description: string }>) => {
+    // Navigiere zur Zielseite
+    setLocation(route);
     
-    // Optional: Tutorial-Schritte speichern
+    // Optional: Tutorial-Schritte speichern (kann später zu Firebase migriert werden)
     if (tutorialSteps && tutorialSteps.length > 0) {
       localStorage.setItem('nexo_tutorial_highlight', JSON.stringify(tutorialSteps));
     }
     
-    // Navigiere zur Zielseite
-    setLocation(route);
-  }, [messages, setLocation]);
+    // Öffne den Chat-Dialog nach Navigation via Event Bus
+    const { eventBus, Events } = await import('@/lib/eventBus');
+    setTimeout(() => {
+      eventBus.emit(Events.CHAT_DIALOG_OPEN);
+    }, 300); // Kurze Verzögerung für sanfte Animation
+  }, [setLocation]);
 
   // Filter out system messages
   const displayMessages = useMemo(() => 

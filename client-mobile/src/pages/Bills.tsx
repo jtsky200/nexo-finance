@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { formatErrorForDisplay } from '@/lib/errorHandler';
 import { hapticSuccess, hapticError, hapticSelection } from '@/lib/hapticFeedback';
 import { Skeleton } from '@/components/ui/skeleton';
+import { formatDateLocal, formatDateGerman, parseDateGerman } from '@/lib/dateTimeUtils';
 
 export default function MobileBills() {
   const { t } = useTranslation();
@@ -34,7 +35,7 @@ export default function MobileBills() {
   const [newBill, setNewBill] = useState({
     title: '',
     amount: '',
-    dueDate: '',
+    dueDate: formatDateLocal(new Date()), // Internal format: YYYY-MM-DD
     iban: '',
     reference: ''
   });
@@ -109,7 +110,7 @@ export default function MobileBills() {
       toast.success('Rechnung hinzugefügt');
       hapticSuccess();
       setShowAddDialog(false);
-      setNewBill({ title: '', amount: '', dueDate: '', iban: '', reference: '' });
+      setNewBill({ title: '', amount: '', dueDate: formatDateLocal(new Date()), iban: '', reference: '' });
       await refetch();
     } catch (error) {
       toast.error(formatErrorForDisplay(error));
@@ -436,9 +437,22 @@ export default function MobileBills() {
               <div>
                 <Label className="text-sm text-muted-foreground">Fälligkeitsdatum</Label>
                 <Input
-                  type="date"
-                  value={newBill.dueDate}
-                  onChange={(e) => setNewBill({ ...newBill, dueDate: e.target.value })}
+                  type="text"
+                  placeholder="DD.MM.YYYY"
+                  value={formatDateGerman(newBill.dueDate)}
+                  onChange={(e) => {
+                    const parsed = parseDateGerman(e.target.value);
+                    if (parsed) {
+                      setNewBill({ ...newBill, dueDate: parsed });
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const parsed = parseDateGerman(e.target.value);
+                    if (!parsed && newBill.dueDate) {
+                      // If invalid, keep current date
+                      e.target.value = formatDateGerman(newBill.dueDate);
+                    }
+                  }}
                   className="mobile-input mt-1"
                 />
               </div>

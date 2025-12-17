@@ -380,3 +380,201 @@ export function isSameDay(date1: Date | any | string | null | undefined, date2: 
   return date1Str !== '' && date2Str !== '' && date1Str === date2Str;
 }
 
+/**
+ * Formats a date as DD.MM.YYYY for display in German format
+ * 
+ * @param date - Date object, YYYY-MM-DD string, or null/undefined
+ * @returns Formatted date string (e.g., "16.12.2025") or empty string if invalid
+ * 
+ * @example
+ * formatDateGerman("2025-12-16") // "16.12.2025"
+ * formatDateGerman(new Date(2025, 11, 16)) // "16.12.2025"
+ */
+export function formatDateGerman(date: Date | string | null | undefined): string {
+  if (!date) return '';
+  
+  try {
+    let dateObj: Date;
+    
+    if (typeof date === 'string') {
+      // If it's already in YYYY-MM-DD format, parse it
+      if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const [year, month, day] = date.split('-').map(Number);
+        dateObj = new Date(year, month - 1, day);
+      } else {
+        dateObj = new Date(date);
+      }
+    } else if (date instanceof Date) {
+      dateObj = date;
+    } else {
+      return '';
+    }
+    
+    if (isNaN(dateObj.getTime())) {
+      return '';
+    }
+    
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const year = dateObj.getFullYear();
+    
+    return `${day}.${month}.${year}`;
+  } catch (error) {
+    return '';
+  }
+}
+
+/**
+ * Parses a German date string (DD.MM.YYYY) to YYYY-MM-DD format
+ * 
+ * @param dateStr - Date string in DD.MM.YYYY format
+ * @returns Date string in YYYY-MM-DD format or empty string if invalid
+ * 
+ * @example
+ * parseDateGerman("16.12.2025") // "2025-12-16"
+ */
+export function parseDateGerman(dateStr: string): string {
+  if (!dateStr) return '';
+  
+  try {
+    // Remove any whitespace
+    dateStr = dateStr.trim();
+    
+    // Try to parse DD.MM.YYYY format
+    const parts = dateStr.split('.');
+    if (parts.length === 3) {
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10);
+      const year = parseInt(parts[2], 10);
+      
+      if (isNaN(day) || isNaN(month) || isNaN(year)) {
+        return '';
+      }
+      
+      // Validate date
+      const dateObj = new Date(year, month - 1, day);
+      if (dateObj.getDate() !== day || dateObj.getMonth() !== month - 1 || dateObj.getFullYear() !== year) {
+        return '';
+      }
+      
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+    
+    // If already in YYYY-MM-DD format, return as is
+    if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      return dateStr;
+    }
+    
+    return '';
+  } catch (error) {
+    return '';
+  }
+}
+
+/**
+ * Formats a date and time as DD.MM.YYYY HH:mm for display in German format
+ * 
+ * @param date - Date object, YYYY-MM-DDTHH:mm string, or null/undefined
+ * @returns Formatted date string (e.g., "16.12.2025 14:30") or empty string if invalid
+ * 
+ * @example
+ * formatDateTimeGerman("2025-12-16T14:30") // "16.12.2025 14:30"
+ */
+export function formatDateTimeGerman(date: Date | string | null | undefined): string {
+  if (!date) return '';
+  
+  try {
+    let dateObj: Date;
+    
+    if (typeof date === 'string') {
+      // If it's in YYYY-MM-DDTHH:mm format, parse it
+      if (date.includes('T')) {
+        const [datePart, timePart] = date.split('T');
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hours, minutes] = timePart ? timePart.split(':').map(Number) : [0, 0];
+        dateObj = new Date(year, month - 1, day, hours, minutes);
+      } else if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const [year, month, day] = date.split('-').map(Number);
+        dateObj = new Date(year, month - 1, day);
+      } else {
+        dateObj = new Date(date);
+      }
+    } else if (date instanceof Date) {
+      dateObj = date;
+    } else {
+      return '';
+    }
+    
+    if (isNaN(dateObj.getTime())) {
+      return '';
+    }
+    
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const year = dateObj.getFullYear();
+    const hours = String(dateObj.getHours()).padStart(2, '0');
+    const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+    
+    return `${day}.${month}.${year} ${hours}:${minutes}`;
+  } catch (error) {
+    return '';
+  }
+}
+
+/**
+ * Parses a German date-time string (DD.MM.YYYY HH:mm) to YYYY-MM-DDTHH:mm format
+ * 
+ * @param dateTimeStr - Date-time string in DD.MM.YYYY HH:mm format
+ * @returns Date-time string in YYYY-MM-DDTHH:mm format or empty string if invalid
+ * 
+ * @example
+ * parseDateTimeGerman("16.12.2025 14:30") // "2025-12-16T14:30"
+ */
+export function parseDateTimeGerman(dateTimeStr: string): string {
+  if (!dateTimeStr) return '';
+  
+  try {
+    // Remove any whitespace
+    dateTimeStr = dateTimeStr.trim();
+    
+    // Try to parse DD.MM.YYYY HH:mm format
+    const parts = dateTimeStr.split(' ');
+    if (parts.length === 2) {
+      const datePart = parts[0]; // DD.MM.YYYY
+      const timePart = parts[1]; // HH:mm
+      
+      const dateParts = datePart.split('.');
+      if (dateParts.length === 3) {
+        const day = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10);
+        const year = parseInt(dateParts[2], 10);
+        
+        const timeParts = timePart.split(':');
+        const hours = timeParts.length >= 1 ? parseInt(timeParts[0], 10) : 0;
+        const minutes = timeParts.length >= 2 ? parseInt(timeParts[1], 10) : 0;
+        
+        if (isNaN(day) || isNaN(month) || isNaN(year) || isNaN(hours) || isNaN(minutes)) {
+          return '';
+        }
+        
+        // Validate date
+        const dateObj = new Date(year, month - 1, day, hours, minutes);
+        if (dateObj.getDate() !== day || dateObj.getMonth() !== month - 1 || dateObj.getFullYear() !== year) {
+          return '';
+        }
+        
+        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+      }
+    }
+    
+    // If already in YYYY-MM-DDTHH:mm format, return as is
+    if (dateTimeStr.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)) {
+      return dateTimeStr;
+    }
+    
+    return '';
+  } catch (error) {
+    return '';
+  }
+}
+

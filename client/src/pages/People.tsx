@@ -188,7 +188,7 @@ export default function People() {
       await deletePerson(deletePersonId);
       toast.success('Person gelöscht');
       setDeletePersonId(null);
-      refetch();
+      // No need to call refetch() - real-time listener (onSnapshot) will automatically update the UI
     } catch (error: any) {
       toast.error('Fehler: ' + error.message);
     }

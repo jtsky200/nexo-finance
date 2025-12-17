@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   collection, 
   query, 
@@ -11,12 +11,15 @@ import {
   doc,
   Timestamp,
   QueryConstraint,
-  onSnapshot
+  onSnapshot,
+  QuerySnapshot,
+  DocumentSnapshot
 } from 'firebase/firestore';
 import { db, functions } from './firebase';
 import { httpsCallable } from 'firebase/functions';
 import { callWithRetry } from './apiRetry';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 // Retry options for critical operations
 const CRITICAL_RETRY_OPTIONS = { maxRetries: 3, initialDelay: 1000 };
@@ -44,36 +47,139 @@ export function useReminders(filters?: { startDate?: Date; endDate?: Date; statu
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const { user } = useAuth();
 
+  // Use Firestore real-time listener for immediate synchronization
   useEffect(() => {
-    const fetchReminders = async () => {
-      try {
-        setIsLoading(true);
-        const getRemindersFunc = httpsCallable(functions, 'getReminders');
-        const result = await getRemindersFunc(filters || {});
-        const data = result.data as { reminders: any[] };
-        
-        const mappedReminders = data.reminders.map((r: any) => ({
-          ...r,
-          dueDate: r.dueDate?.toDate ? r.dueDate.toDate() : new Date(r.dueDate),
-          createdAt: r.createdAt?.toDate ? r.createdAt.toDate() : new Date(r.createdAt),
-          updatedAt: r.updatedAt?.toDate ? r.updatedAt.toDate() : new Date(r.updatedAt),
-        }));
-        
-        setReminders(mappedReminders);
-        setError(null);
-      } catch (err) {
-        setError(err as Error);
-      } finally {
+    if (!user) {
+      setReminders([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    
+    // Build Firestore query
+    let q: any = query(
+      collection(db, 'reminders'),
+      where('userId', '==', user.uid)
+    );
+
+    // Apply filters
+    if (filters?.status) {
+      q = query(q, where('status', '==', filters.status));
+    }
+    if (filters?.startDate) {
+      q = query(q, where('dueDate', '>=', Timestamp.fromDate(filters.startDate)));
+    }
+    if (filters?.endDate) {
+      q = query(q, where('dueDate', '<=', Timestamp.fromDate(filters.endDate)));
+    }
+
+    // Order by dueDate
+    q = query(q, orderBy('dueDate'));
+
+    // Set up real-time listener
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot: QuerySnapshot) => {
+        try {
+          const mappedReminders = snapshot.docs.map((doc: DocumentSnapshot) => {
+            const data = doc.data();
+            if (!data) {
+              return null;
+            }
+            
+            // Handle Firestore Timestamps
+            let dueDate: Date | string = new Date();
+            if (data.dueDate) {
+              if (data.dueDate.toDate && typeof data.dueDate.toDate === 'function') {
+                dueDate = data.dueDate.toDate();
+              } else if (data.dueDate instanceof Date) {
+                dueDate = data.dueDate;
+              } else if (typeof data.dueDate === 'string') {
+                const parsedDate = new Date(data.dueDate);
+                if (!isNaN(parsedDate.getTime())) {
+                  dueDate = parsedDate;
+                }
+              }
+            }
+            
+            let createdAt: Date = new Date();
+            if (data.createdAt) {
+              if (data.createdAt.toDate && typeof data.createdAt.toDate === 'function') {
+                createdAt = data.createdAt.toDate();
+              } else if (data.createdAt instanceof Date) {
+                createdAt = data.createdAt;
+              } else if (typeof data.createdAt === 'string') {
+                const parsedDate = new Date(data.createdAt);
+                if (!isNaN(parsedDate.getTime())) {
+                  createdAt = parsedDate;
+                }
+              }
+            }
+            
+            let updatedAt: Date = new Date();
+            if (data.updatedAt) {
+              if (data.updatedAt.toDate && typeof data.updatedAt.toDate === 'function') {
+                updatedAt = data.updatedAt.toDate();
+              } else if (data.updatedAt instanceof Date) {
+                updatedAt = data.updatedAt;
+              } else if (typeof data.updatedAt === 'string') {
+                const parsedDate = new Date(data.updatedAt);
+                if (!isNaN(parsedDate.getTime())) {
+                  updatedAt = parsedDate;
+                }
+              }
+            }
+            
+            return {
+              id: doc.id,
+              userId: data.userId || user.uid,
+              title: data.title || '',
+              type: data.type || 'erinnerung',
+              dueDate: dueDate,
+              isAllDay: data.isAllDay || false,
+              amount: data.amount || null,
+              currency: data.currency || 'CHF',
+              notes: data.notes || null,
+              recurrenceRule: data.recurrenceRule || null,
+              personId: data.personId || null,
+              personName: data.personName || null,
+              status: data.status || 'offen',
+              createdAt: createdAt,
+              updatedAt: updatedAt,
+            };
+          }).filter((r) => r !== null) as Reminder[];
+          
+          setReminders(mappedReminders);
+          setError(null);
+        } catch (err) {
+          setError(err as Error);
+          console.error('[useReminders] Error processing snapshot:', err);
+        } finally {
+          setIsLoading(false);
+        }
+      },
+      (err: any) => {
+        // Handle specific Firestore errors gracefully
+        if (err?.code === 'failed-precondition') {
+          console.error('[useReminders] Firestore index missing:', err.message);
+          toast.error('Index fehlt - Bitte Firebase Console prüfen');
+        }
+        setError(err);
         setIsLoading(false);
+        console.error('[useReminders] Snapshot error:', err);
       }
-    };
+    );
 
-    fetchReminders();
-  }, [filters?.startDate, filters?.endDate, filters?.status, refreshKey]);
+    return () => unsubscribe();
+  }, [user, filters?.startDate, filters?.endDate, filters?.status]);
 
-  const refetch = () => setRefreshKey(prev => prev + 1);
+  const refetch = () => {
+    // Real-time listener automatically updates, but we can trigger a re-render
+    setReminders(prev => [...prev]);
+  };
 
   return { data: reminders, isLoading, error, refetch };
 }
@@ -115,38 +221,137 @@ export function useFinanceEntries(filters?: { startDate?: Date; endDate?: Date; 
   const [entries, setEntries] = useState<FinanceEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const { user } = useAuth();
 
-  const fetchEntries = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const getEntriesFunc = httpsCallable(functions, 'getFinanceEntries');
-      const result = await getEntriesFunc(filters || {});
-      const data = result.data as { entries: any[] };
-      
-      const mappedEntries = data.entries.map((e: any) => ({
-        ...e,
-        date: e.date?.toDate ? e.date.toDate() : new Date(e.date),
-        createdAt: e.createdAt?.toDate ? e.createdAt.toDate() : new Date(e.createdAt),
-        updatedAt: e.updatedAt?.toDate ? e.updatedAt.toDate() : new Date(e.updatedAt),
-      }));
-      
-      setEntries(mappedEntries);
-      setError(null);
-    } catch (err) {
-      setError(err as Error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [filters?.startDate, filters?.endDate, filters?.type]);
-
+  // Use Firestore real-time listener for immediate synchronization
   useEffect(() => {
-    fetchEntries();
-  }, [fetchEntries]);
+    if (!user) {
+      setEntries([]);
+      setIsLoading(false);
+      return;
+    }
 
-  // Direct refetch function that immediately fetches new data
-  const refetch = useCallback(async () => {
-    await fetchEntries();
-  }, [fetchEntries]);
+    setIsLoading(true);
+    
+    // Build Firestore query
+    let q: any = query(
+      collection(db, 'financeEntries'),
+      where('userId', '==', user.uid)
+    );
+
+    // Apply filters
+    if (filters?.type) {
+      q = query(q, where('type', '==', filters.type));
+    }
+    if (filters?.startDate) {
+      q = query(q, where('date', '>=', Timestamp.fromDate(filters.startDate)));
+    }
+    if (filters?.endDate) {
+      q = query(q, where('date', '<=', Timestamp.fromDate(filters.endDate)));
+    }
+
+    // Order by date descending
+    q = query(q, orderBy('date', 'desc'));
+
+    // Set up real-time listener
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot: QuerySnapshot) => {
+        try {
+          const mappedEntries = snapshot.docs.map((doc: DocumentSnapshot) => {
+            const data = doc.data();
+            if (!data) {
+              return null;
+            }
+            
+            // Handle Firestore Timestamps
+            let date: Date = new Date();
+            if (data.date) {
+              if (data.date.toDate && typeof data.date.toDate === 'function') {
+                date = data.date.toDate();
+              } else if (data.date instanceof Date) {
+                date = data.date;
+              } else if (typeof data.date === 'string') {
+                const parsedDate = new Date(data.date);
+                if (!isNaN(parsedDate.getTime())) {
+                  date = parsedDate;
+                }
+              }
+            }
+            
+            let createdAt: Date = new Date();
+            if (data.createdAt) {
+              if (data.createdAt.toDate && typeof data.createdAt.toDate === 'function') {
+                createdAt = data.createdAt.toDate();
+              } else if (data.createdAt instanceof Date) {
+                createdAt = data.createdAt;
+              } else if (typeof data.createdAt === 'string') {
+                const parsedDate = new Date(data.createdAt);
+                if (!isNaN(parsedDate.getTime())) {
+                  createdAt = parsedDate;
+                }
+              }
+            }
+            
+            let updatedAt: Date = new Date();
+            if (data.updatedAt) {
+              if (data.updatedAt.toDate && typeof data.updatedAt.toDate === 'function') {
+                updatedAt = data.updatedAt.toDate();
+              } else if (data.updatedAt instanceof Date) {
+                updatedAt = data.updatedAt;
+              } else if (typeof data.updatedAt === 'string') {
+                const parsedDate = new Date(data.updatedAt);
+                if (!isNaN(parsedDate.getTime())) {
+                  updatedAt = parsedDate;
+                }
+              }
+            }
+            
+            return {
+              id: doc.id,
+              userId: data.userId || user.uid,
+              type: data.type || 'ausgabe',
+              category: data.category || '',
+              description: data.description || '',
+              amount: data.amount || 0,
+              currency: data.currency || 'CHF',
+              paymentMethod: data.paymentMethod || 'Karte',
+              date: date,
+              isRecurring: data.isRecurring || false,
+              recurrenceRule: data.recurrenceRule || null,
+              createdAt: createdAt,
+              updatedAt: updatedAt,
+            };
+          }).filter((e) => e !== null) as FinanceEntry[];
+          
+          setEntries(mappedEntries);
+          setError(null);
+        } catch (err) {
+          setError(err as Error);
+          console.error('[useFinanceEntries] Error processing snapshot:', err);
+        } finally {
+          setIsLoading(false);
+        }
+      },
+      (err: any) => {
+        // Handle specific Firestore errors gracefully
+        if (err?.code === 'failed-precondition') {
+          console.error('[useFinanceEntries] Firestore index missing:', err.message);
+          toast.error('Index fehlt - Bitte Firebase Console prüfen');
+        }
+        setError(err);
+        setIsLoading(false);
+        console.error('[useFinanceEntries] Snapshot error:', err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user, filters?.startDate, filters?.endDate, filters?.type]);
+
+  const refetch = () => {
+    // Real-time listener automatically updates, but we can trigger a re-render
+    setEntries(prev => [...prev]);
+  };
 
   return { data: entries, isLoading, error, refetch };
 }
@@ -269,34 +474,157 @@ export function usePeople() {
   const [people, setPeople] = useState<Person[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const { user } = useAuth();
 
+  // Use Firestore real-time listener for immediate synchronization
   useEffect(() => {
-    const fetchPeople = async () => {
-      try {
-        setIsLoading(true);
-        const getPeopleFunc = httpsCallable(functions, 'getPeople');
-        const result = await getPeopleFunc({});
-        const data = result.data as { people: any[] };
-        
-        const mappedPeople = data.people.map((p: any) => ({
-          ...p,
-          createdAt: p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.createdAt),
-          updatedAt: p.updatedAt?.toDate ? p.updatedAt.toDate() : new Date(p.updatedAt),
-        }));
-        
-        setPeople(mappedPeople);
-        setError(null);
-      } catch (err) {
-        setError(err as Error);
-      } finally {
-        setIsLoading(false);
+    if (!user) {
+      setPeople([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    
+    // Build Firestore query
+    // Note: If index is missing, try without orderBy first, then add it
+    let q: any = query(
+      collection(db, 'people'),
+      where('userId', '==', user.uid)
+    );
+    
+    // Try to add orderBy, but handle index errors gracefully
+    try {
+      q = query(q, orderBy('createdAt', 'desc'));
+    } catch (err) {
+      console.warn('[usePeople] Index missing for createdAt, using unsorted query');
+    }
+
+    // Set up real-time listener with error handling
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot: QuerySnapshot) => {
+        try {
+          const mappedPeople = snapshot.docs.map((doc: DocumentSnapshot) => {
+            const data = doc.data();
+            if (!data) {
+              return null;
+            }
+            
+            // Handle Firestore Timestamps
+            let createdAt: Date = new Date();
+            if (data.createdAt) {
+              if (data.createdAt.toDate && typeof data.createdAt.toDate === 'function') {
+                createdAt = data.createdAt.toDate();
+              } else if (data.createdAt instanceof Date) {
+                createdAt = data.createdAt;
+              } else if (typeof data.createdAt === 'string') {
+                const parsedDate = new Date(data.createdAt);
+                if (!isNaN(parsedDate.getTime())) {
+                  createdAt = parsedDate;
+                }
+              }
+            }
+            
+            let updatedAt: Date = new Date();
+            if (data.updatedAt) {
+              if (data.updatedAt.toDate && typeof data.updatedAt.toDate === 'function') {
+                updatedAt = data.updatedAt.toDate();
+              } else if (data.updatedAt instanceof Date) {
+                updatedAt = data.updatedAt;
+              } else if (typeof data.updatedAt === 'string') {
+                const parsedDate = new Date(data.updatedAt);
+                if (!isNaN(parsedDate.getTime())) {
+                  updatedAt = parsedDate;
+                }
+              }
+            }
+            
+            return {
+              id: doc.id,
+              userId: data.userId || user.uid,
+              name: data.name || '',
+              email: data.email || null,
+              phone: data.phone || null,
+              totalOwed: data.totalOwed || 0,
+              currency: data.currency || 'CHF',
+              createdAt: createdAt,
+              updatedAt: updatedAt,
+            };
+          }).filter((p) => p !== null) as Person[];
+          
+          // Sort manually if orderBy failed
+          const sortedPeople = mappedPeople.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+          setPeople(sortedPeople);
+          setError(null);
+        } catch (err) {
+          setError(err as Error);
+          console.error('[usePeople] Error processing snapshot:', err);
+        } finally {
+          setIsLoading(false);
+        }
+      },
+      (err: any) => {
+        // Handle specific Firestore errors gracefully
+        if (err?.code === 'failed-precondition') {
+          console.error('[usePeople] Firestore index missing:', err.message);
+          // Try without orderBy as fallback
+          const fallbackQ = query(
+            collection(db, 'people'),
+            where('userId', '==', user.uid)
+          );
+          const fallbackUnsubscribe = onSnapshot(
+            fallbackQ,
+            (snapshot: QuerySnapshot) => {
+              try {
+                const mappedPeople = snapshot.docs.map((doc: DocumentSnapshot) => {
+                  const data = doc.data();
+                  if (!data) return null;
+                  return {
+                    id: doc.id,
+                    userId: data.userId || user.uid,
+                    name: data.name || '',
+                    email: data.email || null,
+                    phone: data.phone || null,
+                    totalOwed: data.totalOwed || 0,
+                    currency: data.currency || 'CHF',
+                    createdAt: data.createdAt?.toDate?.() || new Date(),
+                    updatedAt: data.updatedAt?.toDate?.() || new Date(),
+                  };
+                }).filter((p) => p !== null) as Person[];
+                setPeople(mappedPeople.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()));
+                setError(null);
+              } catch (mapErr) {
+                setError(mapErr as Error);
+                console.error('[usePeople] Error processing fallback snapshot:', mapErr);
+              } finally {
+                setIsLoading(false);
+              }
+            },
+            (fallbackErr: Error) => {
+              setError(fallbackErr);
+              setIsLoading(false);
+              console.error('[usePeople] Fallback snapshot error:', fallbackErr);
+            }
+          );
+          return () => fallbackUnsubscribe();
+        } else {
+          setError(err);
+          setIsLoading(false);
+          console.error('[usePeople] Snapshot error:', err);
+        }
       }
-    };
+    );
 
-    fetchPeople();
-  }, []);
+    return () => unsubscribe();
+  }, [user]);
 
-  return { data: people, isLoading, error };
+  const refetch = () => {
+    // Real-time listener automatically updates, but we can trigger a re-render
+    setPeople(prev => [...prev]);
+  };
+
+  return { data: people, isLoading, error, refetch };
 }
 
 export async function createPerson(data: Omit<Person, 'id' | 'userId' | 'totalOwed' | 'createdAt' | 'updatedAt'>) {
@@ -760,13 +1088,18 @@ export function useChatConversations() {
     setIsLoading(true);
     
     // Use Firestore real-time listener for immediate synchronization
-    const unsubscribe = onSnapshot(
+    // Query with where clause to match security rules
+    const q = query(
       collection(db, 'chatConversations'),
+      where('userId', '==', user.uid),
+      orderBy('updatedAt', 'desc')
+    );
+    
+    const unsubscribe = onSnapshot(
+      q,
       (snapshot) => {
         try {
-          const mappedConversations = snapshot.docs
-            .filter(doc => doc.data().userId === user.uid)
-            .map((doc) => {
+          const mappedConversations = snapshot.docs.map((doc) => {
               const data = doc.data();
               let createdAt: Date | string = new Date();
               if (data.createdAt) {
@@ -817,9 +1150,18 @@ export function useChatConversations() {
         }
       },
       (err) => {
-        console.error('Firestore listener error:', err);
+        // Only log permission errors, don't show toast for background listeners
+        if (err.code === 'permission-denied') {
+          console.warn('[useChatConversations] Permission denied - user may not be authenticated');
+        } else if (err.code === 'failed-precondition') {
+          console.warn('[useChatConversations] Index missing - query may need an index');
+          toast.error('Index fehlt. Bitte warten Sie, bis der Index erstellt wurde.');
+        } else {
+          console.error('[useChatConversations] Firestore listener error:', err);
+        }
         setError(err);
         setIsLoading(false);
+        setConversations([]);
       }
     );
 
@@ -827,19 +1169,11 @@ export function useChatConversations() {
   }, [user]);
 
   const refetch = async () => {
-    // For real-time listeners, refetch is not needed, but kept for compatibility
-    if (user) {
-      setIsLoading(true);
-      try {
-        const getChatConversationsFunc = httpsCallable(functions, 'getChatConversations');
-        const result = await getChatConversationsFunc({});
-        // The listener will update automatically
-        setConversations(prev => [...prev]); // Trigger re-render
-      } catch (err) {
-        setError(err as Error);
-      } finally {
-        setIsLoading(false);
-      }
+    // For real-time listeners, refetch is not needed
+    // The onSnapshot listener automatically updates the data in real-time
+    // This function is kept for compatibility but does nothing
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[useChatConversations] refetch called - no action needed (using real-time listener)');
     }
   };
 
@@ -861,24 +1195,57 @@ export interface WeatherData {
   fetchedAt?: string;
 }
 
+// Cache for weather data to prevent excessive API calls
+const weatherCache = new Map<string, { data: WeatherData | null; timestamp: number; error: Error | null }>();
+const WEATHER_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const WEATHER_DEBOUNCE_DELAY = 500; // 500ms debounce
+
 export function useWeather(date: Date | null, location?: string | null) {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    // Clear any pending fetch
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current);
+      fetchTimeoutRef.current = null;
+    }
+
     if (!date) {
       setWeather(null);
+      setError(null);
+      setIsLoading(false);
       return;
     }
 
-    const fetchWeather = async () => {
+    // Create cache key from date and location
+    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+    const cacheKey = `${dateStr}_${location || 'no-location'}`;
+    
+    // Check cache first
+    const cached = weatherCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < WEATHER_CACHE_DURATION) {
+      setWeather(cached.data);
+      setError(cached.error);
+      setIsLoading(false);
+      return;
+    }
+
+    // Debounce the fetch to prevent excessive calls
+    fetchTimeoutRef.current = setTimeout(async () => {
       try {
         setIsLoading(true);
         setError(null);
         
         if (!location) {
-          throw new Error('Location ist erforderlich. Bitte in den Einstellungen einen Standort eingeben.');
+          const err = new Error('Location ist erforderlich. Bitte in den Einstellungen einen Standort eingeben.');
+          setError(err);
+          setWeather(null);
+          setIsLoading(false);
+          weatherCache.set(cacheKey, { data: null, timestamp: Date.now(), error: err });
+          return;
         }
         
         const getWeatherFunc = httpsCallable(functions, 'getWeather');
@@ -889,12 +1256,6 @@ export function useWeather(date: Date | null, location?: string | null) {
         
         const data = result.data as WeatherData | null;
         
-        // Debug logging
-        const isDev = (globalThis as any).process?.env?.NODE_ENV === 'development';
-        if (isDev) {
-          console.log('[useWeather] API Response:', { data, location, date: date.toISOString() });
-        }
-        
         if (!data) {
           // No data returned - could be API error or no cache
           // Check if it's a past date (historical data not available)
@@ -903,26 +1264,40 @@ export function useWeather(date: Date | null, location?: string | null) {
           const requestDate = new Date(date);
           requestDate.setHours(0, 0, 0, 0);
           
-          if (requestDate < today) {
-            setError(new Error('Historische Wetterdaten sind nur aus dem Cache verfügbar.'));
-          } else {
-            setError(new Error('Keine Wetterdaten verfügbar. Bitte überprüfen Sie den Standort in den Einstellungen.'));
-          }
+          const err = requestDate < today 
+            ? new Error('Historische Wetterdaten sind nur aus dem Cache verfügbar.')
+            : new Error('Keine Wetterdaten verfügbar. Bitte überprüfen Sie den Standort in den Einstellungen.');
+          
+          setError(err);
+          setWeather(null);
+          weatherCache.set(cacheKey, { data: null, timestamp: Date.now(), error: err });
         } else {
           setWeather(data);
+          setError(null);
+          weatherCache.set(cacheKey, { data, timestamp: Date.now(), error: null });
         }
       } catch (err: any) {
-        console.error('[useWeather] Error:', err);
+        // Only log errors that are not resource-related to avoid spam
+        if (err?.code !== 'internal' && !err?.message?.includes('ERR_INSUFFICIENT_RESOURCES')) {
+          console.error('[useWeather] Error:', err);
+        }
         const errorMessage = err?.message || err?.code || 'Unbekannter Fehler beim Laden der Wetterdaten';
-        setError(new Error(errorMessage));
+        const error = new Error(errorMessage);
+        setError(error);
         setWeather(null);
+        weatherCache.set(cacheKey, { data: null, timestamp: Date.now(), error });
       } finally {
         setIsLoading(false);
       }
-    };
+    }, WEATHER_DEBOUNCE_DELAY);
 
-    fetchWeather();
-  }, [date, location]);
+    return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+        fetchTimeoutRef.current = null;
+      }
+    };
+  }, [date?.toISOString(), location]); // Use toISOString() to create stable dependency
 
   return { data: weather, isLoading, error };
 }
@@ -945,6 +1320,18 @@ export async function getWeatherHistory(startDate?: Date, endDate?: Date, locati
 
 // ========== User Settings Hooks (Phase 4) ==========
 
+export interface QuickAddTemplate {
+  id: string;
+  name: string;
+  category: string;
+  price: number;
+}
+
+export interface ShoppingBudget {
+  amount: number;
+  isSet: boolean;
+}
+
 export interface UserSettings {
   ocrProvider?: string;
   openaiApiKey?: string | null;
@@ -953,6 +1340,16 @@ export interface UserSettings {
   language?: string;
   theme?: string;
   weatherLocation?: string;
+  shoppingBudget?: ShoppingBudget;
+  quickAddTemplates?: QuickAddTemplate[];
+  currency?: string;
+  canton?: string;
+  notificationsEnabled?: boolean;
+  glassEffectEnabled?: boolean;
+  biometricEnabled?: boolean;
+  preferDesktop?: boolean;
+  tutorialHighlights?: Array<{ selector: string; title: string; description: string }> | null;
+  sidebarWidth?: number;
 }
 
 export function useUserSettings() {

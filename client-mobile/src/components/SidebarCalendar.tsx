@@ -2,14 +2,15 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Plus, Cloud, CloudRain, Sun, CloudSun, Wind, CalendarPlus, Bell, Wallet, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { functions } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
 import { toast } from 'sonner';
 import { useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
 import WeatherWidget from './WeatherWidget';
-import { useWeather, useUserSettings, createReminder, createFinanceEntry } from '@/lib/firebaseHooks';
+import { useWeather, useUserSettings, useReminders, createReminder, createFinanceEntry } from '@/lib/firebaseHooks';
+import { normalizeEventDate, formatDateLocal, formatTime, formatDateGerman, parseDateGerman } from '@/lib/dateTimeUtils';
 
 interface CalendarEvent {
   id: string;
@@ -38,6 +39,13 @@ export default function SidebarCalendar() {
   const [showCreateReminderModal, setShowCreateReminderModal] = useState(false);
   const [showCreateFinanceModal, setShowCreateFinanceModal] = useState(false);
   
+  // Date display states for German format (DD.MM.YYYY)
+  const [reminderDateDisplay, setReminderDateDisplay] = useState(formatDateGerman(new Date()));
+  const [financeDateDisplay, setFinanceDateDisplay] = useState(formatDateGerman(new Date()));
+  
+  // Get reminders directly
+  const { data: reminders = [] } = useReminders();
+  
   // Get weather data for selected date - normalize to avoid timezone issues
   const { settings } = useUserSettings();
   const location = settings?.weatherLocation || 'Zurich, CH';
@@ -47,7 +55,10 @@ export default function SidebarCalendar() {
   // Set today as default selected date
   useEffect(() => {
     if (!selectedDate) {
-      setSelectedDate(new Date());
+      // Normalize to midnight in local timezone
+      const today = new Date();
+      const normalizedToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      setSelectedDate(normalizedToday);
     }
   }, []);
 
@@ -145,18 +156,93 @@ export default function SidebarCalendar() {
     const startOfWeek = getStartOfWeek(currentDate);
     const days: { date: Date; events: CalendarEvent[] }[] = [];
     
+    // Helper function to get events for a date (including reminders)
+    const getEventsForDate = (date: Date): CalendarEvent[] => {
+      const dateStr = formatDateLocal(date);
+      
+      // Filter events
+      const filtered = events.filter(e => {
+        if (!e.date) return false;
+        let eventDateStr = normalizeEventDate(e.date);
+        if (!eventDateStr && typeof e.date === 'string') {
+          const datePart = e.date.split('T')[0];
+          if (datePart.match(/^\d{4}-\d{2}-\d{2}/)) {
+            eventDateStr = datePart;
+          }
+        }
+        return eventDateStr === dateStr;
+      });
+      
+      // Also check reminders
+      const remindersForDate = reminders.filter(r => {
+        if (!r.dueDate) return false;
+        let dueDateObj: Date;
+        if (r.dueDate instanceof Date) {
+          dueDateObj = r.dueDate;
+        } else if (typeof r.dueDate === 'string') {
+          dueDateObj = new Date(r.dueDate);
+        } else {
+          return false;
+        }
+        if (isNaN(dueDateObj.getTime())) return false;
+        const reminderDateStr = formatDateLocal(dueDateObj);
+        return reminderDateStr === dateStr;
+      });
+      
+      // Convert reminders to events
+      const reminderEvents: CalendarEvent[] = remindersForDate.map(r => {
+        let eventType: CalendarEvent['type'] = 'appointment';
+        if (r.type === 'termin') {
+          eventType = 'appointment';
+        } else if (r.type === 'zahlung') {
+          eventType = 'due';
+        } else if (r.type === 'aufgabe') {
+          eventType = 'reminder';
+        }
+        
+        let dueDateObj: Date;
+        if (r.dueDate instanceof Date) {
+          dueDateObj = r.dueDate;
+        } else if (typeof r.dueDate === 'string') {
+          dueDateObj = new Date(r.dueDate);
+        } else {
+          throw new Error(`Invalid dueDate for reminder ${r.id}`);
+        }
+        
+        return {
+          id: `reminder-${r.id}`,
+          type: eventType,
+          title: r.title,
+          date: formatDateLocal(dueDateObj),
+          time: r.isAllDay ? undefined : formatTime(dueDateObj),
+          description: r.notes || undefined,
+          status: r.status
+        };
+      });
+      
+      // Merge and avoid duplicates
+      const allEvents = [...filtered];
+      for (const reminderEvent of reminderEvents) {
+        if (!allEvents.some(e => e.id === reminderEvent.id)) {
+          allEvents.push(reminderEvent);
+        }
+      }
+      
+      return allEvents;
+    };
+    
     for (let i = 0; i < 7; i++) {
       const date = new Date(startOfWeek);
       date.setDate(startOfWeek.getDate() + i);
-      const dateStr = date.toISOString().split('T')[0];
+      const dayEvents = getEventsForDate(date);
       days.push({
         date,
-        events: events.filter(e => e.date === dateStr)
+        events: dayEvents
       });
     }
     
     return days;
-  }, [currentDate, events]);
+  }, [currentDate, events, reminders]);
 
   const goToPreviousWeek = () => {
     const newDate = new Date(currentDate);
@@ -180,13 +266,22 @@ export default function SidebarCalendar() {
   };
 
   const handleDayClick = (date: Date) => {
-    setSelectedDate(date);
+    // Create a new date object at midnight to avoid timezone issues
+    const normalizedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    console.log('[SidebarCalendar] handleDayClick:', {
+      originalDate: date.toISOString(),
+      normalizedDate: normalizedDate.toISOString(),
+      dateStr: formatDateLocal(normalizedDate)
+    });
+    setSelectedDate(normalizedDate);
     setShowDayDialog(true);
   };
 
   // Update selected date when clicking on a day (without opening dialog)
   const handleDaySelect = (date: Date) => {
-    setSelectedDate(date);
+    // Normalize to midnight in local timezone to avoid timezone issues
+    const normalizedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    setSelectedDate(normalizedDate);
   };
 
   const handleEventClick = (event: CalendarEvent) => {
@@ -195,10 +290,145 @@ export default function SidebarCalendar() {
   };
 
   const dayEvents = useMemo(() => {
-    if (!selectedDate) return [];
-    const dateStr = selectedDate.toISOString().split('T')[0];
-    return events.filter(e => e.date === dateStr);
-  }, [selectedDate, events]);
+    if (!selectedDate) {
+      console.log('[SidebarCalendar] dayEvents - no selectedDate');
+      return [];
+    }
+    
+    // Normalize selectedDate to midnight in local timezone
+    const normalizedSelectedDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+    // Format as YYYY-MM-DD using GLOBAL utility (LOCAL timezone)
+    const dateStr = formatDateLocal(normalizedSelectedDate);
+    
+    console.log('[SidebarCalendar] dayEvents filter - START:', {
+      selectedDate: selectedDate.toISOString(),
+      normalizedSelectedDate: normalizedSelectedDate.toISOString(),
+      dateStr,
+      totalEvents: events.length,
+      totalReminders: reminders.length
+    });
+    
+    // Filter events from events array
+    const filtered = events.filter(e => {
+      if (!e.date) {
+        console.log('[SidebarCalendar] Event skipped - no date:', e.title);
+        return false;
+      }
+      
+      // Normalize event date using GLOBAL utility (LOCAL timezone)
+      let eventDateStr = normalizeEventDate(e.date);
+      
+      // Fallback: if normalization fails, try to extract date from ISO string
+      if (!eventDateStr && typeof e.date === 'string') {
+        const datePart = e.date.split('T')[0];
+        if (datePart.match(/^\d{4}-\d{2}-\d{2}/)) {
+          eventDateStr = datePart;
+          console.log('[SidebarCalendar] Using fallback date extraction for filter:', eventDateStr);
+        }
+      }
+      
+      if (!eventDateStr) {
+        console.log('[SidebarCalendar] Event skipped - invalid date:', e.title, e.date);
+        return false;
+      }
+      
+      const matches = eventDateStr === dateStr;
+      
+      if (matches) {
+        console.log('[SidebarCalendar] Event matched:', {
+          eventTitle: e.title,
+          eventDate: e.date,
+          eventDateStr,
+          selectedDateStr: dateStr
+        });
+      }
+      
+      return matches;
+    });
+    
+    // ALWAYS check reminders directly as well
+    const remindersForDate = reminders.filter(r => {
+      if (!r.dueDate) return false;
+      
+      // Convert dueDate to Date if it's a string
+      let dueDateObj: Date;
+      if (r.dueDate instanceof Date) {
+        dueDateObj = r.dueDate;
+      } else if (typeof r.dueDate === 'string') {
+        dueDateObj = new Date(r.dueDate);
+      } else {
+        return false;
+      }
+      
+      if (isNaN(dueDateObj.getTime())) return false;
+      
+      const reminderDateStr = formatDateLocal(dueDateObj);
+      return reminderDateStr === dateStr;
+    });
+    
+    console.log('[SidebarCalendar] Reminders for date:', {
+      dateStr,
+      remindersForDate: remindersForDate.length,
+      reminders: remindersForDate.map(r => ({ id: r.id, title: r.title, dueDate: r.dueDate }))
+    });
+    
+    // Convert reminders to events and merge with filtered events
+    const reminderEvents: CalendarEvent[] = remindersForDate.map(r => {
+      // Map reminder types to calendar event types
+      let eventType: CalendarEvent['type'] = 'appointment';
+      if (r.type === 'termin') {
+        eventType = 'appointment';
+      } else if (r.type === 'zahlung') {
+        eventType = 'due';
+      } else if (r.type === 'aufgabe') {
+        eventType = 'reminder';
+      }
+      
+      // Convert dueDate to Date if it's a string
+      let dueDateObj: Date;
+      if (r.dueDate instanceof Date) {
+        dueDateObj = r.dueDate;
+      } else if (typeof r.dueDate === 'string') {
+        dueDateObj = new Date(r.dueDate);
+      } else {
+        throw new Error(`Invalid dueDate for reminder ${r.id}`);
+      }
+      
+      return {
+        id: `reminder-${r.id}`,
+        type: eventType,
+        title: r.title,
+        date: formatDateLocal(dueDateObj),
+        time: r.isAllDay ? undefined : formatTime(dueDateObj),
+        description: r.notes || undefined,
+        status: r.status
+      };
+    });
+    
+    // Merge filtered events with reminder events, avoiding duplicates
+    const allDayEvents = [...filtered];
+    for (const reminderEvent of reminderEvents) {
+      if (!allDayEvents.some(e => e.id === reminderEvent.id)) {
+        allDayEvents.push(reminderEvent);
+      }
+    }
+    
+    console.log('[SidebarCalendar] dayEvents filter - RESULT:', {
+      selectedDate: normalizedSelectedDate.toISOString(),
+      dateStr,
+      filteredFromEvents: filtered.length,
+      fromReminders: reminderEvents.length,
+      totalDayEvents: allDayEvents.length,
+      allDayEvents: allDayEvents.map(e => ({ 
+        id: e.id,
+        title: e.title, 
+        date: e.date,
+        type: e.type 
+      }))
+    });
+    
+    return allDayEvents;
+  }, [selectedDate, events, reminders]);
 
   const getEventColor = (type: string) => {
     switch (type) {
@@ -315,6 +545,9 @@ export default function SidebarCalendar() {
       <Dialog open={showDayDialog} onOpenChange={setShowDayDialog}>
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-[85vh] !rounded-3xl !m-0 !overflow-y-auto !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3 sticky top-0 bg-background z-10 border-b border-border">
+            <DialogDescription className="sr-only">
+              Details für den ausgewählten Tag mit Wetter, Terminen und Schnellaktionen
+            </DialogDescription>
             <div className="flex items-center justify-between">
               <DialogTitle className="text-lg font-semibold">
                 {selectedDate?.toLocaleDateString('de-CH', { 
@@ -490,10 +723,20 @@ export default function SidebarCalendar() {
       </Dialog>
 
       {/* Create Reminder Modal */}
-      <Dialog open={showCreateReminderModal} onOpenChange={setShowCreateReminderModal}>
+      <Dialog open={showCreateReminderModal} onOpenChange={(open) => {
+        setShowCreateReminderModal(open);
+        if (open) {
+          // Update date when dialog opens
+          const dateToUse = selectedDate || new Date();
+          setReminderDateDisplay(formatDateGerman(dateToUse));
+        }
+      }}>
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-lg font-semibold">Termin erstellen</DialogTitle>
+            <DialogDescription className="sr-only">
+              Erstellen Sie einen neuen Termin mit Titel, Datum, Uhrzeit und optionalen Notizen
+            </DialogDescription>
           </DialogHeader>
           
           <div className="px-5 pb-2 space-y-4">
@@ -510,9 +753,24 @@ export default function SidebarCalendar() {
             <div>
               <label className="text-sm font-medium mb-1 block">Datum</label>
               <input
-                type="date"
+                type="text"
                 id="reminder-date"
-                defaultValue={selectedDate?.toISOString().split('T')[0]}
+                placeholder="DD.MM.YYYY"
+                value={reminderDateDisplay}
+                onChange={(e) => {
+                  const inputValue = e.target.value;
+                  setReminderDateDisplay(inputValue);
+                }}
+                onBlur={(e) => {
+                  // Validate and format on blur
+                  const parsed = parseDateGerman(e.target.value);
+                  if (parsed) {
+                    setReminderDateDisplay(formatDateGerman(parsed));
+                  } else if (e.target.value && selectedDate) {
+                    // If invalid, use selectedDate
+                    setReminderDateDisplay(formatDateGerman(selectedDate));
+                  }
+                }}
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm"
               />
             </div>
@@ -557,7 +815,14 @@ export default function SidebarCalendar() {
                     return;
                   }
                   
-                  const dueDate = new Date(dateInput.value);
+                  // Parse German date format (DD.MM.YYYY)
+                  const parsedDate = parseDateGerman(dateInput.value);
+                  if (!parsedDate) {
+                    toast.error('Bitte gib ein gültiges Datum ein (DD.MM.YYYY)');
+                    return;
+                  }
+                  
+                  const dueDate = new Date(parsedDate);
                   if (timeInput.value) {
                     const [hours, minutes] = timeInput.value.split(':');
                     dueDate.setHours(parseInt(hours), parseInt(minutes));
@@ -590,10 +855,20 @@ export default function SidebarCalendar() {
       </Dialog>
 
       {/* Create Finance Entry Modal */}
-      <Dialog open={showCreateFinanceModal} onOpenChange={setShowCreateFinanceModal}>
+      <Dialog open={showCreateFinanceModal} onOpenChange={(open) => {
+        setShowCreateFinanceModal(open);
+        if (open) {
+          // Update date when dialog opens
+          const dateToUse = selectedDate || new Date();
+          setFinanceDateDisplay(formatDateGerman(dateToUse));
+        }
+      }}>
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-lg font-semibold">Finanz-Eintrag erstellen</DialogTitle>
+            <DialogDescription className="sr-only">
+              Erstellen Sie einen neuen Finanz-Eintrag mit Beschreibung, Betrag, Typ und Datum
+            </DialogDescription>
           </DialogHeader>
           
           <div className="px-5 pb-2 space-y-4">
@@ -630,9 +905,24 @@ export default function SidebarCalendar() {
             <div>
               <label className="text-sm font-medium mb-1 block">Datum</label>
               <input
-                type="date"
+                type="text"
                 id="finance-date"
-                defaultValue={selectedDate?.toISOString().split('T')[0]}
+                placeholder="DD.MM.YYYY"
+                value={financeDateDisplay}
+                onChange={(e) => {
+                  const inputValue = e.target.value;
+                  setFinanceDateDisplay(inputValue);
+                }}
+                onBlur={(e) => {
+                  // Validate and format on blur
+                  const parsed = parseDateGerman(e.target.value);
+                  if (parsed) {
+                    setFinanceDateDisplay(formatDateGerman(parsed));
+                  } else if (e.target.value && selectedDate) {
+                    // If invalid, use selectedDate
+                    setFinanceDateDisplay(formatDateGerman(selectedDate));
+                  }
+                }}
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm"
               />
             </div>
@@ -660,6 +950,13 @@ export default function SidebarCalendar() {
                     return;
                   }
                   
+                  // Parse German date format (DD.MM.YYYY)
+                  const parsedDate = parseDateGerman(dateInput.value);
+                  if (!parsedDate) {
+                    toast.error('Bitte gib ein gültiges Datum ein (DD.MM.YYYY)');
+                    return;
+                  }
+                  
                   if (!amountInput.value || parseFloat(amountInput.value) <= 0) {
                     toast.error('Bitte gib einen gültigen Betrag ein');
                     return;
@@ -669,7 +966,7 @@ export default function SidebarCalendar() {
                     description: descriptionInput.value.trim(),
                     amount: Math.round(parseFloat(amountInput.value) * 100), // Convert to Rappen
                     type: typeInput.value as 'einnahme' | 'ausgabe',
-                    date: new Date(dateInput.value),
+                    date: new Date(parsedDate),
                     category: 'Sonstiges',
                     currency: 'CHF',
                     isRecurring: false,
@@ -697,6 +994,9 @@ export default function SidebarCalendar() {
             <DialogTitle className="text-lg font-semibold">
               {selectedEvent?.title}
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Detaillierte Informationen zum ausgewählten Event
+            </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-3 px-5 pb-2">

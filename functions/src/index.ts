@@ -1109,8 +1109,11 @@ export const updateInvoiceStatus = onCall(async (request) => {
   }
 
   const invoiceData = invoiceDoc.data();
-  const oldStatus = invoiceData?.status;
-  const amount = invoiceData?.amount || 0;
+  if (!invoiceData) {
+    throw new HttpsError('not-found', 'Invoice data not found');
+  }
+  const oldStatus = invoiceData.status;
+  const amount = invoiceData.amount || 0;
 
   // Update invoice status
   await invoiceRef.update({
@@ -1133,7 +1136,7 @@ export const updateInvoiceStatus = onCall(async (request) => {
       amount,
       currency: personData?.currency || 'CHF',
       date: admin.firestore.Timestamp.now(),
-      description: `${personData?.name}: ${invoiceData?.description}`,
+      description: `${personData?.name}: ${invoiceData.description}`,
       status: 'paid',
       personId,
       invoiceId,
@@ -1770,17 +1773,20 @@ export const getCalendarEvents = onCall(async (request) => {
     console.log(`Reminder ${reminderDoc.id}: ${reminderData.title} at ${reminderDate.toISOString()}`);
     
     // Filter by date range if provided - but be more lenient
+    // Compare only the date part, not the time, to avoid timezone issues
     if (startDate && endDate) {
       const start = new Date(startDate);
       start.setHours(0, 0, 0, 0);
       const end = new Date(endDate);
       end.setHours(23, 59, 59, 999);
       
+      // Normalize reminder date to start of day for comparison
       const reminderDateOnly = new Date(reminderDate);
-      reminderDateOnly.setHours(12, 0, 0, 0);
+      reminderDateOnly.setHours(0, 0, 0, 0);
       
+      // Use <= and >= for inclusive comparison
       if (reminderDateOnly < start || reminderDateOnly > end) {
-        console.log(`  -> Filtered out (outside range ${start.toISOString()} - ${end.toISOString()})`);
+        console.log(`  -> Filtered out (outside range ${start.toISOString()} - ${end.toISOString()}, reminder: ${reminderDateOnly.toISOString()})`);
         continue;
       }
     }
@@ -3044,6 +3050,16 @@ export const getUserSettings = onCall(async (request) => {
       language: 'de',
       theme: 'system',
       weatherLocation: 'Zurich, CH', // Default weather location
+      shoppingBudget: { amount: 0, isSet: false },
+      quickAddTemplates: [],
+      currency: 'CHF',
+      canton: '',
+      notificationsEnabled: true,
+      glassEffectEnabled: false,
+      biometricEnabled: false,
+      preferDesktop: false,
+      tutorialHighlights: null,
+      sidebarWidth: 256,
     };
   }
   

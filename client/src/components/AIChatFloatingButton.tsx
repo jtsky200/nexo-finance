@@ -7,27 +7,11 @@ import { useChatReminders, markChatReminderAsRead, type ChatReminder } from '@/l
 import { toast } from 'sonner';
 import { eventBus, Events } from '@/lib/eventBus';
 
-const POPUP_FLAG_KEY = 'nexo_chat_open_popup';
-
 export default function AIChatFloatingButton() {
   const [isOpen, setIsOpen] = useState(false);
   const [pendingReminder, setPendingReminder] = useState<ChatReminder | null>(null);
   const processedRemindersRef = useRef<Set<string>>(new Set());
   const { data: chatReminders, refetch } = useChatReminders(true);
-
-  // Prüfe beim Mount ob der Popup automatisch geöffnet werden soll
-  useEffect(() => {
-    const shouldOpenPopup = localStorage.getItem(POPUP_FLAG_KEY);
-    if (shouldOpenPopup === 'true') {
-      // Entferne das Flag und öffne den Popup
-      localStorage.removeItem(POPUP_FLAG_KEY);
-      localStorage.removeItem('nexo_chat_from_route');
-      // Kurze Verzögerung für sanfte Animation
-      setTimeout(() => {
-        setIsOpen(true);
-      }, 300);
-    }
-  }, []);
 
   // Auto-open dialog when new reminder arrives
   useEffect(() => {

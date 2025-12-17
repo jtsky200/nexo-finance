@@ -5,11 +5,11 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { AIChatBox, type Message } from './AIChatBox';
 import { Button } from './ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { useChatReminders, markChatReminderAsRead, type ChatReminder } from '@/lib/firebaseHooks';
 import { eventBus, Events } from '@/lib/eventBus';
+import { useChatHistory, createNewChat, saveChatConversation, getChatConversation } from '@/lib/chatHistory';
 
-const CHAT_STORAGE_KEY = 'nexo_chat_messages';
 const SYSTEM_MESSAGE: Message = {
   role: 'system',
   content: 'Du bist ein hilfreicher Assistent für die Nexo-Anwendung. Du hilfst Benutzern bei Fragen zu Finanzen, Rechnungen, Terminen und anderen Funktionen der App.',
@@ -26,44 +26,47 @@ export default function AIChatDialog({ open, onOpenChange, pendingReminder, onRe
   const { t } = useTranslation();
   const { data: chatReminders, refetch } = useChatReminders(true);
   const processedRemindersRef = useRef<Set<string>>(new Set());
+  const { data: chatHistory, refetch: refetchHistory } = useChatHistory();
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
 
-  const [messages, setMessages] = useState<Message[]>(() => {
-    try {
-      const saved = localStorage.getItem(CHAT_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as Message[];
-        if (!parsed.some(m => m.role === 'system')) {
-          return [SYSTEM_MESSAGE, ...parsed];
-        }
-        return parsed;
-      }
-    } catch (e) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Fehler beim Laden der Chat-Historie:', e);
-      }
-    }
-    return [SYSTEM_MESSAGE];
-  });
+  // Initialize messages from Firebase Chat History only (no localStorage)
+  const [messages, setMessages] = useState<Message[]>([SYSTEM_MESSAGE]);
 
+  // Create a new chat when dialog opens for the first time
   useEffect(() => {
-    if (open) {
-      try {
-        const saved = localStorage.getItem(CHAT_STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved) as Message[];
-          if (!parsed.some(m => m.role === 'system')) {
-            setMessages([SYSTEM_MESSAGE, ...parsed]);
-          } else {
-            setMessages(parsed);
+    if (open && !currentChatId) {
+      const initializeChat = async () => {
+        try {
+          const newChat = createNewChat();
+          await saveChatConversation(newChat);
+          setCurrentChatId(newChat.id);
+          setMessages([SYSTEM_MESSAGE]);
+          await refetchHistory();
+        } catch (error) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Error initializing chat:', error);
           }
+          // Fallback: still allow chat to work without Firebase
+          setMessages([SYSTEM_MESSAGE]);
         }
-      } catch (e) {
-        if (process.env.NODE_ENV === 'development') {
-        console.error('Fehler beim Laden der Chat-Historie:', e);
-      }
-      }
+      };
+      initializeChat();
     }
-  }, [open]);
+  }, [open, currentChatId, refetchHistory]);
+
+  // Load chat from Firebase when currentChatId changes
+  useEffect(() => {
+    if (currentChatId && chatHistory.length > 0) {
+      const chat = getChatConversation(currentChatId, chatHistory);
+      if (chat && chat.messages && chat.messages.length > 0) {
+        setMessages(chat.messages);
+      } else {
+        setMessages([SYSTEM_MESSAGE]);
+      }
+    } else if (!currentChatId) {
+      setMessages([SYSTEM_MESSAGE]);
+    }
+  }, [currentChatId, chatHistory]);
 
   useEffect(() => {
     if (open && pendingReminder && pendingReminder.message) {
@@ -121,21 +124,53 @@ export default function AIChatDialog({ open, onOpenChange, pendingReminder, onRe
     }
   }, [chatReminders, refetch, onOpenChange]);
 
+  // Save messages to Firebase Chat History only (debounced to avoid too many writes)
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
-    } catch (e) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Fehler beim Speichern der Chat-Historie:', e);
-      }
+    if (currentChatId && messages.length > 1) { // More than just system message
+      const timeoutId = setTimeout(async () => {
+        try {
+          const chat = getChatConversation(currentChatId, chatHistory);
+          if (chat) {
+            const updatedChat = {
+              ...chat,
+              messages: messages,
+              updatedAt: new Date().toISOString(),
+            };
+            // Update title from first user message if it's still the default
+            const firstUserMessage = messages.find(m => m.role === 'user');
+            if (firstUserMessage && (chat.title === 'Neue Konversation' || !chat.title)) {
+              updatedChat.title = firstUserMessage.content.substring(0, 50) + (firstUserMessage.content.length > 50 ? '...' : '');
+            }
+            await saveChatConversation(updatedChat);
+            // Refetch to get updated data
+            await refetchHistory();
+          }
+        } catch (err) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Error saving chat to Firebase:', err);
+          }
+        }
+      }, 1000); // Debounce by 1 second
+      
+      return () => clearTimeout(timeoutId);
     }
-  }, [messages]);
+  }, [messages, currentChatId, chatHistory, refetchHistory]);
 
-  const handleNewConversation = useCallback(() => {
-    setMessages([SYSTEM_MESSAGE]);
-    localStorage.removeItem(CHAT_STORAGE_KEY);
-    toast.success('Neue Konversation gestartet');
-  }, []);
+  const handleNewConversation = useCallback(async () => {
+    try {
+      const newChat = createNewChat();
+      await saveChatConversation(newChat);
+      setCurrentChatId(newChat.id);
+      setMessages([SYSTEM_MESSAGE]);
+      await refetchHistory();
+      toast.success('Neue Konversation gestartet');
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error creating new chat:', error);
+      }
+      toast.error('Fehler beim Erstellen der neuen Konversation');
+    }
+  }, [refetchHistory]);
 
   const chatMutation = trpc.ai.chat.useMutation({
     onSuccess: (data) => {
@@ -234,6 +269,9 @@ export default function AIChatDialog({ open, onOpenChange, pendingReminder, onRe
         showCloseButton={false}
         className="max-w-full w-full h-full max-h-[100vh] m-0 p-0 flex flex-col gap-0 rounded-none sm:rounded-lg sm:max-w-lg sm:h-[90vh] sm:m-4 safe-area-inset"
       >
+        <DialogDescription className="sr-only">
+          Chat-Assistent Dialog für Konversationen mit dem KI-Assistenten
+        </DialogDescription>
         <DialogHeader className="px-4 py-4 border-b border-border safe-top flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">

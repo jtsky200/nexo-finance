@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { useUserSettings } from "@/lib/firebaseHooks";
 
 type Theme = "light" | "dark";
 
@@ -21,13 +22,34 @@ export function ThemeProvider({
   defaultTheme = "light",
   switchable = false,
 }: ThemeProviderProps) {
+  const { settings, updateSettings } = useUserSettings();
   const [theme, setTheme] = useState<Theme>(() => {
     if (switchable) {
+      // Try Firebase first, then localStorage as fallback
+      const firebaseTheme = settings?.theme;
+      if (firebaseTheme && (firebaseTheme === "light" || firebaseTheme === "dark")) {
+        return firebaseTheme;
+      }
       const stored = localStorage.getItem("theme");
-      return (stored as Theme) || defaultTheme;
+      if (stored && (stored === "light" || stored === "dark")) {
+        return stored as Theme;
+      }
+      // Migrate from localStorage to Firebase if available
+      if (stored && updateSettings) {
+        updateSettings({ theme: stored as Theme }).catch(console.error);
+        localStorage.removeItem("theme");
+      }
+      return defaultTheme;
     }
     return defaultTheme;
   });
+
+  // Sync with Firebase UserSettings when settings change
+  useEffect(() => {
+    if (switchable && settings?.theme && (settings.theme === "light" || settings.theme === "dark")) {
+      setTheme(settings.theme);
+    }
+  }, [settings?.theme, switchable]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -37,10 +59,13 @@ export function ThemeProvider({
       root.classList.remove("dark");
     }
 
-    if (switchable) {
+    if (switchable && updateSettings) {
+      // Save to Firebase UserSettings
+      updateSettings({ theme }).catch(console.error);
+      // Keep localStorage as fallback for now
       localStorage.setItem("theme", theme);
     }
-  }, [theme, switchable]);
+  }, [theme, switchable, updateSettings]);
 
   const toggleTheme = switchable
     ? () => {

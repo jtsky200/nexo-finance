@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/lib/firebase';
+import { useUserSettings } from '@/lib/firebaseHooks';
 import { User, Mail, Globe, Wallet, MapPin, Bell, Moon, Sun, Loader2, FileSearch, Eye, EyeOff } from 'lucide-react';
 import i18n from '@/lib/i18n';
 
@@ -71,6 +72,8 @@ export default function Settings() {
   const [autoConfirmDocuments, setAutoConfirmDocuments] = useState(false);
   const [isLoadingOcrSettings, setIsLoadingOcrSettings] = useState(true);
 
+  const { settings, isLoading: isLoadingUserSettings, updateSettings } = useUserSettings();
+  
   // Load user data
   useEffect(() => {
     if (user) {
@@ -97,35 +100,70 @@ export default function Settings() {
     } else {
       setIsLoadingOcrSettings(false);
     }
-    
-    // Load saved preferences from localStorage
-    const savedLanguage = localStorage.getItem('nexo-language') || 'de';
-    const savedCurrency = localStorage.getItem('nexo-currency') || 'CHF';
-    const savedCanton = localStorage.getItem('nexo-canton') || '';
-    const savedNotifications = localStorage.getItem('nexo-notifications') !== 'false';
-    const savedTheme = localStorage.getItem('nexo-theme') || 'light';
-    
-    setLanguage(savedLanguage);
-    setCurrency(savedCurrency);
-    setCanton(savedCanton);
-    setNotificationsEnabled(savedNotifications);
-    setIsDarkMode(savedTheme === 'dark');
-    
-    // Apply theme
-    if (savedTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    }
   }, [user]);
+
+  // Load settings from Firebase UserSettings with localStorage migration
+  useEffect(() => {
+    if (!isLoadingUserSettings && settings) {
+      // Migrate from localStorage if Firebase settings are not set
+      const migratedLanguage = settings.language || localStorage.getItem('nexo-language') || 'de';
+      const migratedCurrency = settings.currency || localStorage.getItem('nexo-currency') || 'CHF';
+      const migratedCanton = settings.canton || localStorage.getItem('nexo-canton') || '';
+      const migratedNotifications = settings.notificationsEnabled !== undefined 
+        ? settings.notificationsEnabled 
+        : (localStorage.getItem('nexo-notifications') !== 'false');
+      const migratedTheme = settings.theme || localStorage.getItem('nexo-theme') || 'light';
+      
+      // Check if we need to migrate
+      const hasLocalData = localStorage.getItem('nexo-language') || 
+                          localStorage.getItem('nexo-currency') || 
+                          localStorage.getItem('nexo-canton') ||
+                          localStorage.getItem('nexo-notifications') ||
+                          localStorage.getItem('nexo-theme');
+      
+      if (hasLocalData && (!settings.language || !settings.currency)) {
+        // Migrate to Firebase
+        updateSettings({
+          language: migratedLanguage,
+          currency: migratedCurrency,
+          canton: migratedCanton,
+          notificationsEnabled: migratedNotifications,
+          theme: migratedTheme,
+        }).then(() => {
+          // Clear localStorage after successful migration
+          localStorage.removeItem('nexo-language');
+          localStorage.removeItem('nexo-currency');
+          localStorage.removeItem('nexo-canton');
+          localStorage.removeItem('nexo-notifications');
+          localStorage.removeItem('nexo-theme');
+        }).catch(console.error);
+      }
+      
+      setLanguage(migratedLanguage);
+      setCurrency(migratedCurrency);
+      setCanton(migratedCanton);
+      setNotificationsEnabled(migratedNotifications);
+      setIsDarkMode(migratedTheme === 'dark');
+      
+      // Apply theme
+      if (migratedTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+  }, [settings, isLoadingUserSettings, updateSettings]);
 
   const handleLanguageChange = (value: string) => {
     setLanguage(value);
     i18n.changeLanguage(value);
-    localStorage.setItem('nexo-language', value);
+    updateSettings({ language: value }).catch(console.error);
   };
 
   const handleThemeChange = (dark: boolean) => {
     setIsDarkMode(dark);
-    localStorage.setItem('nexo-theme', dark ? 'dark' : 'light');
+    const themeValue = dark ? 'dark' : 'light';
+    updateSettings({ theme: themeValue }).catch(console.error);
     if (dark) {
       document.documentElement.classList.add('dark');
     } else {
@@ -137,13 +175,15 @@ export default function Settings() {
     setIsSaving(true);
     
     try {
-      // Save to localStorage
-      localStorage.setItem('nexo-language', language);
-      localStorage.setItem('nexo-currency', currency);
-      localStorage.setItem('nexo-canton', canton);
-      localStorage.setItem('nexo-notifications', notificationsEnabled.toString());
+      // Save to Firebase UserSettings
+      await updateSettings({
+        language,
+        currency,
+        canton,
+        notificationsEnabled,
+      });
       
-      // Save to Firebase if user is logged in
+      // Save to Firebase if user is logged in (legacy function, can be removed later)
       if (user) {
         try {
           const updatePreferences = httpsCallable(functions, 'updateUserPreferences');

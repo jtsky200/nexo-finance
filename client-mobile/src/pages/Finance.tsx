@@ -27,6 +27,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { hapticSuccess, hapticError, hapticSelection } from '@/lib/hapticFeedback';
 import { formatErrorForDisplay } from '@/lib/errorHandler';
 import { exportFinanceToCSV, exportFinanceToPDF } from '@/lib/exportUtils';
+import { formatDateLocal, formatDateGerman, parseDateGerman } from '@/lib/dateTimeUtils';
 
 type TabType = 'all' | 'income' | 'expenses';
 
@@ -57,7 +58,7 @@ export default function MobileFinance() {
   const [newEntry, setNewEntry] = useState({
     category: '',
     amount: '',
-    date: new Date().toISOString().split('T')[0],
+    date: formatDateLocal(new Date()), // Internal format: YYYY-MM-DD
     notes: '',
     paymentMethod: 'Karte',
     isRecurring: false,
@@ -271,7 +272,7 @@ export default function MobileFinance() {
       setNewEntry({
         category: '',
         amount: '',
-        date: new Date().toISOString().split('T')[0],
+        date: formatDateLocal(new Date()),
         notes: '',
         paymentMethod: 'Karte',
         isRecurring: false,
@@ -289,7 +290,7 @@ export default function MobileFinance() {
       setNewEntry({
         category: '',
         amount: '',
-        date: new Date().toISOString().split('T')[0],
+        date: formatDateLocal(new Date()),
         notes: '',
         paymentMethod: 'Karte',
         isRecurring: false,
@@ -779,9 +780,22 @@ export default function MobileFinance() {
               <div>
                 <Label className="text-sm text-muted-foreground">Datum</Label>
                 <Input
-                  type="date"
-                  value={newEntry.date}
-                  onChange={(e) => setNewEntry({ ...newEntry, date: e.target.value })}
+                  type="text"
+                  placeholder="DD.MM.YYYY"
+                  value={formatDateGerman(newEntry.date)}
+                  onChange={(e) => {
+                    const parsed = parseDateGerman(e.target.value);
+                    if (parsed) {
+                      setNewEntry({ ...newEntry, date: parsed });
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const parsed = parseDateGerman(e.target.value);
+                    if (!parsed && newEntry.date) {
+                      // If invalid, keep current date
+                      e.target.value = formatDateGerman(newEntry.date);
+                    }
+                  }}
                   className="mobile-input mt-1"
                 />
               </div>

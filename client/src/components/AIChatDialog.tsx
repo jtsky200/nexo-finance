@@ -12,8 +12,8 @@ import { AIChatBox, type Message } from './AIChatBox';
 
 import { Button } from './ui/button';
 import { createPortal } from 'react-dom';
+import { useChatHistory, createNewChat, saveChatConversation, getChatConversation } from '@/lib/chatHistory';
 
-const CHAT_STORAGE_KEY = 'nexo_chat_messages';
 const SYSTEM_MESSAGE: Message = {
   role: 'system',
   content: 'Du bist ein hilfreicher Assistent für die Nexo-Anwendung. Du hilfst Benutzern bei Fragen zu Finanzen, Rechnungen, Terminen und anderen Funktionen der App.',
@@ -28,6 +28,8 @@ interface AIChatDialogProps {
 
 export default function AIChatDialog({ open, onOpenChange, pendingReminder, onReminderProcessed }: AIChatDialogProps) {
   const { t } = useTranslation();
+  const { data: chatHistory, refetch: refetchHistory } = useChatHistory();
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   
   // Refs für flüssige Drag-Performance (direkte DOM-Manipulation)
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -108,41 +110,42 @@ export default function AIChatDialog({ open, onOpenChange, pendingReminder, onRe
     };
   }, [open, onOpenChange]);
 
-  // Lade gespeicherte Nachrichten aus LocalStorage
-  const [messages, setMessages] = useState<Message[]>(() => {
-    try {
-      const saved = localStorage.getItem(CHAT_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as Message[];
-        if (!parsed.some(m => m.role === 'system')) {
-          return [SYSTEM_MESSAGE, ...parsed];
-        }
-        return parsed;
-      }
-    } catch (e) {
-      console.error('Fehler beim Laden der Chat-Historie:', e);
-    }
-    return [SYSTEM_MESSAGE];
-  });
+  // Initialize messages from Firebase Chat History only (no localStorage)
+  const [messages, setMessages] = useState<Message[]>([SYSTEM_MESSAGE]);
 
-  // Synchronisiere mit LocalStorage wenn Dialog geöffnet wird
+  // Create a new chat when dialog opens for the first time
   useEffect(() => {
-    if (open) {
-      try {
-        const saved = localStorage.getItem(CHAT_STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved) as Message[];
-          if (!parsed.some(m => m.role === 'system')) {
-            setMessages([SYSTEM_MESSAGE, ...parsed]);
-          } else {
-            setMessages(parsed);
-          }
+    if (open && !currentChatId) {
+      const initializeChat = async () => {
+        try {
+          const newChat = createNewChat();
+          await saveChatConversation(newChat);
+          setCurrentChatId(newChat.id);
+          setMessages([SYSTEM_MESSAGE]);
+          await refetchHistory();
+        } catch (error) {
+          console.error('Error initializing chat:', error);
+          // Fallback: still allow chat to work without Firebase
+          setMessages([SYSTEM_MESSAGE]);
         }
-      } catch (e) {
-        console.error('Fehler beim Laden der Chat-Historie:', e);
-      }
+      };
+      initializeChat();
     }
-  }, [open]);
+  }, [open, currentChatId, refetchHistory]);
+
+  // Load chat from Firebase when currentChatId changes
+  useEffect(() => {
+    if (currentChatId && chatHistory.length > 0) {
+      const chat = getChatConversation(currentChatId, chatHistory);
+      if (chat && chat.messages && chat.messages.length > 0) {
+        setMessages(chat.messages);
+      } else {
+        setMessages([SYSTEM_MESSAGE]);
+      }
+    } else if (!currentChatId) {
+      setMessages([SYSTEM_MESSAGE]);
+    }
+  }, [currentChatId, chatHistory]);
 
   // Add pending reminder message when dialog opens with a reminder
   useEffect(() => {
@@ -174,21 +177,50 @@ export default function AIChatDialog({ open, onOpenChange, pendingReminder, onRe
     }
   }, [open, pendingReminder, messages, onReminderProcessed]);
 
-  // Speichere Nachrichten in LocalStorage bei jeder Änderung
+  // Save messages to Firebase Chat History only (debounced to avoid too many writes)
   useEffect(() => {
-    try {
-      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
-    } catch (e) {
-      console.error('Fehler beim Speichern der Chat-Historie:', e);
+    if (currentChatId && messages.length > 1) { // More than just system message
+      const timeoutId = setTimeout(async () => {
+        try {
+          const chat = getChatConversation(currentChatId, chatHistory);
+          if (chat) {
+            const updatedChat = {
+              ...chat,
+              messages: messages,
+              updatedAt: new Date().toISOString(),
+            };
+            // Update title from first user message if it's still the default
+            const firstUserMessage = messages.find(m => m.role === 'user');
+            if (firstUserMessage && (chat.title === 'Neue Konversation' || !chat.title)) {
+              updatedChat.title = firstUserMessage.content.substring(0, 50) + (firstUserMessage.content.length > 50 ? '...' : '');
+            }
+            await saveChatConversation(updatedChat);
+            // Refetch to get updated data
+            await refetchHistory();
+          }
+        } catch (err) {
+          console.error('Error saving chat to Firebase:', err);
+        }
+      }, 1000); // Debounce by 1 second
+      
+      return () => clearTimeout(timeoutId);
     }
-  }, [messages]);
+  }, [messages, currentChatId, chatHistory, refetchHistory]);
 
   // Neue Konversation starten
-  const handleNewConversation = useCallback(() => {
-    setMessages([SYSTEM_MESSAGE]);
-    localStorage.removeItem(CHAT_STORAGE_KEY);
-    toast.success('Neue Konversation gestartet');
-  }, []);
+  const handleNewConversation = useCallback(async () => {
+    try {
+      const newChat = createNewChat();
+      await saveChatConversation(newChat);
+      setCurrentChatId(newChat.id);
+      setMessages([SYSTEM_MESSAGE]);
+      await refetchHistory();
+      toast.success('Neue Konversation gestartet');
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+      toast.error('Fehler beim Erstellen der neuen Konversation');
+    }
+  }, [refetchHistory]);
 
   const chatMutation = trpc.ai.chat.useMutation({
     onSuccess: (data) => {

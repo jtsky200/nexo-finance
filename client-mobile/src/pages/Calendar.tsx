@@ -1,22 +1,19 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import MobileLayout from '@/components/MobileLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
   ChevronLeft, ChevronRight, Calendar as CalendarIcon, 
-  Plus, X, AlertTriangle, Bell, Clock, CheckCircle, Cloud, CloudRain, Sun, CloudSun, Wind, CalendarPlus, Wallet
+  X, AlertTriangle, Bell, Clock, CheckCircle, Cloud, CloudRain, Sun, CloudSun, Wind, CalendarPlus, Wallet
 } from 'lucide-react';
 import { functions, auth } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
-import { useReminders, useWeather, useUserSettings, createReminder, createFinanceEntry } from '@/lib/firebaseHooks';
-import { normalizeEventDate, formatDateLocal } from '@/lib/dateTimeUtils';
+import { useReminders, useFinanceEntries, usePeople, useWeather, useUserSettings, createReminder, createFinanceEntry } from '@/lib/firebaseHooks';
+import { normalizeEventDate, formatDateLocal, formatTime, formatDateGerman, parseDateGerman } from '@/lib/dateTimeUtils';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useLocation } from 'wouter';
@@ -37,7 +34,6 @@ interface CalendarEvent {
 }
 
 export default function MobileCalendar() {
-  const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -48,32 +44,32 @@ export default function MobileCalendar() {
   const [showDayDialog, setShowDayDialog] = useState(false);
   const [showCreateReminderModal, setShowCreateReminderModal] = useState(false);
   const [showCreateFinanceModal, setShowCreateFinanceModal] = useState(false);
+  
+  // Date display states for German format (DD.MM.YYYY)
+  const [reminderDateDisplay, setReminderDateDisplay] = useState(formatDateGerman(new Date()));
+  const [financeDateDisplay, setFinanceDateDisplay] = useState(formatDateGerman(new Date()));
 
   const { data: reminders = [] } = useReminders();
+  const { data: financeEntries = [] } = useFinanceEntries();
+  const { data: people = [] } = usePeople();
   
-  // Get user settings for location
+  // Get user settings for weather location
   const { settings } = useUserSettings();
-  const location = (settings as any)?.location || 'Zurich, CH';
+  const location = settings?.weatherLocation || 'Zurich, CH';
   
   // Get weather for selected date - ensure we use the correct date
-  // Normalize date to avoid timezone issues
-  const weatherDate = selectedDate ? new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate()) : null;
+  // Normalize date to avoid timezone issues and memoize to prevent unnecessary re-renders
+  const weatherDate = useMemo(() => {
+    if (!selectedDate) return null;
+    return new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+  }, [selectedDate?.getFullYear(), selectedDate?.getMonth(), selectedDate?.getDate()]);
+  
   const { data: weather, isLoading: weatherLoading, error: weatherError } = useWeather(weatherDate, location);
   
-  // Debug logging for weather (only in development)
-  useEffect(() => {
-    if (typeof (globalThis as any).process !== 'undefined' && (globalThis as any).process?.env?.NODE_ENV === 'development') {
-      console.log('[Calendar] Weather state:', {
-        selectedDate: selectedDate?.toISOString(),
-        weatherDate: weatherDate?.toISOString(),
-        location,
-        weatherData: weather,
-        isLoading: weatherLoading,
-        error: weatherError?.message
-      });
-    }
-  }, [selectedDate, weatherDate, location, weather, weatherLoading, weatherError]);
-
+  // Refetch events when data changes (real-time sync)
+  // Track previous counts to detect changes - use JSON.stringify to detect any changes, not just count
+  const prevDataRef = useRef<string>('');
+  
   const fetchEvents = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -81,7 +77,6 @@ export default function MobileCalendar() {
       // Check if functions is available
       if (!functions) {
         console.error('[Calendar] Firebase functions not available');
-        toast.error('Firebase nicht initialisiert');
         setEvents([]);
         return;
       }
@@ -89,89 +84,368 @@ export default function MobileCalendar() {
       // Check if user is authenticated
       if (!auth.currentUser) {
         console.warn('[Calendar] User not authenticated');
-        // Don't show error toast for unauthenticated users - they might be on login page
         setEvents([]);
         return;
       }
       
       const getEventsFunc = httpsCallable(functions, 'getCalendarEvents');
       
-      const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
-      const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 2, 0);
+      // Get events for a wider range (6 months before and 6 months after) to match web version
+      const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 6, 1);
+      const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 6, 0);
       
-      // Always log errors in production for debugging
       try {
+        console.log('[Calendar] Calling getCalendarEvents with:', {
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString()
+        });
+        
         const eventsResult = await getEventsFunc({ 
           startDate: startDate.toISOString(),
           endDate: endDate.toISOString()
         });
         
+        console.log('[Calendar] Raw eventsResult:', eventsResult);
+        console.log('[Calendar] eventsResult.data:', eventsResult.data);
+        
         const eventsData = eventsResult.data as { events: CalendarEvent[] };
         const loadedEvents = eventsData.events || [];
         
-        // Log only in development
-        const isDev = typeof (globalThis as any).process !== 'undefined' && (globalThis as any).process?.env?.NODE_ENV === 'development';
-        if (isDev) {
-          console.log('[Calendar] fetchEvents - Raw events:', {
-            total: loadedEvents.length,
-            events: loadedEvents.map(e => ({ title: e.title, date: e.date, type: e.type }))
-          });
-        }
+        console.log('[Calendar] loadedEvents count:', loadedEvents.length);
+        console.log('[Calendar] loadedEvents sample:', loadedEvents.slice(0, 3));
         
         // Normalize date format - use GLOBAL utility function (LOCAL timezone)
+        // IMPORTANT: Don't skip events if normalization fails - use original date as fallback
         const normalizedEvents = loadedEvents.map(event => {
-          const normalizedDate = normalizeEventDate(event.date);
-          if (!normalizedDate) {
-            console.warn('[Calendar] Event with invalid date skipped:', event);
+          try {
+            if (!event.date) {
+              console.warn('[Calendar] Event has no date:', event);
+              return null;
+            }
+            
+            const normalizedDate = normalizeEventDate(event.date);
+            if (!normalizedDate) {
+              // Fallback: try to use the original date string if it's already in YYYY-MM-DD format
+              if (typeof event.date === 'string' && event.date.match(/^\d{4}-\d{2}-\d{2}/)) {
+                console.warn('[Calendar] Normalization failed, using original date string:', event.date);
+                return {
+                  ...event,
+                  date: event.date.split('T')[0] // Extract just the date part
+                };
+              }
+              // Try to extract from ISO string
+              if (typeof event.date === 'string' && event.date.includes('T')) {
+                const datePart = event.date.split('T')[0];
+                if (datePart.match(/^\d{4}-\d{2}-\d{2}/)) {
+                  console.warn('[Calendar] Using fallback ISO date extraction:', datePart);
+                  return {
+                    ...event,
+                    date: datePart
+                  };
+                }
+              }
+              console.warn('[Calendar] Event with invalid date skipped:', event);
+              return null;
+            }
+            return {
+              ...event,
+              date: normalizedDate
+            };
+          } catch (dateErr) {
+            console.error('[Calendar] Error normalizing event date:', dateErr, event);
+            // Fallback: try to extract date from ISO string
+            if (typeof event.date === 'string') {
+              try {
+                const datePart = event.date.split('T')[0];
+                if (datePart.match(/^\d{4}-\d{2}-\d{2}/)) {
+                  console.warn('[Calendar] Using fallback date extraction:', datePart);
+                  return {
+                    ...event,
+                    date: datePart
+                  };
+                }
+              } catch (fallbackErr) {
+                console.error('[Calendar] Fallback also failed:', fallbackErr);
+              }
+            }
             return null;
           }
-          return {
-            ...event,
-            date: normalizedDate
-          };
         }).filter((e): e is CalendarEvent => e !== null);
         
-        if (isDev) {
-          console.log('[Calendar] fetchEvents - Normalized events:', {
-            total: normalizedEvents.length,
-            events: normalizedEvents.map(e => ({ title: e.title, date: e.date, type: e.type }))
+        console.log('[Calendar] normalizedEvents count:', normalizedEvents.length);
+        console.log('[Calendar] normalizedEvents sample (first 5):', normalizedEvents.slice(0, 5).map(e => ({
+          id: e.id,
+          title: e.title,
+          date: e.date,
+          type: e.type
+        })));
+        
+        // Log if events were lost during normalization
+        if (normalizedEvents.length < loadedEvents.length) {
+          console.warn(`[Calendar] WARNING: Lost ${loadedEvents.length - normalizedEvents.length} events during normalization!`);
+          const lostEvents = loadedEvents.filter(e => {
+            const normalized = normalizedEvents.find(ne => ne.id === e.id);
+            return !normalized;
           });
+          console.warn('[Calendar] Lost events:', lostEvents.map(e => ({ title: e.title, date: e.date })));
         }
         
-        setEvents(normalizedEvents);
+        // ALWAYS add reminders directly as events - don't rely on Cloud Function
+        // This ensures reminders are always visible, even if Cloud Function fails or doesn't return them
+        const allEvents = convertRemindersToEvents(reminders, normalizedEvents);
+        
+        console.log('[Calendar] Final events count:', {
+          normalizedEvents: normalizedEvents.length,
+          totalEvents: allEvents.length,
+          sampleEvents: allEvents.slice(0, 5).map(e => ({ id: e.id, title: e.title, date: e.date }))
+        });
+        
+        setEvents(allEvents);
       } catch (apiError: any) {
         // More detailed error logging
         console.error('[Calendar] API Error:', {
           message: apiError?.message,
           code: apiError?.code,
-          details: apiError?.details,
-          stack: apiError?.stack
+          details: apiError?.details
         });
         
-        // Check for specific error types
-        if (apiError?.code === 'unauthenticated' || apiError?.message?.includes('UNAUTHORIZED')) {
-          toast.error('Bitte anmelden');
-        } else if (apiError?.code === 'unavailable' || apiError?.message?.includes('network')) {
-          toast.error('Netzwerkfehler - Bitte erneut versuchen');
-        } else {
-          toast.error(`Fehler beim Laden der Events: ${apiError?.message || 'Unbekannter Fehler'}`);
+        // Only show error toast for user-initiated actions, not background sync
+        const isUserInitiated = prevDataRef.current === '';
+        if (isUserInitiated) {
+          if (apiError?.code === 'unauthenticated' || apiError?.message?.includes('UNAUTHORIZED')) {
+            toast.error('Bitte anmelden');
+          } else if (apiError?.code === 'unavailable' || apiError?.message?.includes('network')) {
+            toast.error('Netzwerkfehler - Bitte erneut versuchen');
+          }
         }
         
-        // Set empty events array on error to prevent UI issues
-        setEvents([]);
+        // Even on error, still convert reminders to events
+        // This ensures reminders are always visible
+        console.log('[Calendar] API Error occurred, but still converting reminders to events');
+        const reminderEventsOnError = convertRemindersToEvents(reminders, []);
+        setEvents(reminderEventsOnError);
       }
     } catch (error: any) {
-      // Catch any other unexpected errors
+      // Catch any other unexpected errors - don't crash the app
       console.error('[Calendar] Unexpected error:', error);
-      toast.error('Unerwarteter Fehler beim Laden der Events');
-      setEvents([]);
+      // Even on unexpected error, still convert reminders to events
+      const reminderEventsOnError = convertRemindersToEvents(reminders, []);
+      setEvents(reminderEventsOnError);
     } finally {
       setIsLoading(false);
     }
-  }, [currentDate]);
-
+  }, [currentDate, reminders]);
+  
+  // Helper function to convert reminders to events
+  const convertRemindersToEvents = useCallback((remindersList: any[], existingEvents: CalendarEvent[] = []): CalendarEvent[] => {
+    console.log('[Calendar] convertRemindersToEvents - START:', {
+      remindersCount: remindersList.length,
+      existingEventsCount: existingEvents.length
+    });
+    
+    const reminderEvents: CalendarEvent[] = remindersList
+      .filter(r => {
+        if (!r.dueDate) {
+          console.log('[Calendar] Reminder skipped - no dueDate:', r.title);
+          return false;
+        }
+        
+        // Convert dueDate to Date if it's a string
+        let dueDateObj: Date;
+        if (r.dueDate instanceof Date) {
+          dueDateObj = r.dueDate;
+        } else if (typeof r.dueDate === 'string') {
+          dueDateObj = new Date(r.dueDate);
+        } else {
+          console.log('[Calendar] Reminder skipped - invalid dueDate type:', r.title, typeof r.dueDate);
+          return false;
+        }
+        
+        if (isNaN(dueDateObj.getTime())) {
+          console.log('[Calendar] Reminder skipped - invalid date:', r.title, r.dueDate);
+          return false;
+        }
+        
+        // Check if this reminder is already in the existing events
+        const reminderDateStr = formatDateLocal(dueDateObj);
+        const alreadyExists = existingEvents.some(e => {
+          const eventDateStr = normalizeEventDate(e.date) || (typeof e.date === 'string' ? e.date.split('T')[0] : '');
+          return eventDateStr === reminderDateStr && e.title === r.title;
+        });
+        
+        if (alreadyExists) {
+          console.log('[Calendar] Reminder already in events, skipping:', r.title);
+        }
+        
+        return !alreadyExists;
+      })
+      .map(r => {
+        // Convert dueDate to Date if it's a string
+        let dueDateObj: Date;
+        if (r.dueDate instanceof Date) {
+          dueDateObj = r.dueDate;
+        } else if (typeof r.dueDate === 'string') {
+          dueDateObj = new Date(r.dueDate);
+        } else {
+          throw new Error(`Invalid dueDate for reminder ${r.id}`);
+        }
+        
+        let eventType: CalendarEvent['type'] = 'appointment';
+        if (r.type === 'termin') {
+          eventType = 'appointment';
+        } else if (r.type === 'zahlung') {
+          eventType = 'due';
+        } else if (r.type === 'aufgabe') {
+          eventType = 'reminder';
+        }
+        
+        const eventDateStr = formatDateLocal(dueDateObj);
+        const eventTime = r.isAllDay ? undefined : formatTime(dueDateObj);
+        
+        return {
+          id: `reminder-${r.id}`,
+          type: eventType,
+          title: r.title,
+          date: eventDateStr,
+          time: eventTime,
+          description: r.notes || undefined,
+          status: r.status
+        };
+      });
+    
+    console.log('[Calendar] convertRemindersToEvents - RESULT:', {
+      count: reminderEvents.length,
+      events: reminderEvents.map(e => ({ id: e.id, title: e.title, date: e.date }))
+    });
+    
+    // Combine existing events with reminder events, avoiding duplicates
+    const allEvents = [...existingEvents];
+    for (const reminderEvent of reminderEvents) {
+      if (!allEvents.some(e => e.id === reminderEvent.id)) {
+        allEvents.push(reminderEvent);
+      }
+    }
+    
+    return allEvents;
+  }, []);
+  
   useEffect(() => {
-    fetchEvents();
+    const currentData = JSON.stringify({
+      reminders: reminders.map(r => r.id).sort(),
+      financeEntries: financeEntries.map(e => e.id).sort(),
+      people: people.map(p => p.id).sort()
+    });
+    
+    if (prevDataRef.current !== currentData && prevDataRef.current !== '') {
+      // Data has changed (not just initial load)
+      prevDataRef.current = currentData;
+      // Debounce the refetch to avoid too many calls
+      const timeoutId = setTimeout(() => {
+        if (auth.currentUser) {
+          fetchEvents().catch((err: any) => {
+            console.error('[Calendar] Error refetching events:', err);
+            // Don't show error toast for background sync failures
+          });
+        }
+      }, 1000); // Increased debounce to 1 second
+      return () => clearTimeout(timeoutId);
+    } else if (prevDataRef.current === '') {
+      // Initial load - just store the data
+      prevDataRef.current = currentData;
+    }
+  }, [reminders, financeEntries, people, fetchEvents]);
+  
+  // Convert reminders to events immediately when reminders change
+  // This ensures events are always available, even if Cloud Function fails
+  useEffect(() => {
+    console.log('[Calendar] useEffect - Reminders changed:', {
+      remindersCount: reminders.length,
+      reminders: reminders.map(r => ({ id: r.id, title: r.title, dueDate: r.dueDate }))
+    });
+    
+    // Always convert reminders to events immediately
+    const reminderEvents = convertRemindersToEvents(reminders, []);
+    console.log('[Calendar] Converted reminders to events immediately:', {
+      count: reminderEvents.length,
+      events: reminderEvents.map(e => ({ id: e.id, title: e.title, date: e.date }))
+    });
+    
+    // Update events immediately with reminders
+    setEvents(prevEvents => {
+      // Merge with existing events, avoiding duplicates
+      const merged = [...prevEvents];
+      for (const reminderEvent of reminderEvents) {
+        if (!merged.some(e => e.id === reminderEvent.id)) {
+          merged.push(reminderEvent);
+        }
+      }
+      console.log('[Calendar] Updated events state:', {
+        prevCount: prevEvents.length,
+        newCount: merged.length,
+        added: reminderEvents.length
+      });
+      return merged;
+    });
+  }, [reminders, convertRemindersToEvents]);
+  
+  // Debug logging for weather (always log, not just in development)
+  useEffect(() => {
+    console.log('[Calendar] Weather state:', {
+      selectedDate: selectedDate?.toISOString(),
+      weatherDate: weatherDate?.toISOString(),
+      location,
+      weatherData: weather,
+      isLoading: weatherLoading,
+      error: weatherError?.message
+    });
+  }, [selectedDate, weatherDate, location, weather, weatherLoading, weatherError]);
+
+
+  // Convert reminders to events immediately when reminders change
+  useEffect(() => {
+    console.log('[Calendar] Reminders changed, converting to events:', {
+      remindersCount: reminders.length,
+      reminders: reminders.map(r => ({ id: r.id, title: r.title, dueDate: r.dueDate }))
+    });
+    
+    // Always convert reminders to events, even if Cloud Function hasn't loaded yet
+    const reminderEvents = convertRemindersToEvents(reminders, []);
+    console.log('[Calendar] Converted reminders to events immediately:', {
+      count: reminderEvents.length,
+      events: reminderEvents.map(e => ({ id: e.id, title: e.title, date: e.date }))
+    });
+    
+    // Update events immediately with reminders
+    setEvents(prevEvents => {
+      // Merge with existing events, avoiding duplicates
+      const merged = [...prevEvents];
+      for (const reminderEvent of reminderEvents) {
+        if (!merged.some(e => e.id === reminderEvent.id)) {
+          merged.push(reminderEvent);
+        }
+      }
+      return merged;
+    });
+  }, [reminders, convertRemindersToEvents]);
+  
+  useEffect(() => {
+    // Only fetch events if user is authenticated
+    console.log('[Calendar] useEffect for fetchEvents - auth check:', {
+      isAuthenticated: !!auth.currentUser,
+      userId: auth.currentUser?.uid
+    });
+    
+    if (auth.currentUser) {
+      console.log('[Calendar] User authenticated, calling fetchEvents');
+      fetchEvents().catch(err => {
+        console.error('[Calendar] Error in fetchEvents:', err);
+      });
+    } else {
+      // Clear events if user is not authenticated
+      console.log('[Calendar] User not authenticated, clearing events');
+      setEvents([]);
+      setIsLoading(false);
+    }
   }, [fetchEvents]);
 
   const monthNames = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 
@@ -192,18 +466,71 @@ export default function MobileCalendar() {
     const firstDay = getFirstDayOfMonth(currentDate);
     const days: { date: Date; isCurrentMonth: boolean; events: CalendarEvent[] }[] = [];
 
+    console.log('[Calendar] calendarDays useMemo - START:', {
+      currentDate: currentDate.toISOString(),
+      eventsCount: events.length,
+      events: events.map(e => ({ id: e.id, title: e.title, date: e.date }))
+    });
+
     // Use GLOBAL utility functions for date normalization (LOCAL timezone)
+    // Helper function to match events to dates with robust fallback
+    const getEventsForDate = (date: Date): CalendarEvent[] => {
+      const dateStr = formatDateLocal(date);
+      const matchedEvents = events.filter(e => {
+        if (!e.date) {
+          console.log('[Calendar] Event skipped - no date:', e.title);
+          return false;
+        }
+        
+        // Try to normalize the event date
+        let eventDateStr = normalizeEventDate(e.date);
+        
+        // Fallback: if normalization fails, try to extract date from ISO string
+        if (!eventDateStr && typeof e.date === 'string') {
+          const datePart = e.date.split('T')[0];
+          if (datePart.match(/^\d{4}-\d{2}-\d{2}/)) {
+            eventDateStr = datePart;
+            console.log('[Calendar] Using fallback date extraction for event:', e.title, eventDateStr);
+          }
+        }
+        
+        // If still no valid date string, skip this event
+        if (!eventDateStr) {
+          console.log('[Calendar] Event skipped - invalid date:', e.title, e.date);
+          return false;
+        }
+        
+        const matches = eventDateStr === dateStr;
+        if (matches) {
+          console.log('[Calendar] Event matched for date:', {
+            eventTitle: e.title,
+            eventDate: e.date,
+            eventDateStr,
+            targetDateStr: dateStr,
+            date: date.toISOString()
+          });
+        }
+        
+        return matches;
+      });
+      
+      if (matchedEvents.length > 0) {
+        console.log('[Calendar] Found events for date:', {
+          date: dateStr,
+          count: matchedEvents.length,
+          events: matchedEvents.map(e => e.title)
+        });
+      }
+      
+      return matchedEvents;
+    };
 
     // Previous month days
     const prevMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 0);
     const daysInPrevMonth = prevMonth.getDate();
     for (let i = firstDay - 1; i >= 0; i--) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, daysInPrevMonth - i);
-      const dateStr = formatDateLocal(date);
-      const dayEvents = events.filter(e => {
-        const eventDateStr = normalizeEventDate(e.date);
-        return eventDateStr === dateStr;
-      });
+      const dayEvents = getEventsForDate(date);
       days.push({
         date,
         isCurrentMonth: false,
@@ -214,11 +541,7 @@ export default function MobileCalendar() {
     // Current month days
     for (let i = 1; i <= daysInMonth; i++) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), i);
-      const dateStr = formatDateLocal(date);
-      const dayEvents = events.filter(e => {
-        const eventDateStr = normalizeEventDate(e.date);
-        return eventDateStr === dateStr;
-      });
+      const dayEvents = getEventsForDate(date);
       days.push({
         date,
         isCurrentMonth: true,
@@ -230,11 +553,7 @@ export default function MobileCalendar() {
     const remainingDays = 42 - days.length;
     for (let i = 1; i <= remainingDays; i++) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, i);
-      const dateStr = formatDateLocal(date);
-      const dayEvents = events.filter(e => {
-        const eventDateStr = normalizeEventDate(e.date);
-        return eventDateStr === dateStr;
-      });
+      const dayEvents = getEventsForDate(date);
       days.push({
         date,
         isCurrentMonth: false,
@@ -275,74 +594,147 @@ export default function MobileCalendar() {
   };
 
   const dayEvents = useMemo(() => {
-    if (!selectedDate) return [];
+    if (!selectedDate) {
+      console.log('[Calendar] dayEvents - no selectedDate');
+      return [];
+    }
     
     // Normalize selectedDate to midnight in local timezone
     const normalizedSelectedDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
     // Format as YYYY-MM-DD using GLOBAL utility (LOCAL timezone)
     const dateStr = formatDateLocal(normalizedSelectedDate);
     
-    // Log only in development
-    const isDev = typeof (globalThis as any).process !== 'undefined' && (globalThis as any).process?.env?.NODE_ENV === 'development';
-    if (isDev) {
-      console.log('[Calendar] dayEvents filter - START:', {
-        selectedDate: selectedDate.toISOString(),
-        normalizedSelectedDate: normalizedSelectedDate.toISOString(),
-        dateStr,
-        totalEvents: events.length,
-        events: events.map(e => ({ title: e.title, date: e.date, type: e.type }))
-      });
-    }
+    console.log('[Calendar] dayEvents filter - START:', {
+      selectedDate: selectedDate.toISOString(),
+      normalizedSelectedDate: normalizedSelectedDate.toISOString(),
+      dateStr,
+      totalEvents: events.length,
+      totalReminders: reminders.length,
+      events: events.map(e => ({ title: e.title, date: e.date, type: e.type }))
+    });
     
     // Handle both ISO date strings and full ISO datetime strings
     const filtered = events.filter(e => {
       if (!e.date) {
-        if (isDev) {
-          console.log('[Calendar] Event skipped - no date:', e.title);
-        }
+        console.log('[Calendar] Event skipped - no date:', e.title);
         return false;
       }
       
       // Normalize event date using GLOBAL utility (LOCAL timezone)
-      const eventDateStr = normalizeEventDate(e.date);
-      if (!eventDateStr) {
-        if (isDev) {
-          console.log('[Calendar] Event skipped - invalid date:', e.title, e.date);
+      let eventDateStr = normalizeEventDate(e.date);
+      
+      // Fallback: if normalization fails, try to extract date from ISO string
+      if (!eventDateStr && typeof e.date === 'string') {
+        const datePart = e.date.split('T')[0];
+        if (datePart.match(/^\d{4}-\d{2}-\d{2}/)) {
+          eventDateStr = datePart;
+          console.log('[Calendar] Using fallback date extraction for filter:', eventDateStr);
         }
+      }
+      
+      if (!eventDateStr) {
+        console.log('[Calendar] Event skipped - invalid date:', e.title, e.date);
         return false;
       }
       
       const matches = eventDateStr === dateStr;
       
-      if (isDev) {
-        console.log('[Calendar] Event filter check:', {
+      if (matches) {
+        console.log('[Calendar] Event matched:', {
           eventTitle: e.title,
           eventDate: e.date,
           eventDateStr,
-          selectedDateStr: dateStr,
-          matches
+          selectedDateStr: dateStr
         });
       }
       
       return matches;
     });
     
-    if (isDev) {
-      console.log('[Calendar] dayEvents filter - RESULT:', {
-        selectedDate: normalizedSelectedDate.toISOString(),
-        dateStr,
-        totalEvents: events.length,
-        filteredCount: filtered.length,
-        filteredEvents: filtered.map(e => ({ 
-          title: e.title, 
-          date: e.date,
-          type: e.type 
-        }))
-      });
+    // ALWAYS check reminders directly as well, even if we found events
+    // This ensures reminders are always shown, even if they weren't converted to events properly
+    const remindersForDate = reminders.filter(r => {
+      if (!r.dueDate) return false;
+      
+      // Convert dueDate to Date if it's a string
+      let dueDateObj: Date;
+      if (r.dueDate instanceof Date) {
+        dueDateObj = r.dueDate;
+      } else if (typeof r.dueDate === 'string') {
+        dueDateObj = new Date(r.dueDate);
+      } else {
+        return false;
+      }
+      
+      if (isNaN(dueDateObj.getTime())) return false;
+      
+      const reminderDateStr = formatDateLocal(dueDateObj);
+      return reminderDateStr === dateStr;
+    });
+    
+    console.log('[Calendar] Reminders for date:', {
+      dateStr,
+      remindersForDate: remindersForDate.length,
+      reminders: remindersForDate.map(r => ({ id: r.id, title: r.title, dueDate: r.dueDate }))
+    });
+    
+    // Convert reminders to events and merge with filtered events
+    const reminderEvents: CalendarEvent[] = remindersForDate.map(r => {
+      // Map reminder types to calendar event types
+      let eventType: CalendarEvent['type'] = 'appointment';
+      if (r.type === 'termin') {
+        eventType = 'appointment';
+      } else if (r.type === 'zahlung') {
+        eventType = 'due';
+      } else if (r.type === 'aufgabe') {
+        eventType = 'reminder';
+      }
+      
+      // Convert dueDate to Date if it's a string
+      let dueDateObj: Date;
+      if (r.dueDate instanceof Date) {
+        dueDateObj = r.dueDate;
+      } else if (typeof r.dueDate === 'string') {
+        dueDateObj = new Date(r.dueDate);
+      } else {
+        throw new Error(`Invalid dueDate for reminder ${r.id}`);
+      }
+      
+      return {
+        id: `reminder-${r.id}`,
+        type: eventType,
+        title: r.title,
+        date: formatDateLocal(dueDateObj),
+        time: r.isAllDay ? undefined : formatTime(dueDateObj),
+        description: r.notes || undefined,
+        status: r.status
+      };
+    });
+    
+    // Merge filtered events with reminder events, avoiding duplicates
+    const allDayEvents = [...filtered];
+    for (const reminderEvent of reminderEvents) {
+      if (!allDayEvents.some(e => e.id === reminderEvent.id)) {
+        allDayEvents.push(reminderEvent);
+      }
     }
     
-    return filtered;
-  }, [selectedDate, events]);
+    console.log('[Calendar] dayEvents filter - RESULT:', {
+      selectedDate: normalizedSelectedDate.toISOString(),
+      dateStr,
+      filteredFromEvents: filtered.length,
+      fromReminders: reminderEvents.length,
+      totalDayEvents: allDayEvents.length,
+      allDayEvents: allDayEvents.map(e => ({ 
+        id: e.id,
+        title: e.title, 
+        date: e.date,
+        type: e.type 
+      }))
+    });
+    
+    return allDayEvents;
+  }, [selectedDate, events, reminders]);
 
   // Get today's events for the bottom section
   const todayEvents = useMemo(() => {
@@ -531,6 +923,9 @@ export default function MobileCalendar() {
                   year: 'numeric'
                 })}
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                Details für den ausgewählten Tag mit Wetter, Terminen und Schnellaktionen
+              </DialogDescription>
               <Button
                 variant="ghost"
                 size="icon"
@@ -557,6 +952,14 @@ export default function MobileCalendar() {
                   <div className="text-xs text-muted-foreground">Lädt Wetterdaten...</div>
                   {weatherError && (
                     <div className="text-xs text-red-500 mt-2">Fehler: {weatherError.message}</div>
+                  )}
+                </div>
+              ) : weatherError ? (
+                <div className="text-xs text-muted-foreground text-center py-2">
+                  <p className="text-red-500 mb-1">Fehler beim Laden</p>
+                  <p className="opacity-70">{weatherError.message}</p>
+                  {!location && (
+                    <p className="text-xs mt-2 opacity-50">Bitte Standort in Einstellungen eingeben</p>
                   )}
                 </div>
               ) : weather ? (
@@ -593,7 +996,14 @@ export default function MobileCalendar() {
                 </div>
               ) : (
                 <div className="text-xs text-muted-foreground text-center py-2">
-                  Keine Wetterdaten verfügbar
+                  {!location ? (
+                    <>
+                      <p>Kein Standort konfiguriert</p>
+                      <p className="text-xs mt-1 opacity-70">Bitte in Einstellungen einen Standort eingeben</p>
+                    </>
+                  ) : (
+                    'Keine Wetterdaten verfügbar'
+                  )}
                 </div>
               )}
             </div>
@@ -605,8 +1015,13 @@ export default function MobileCalendar() {
                 <div className="text-sm text-muted-foreground text-center py-3 bg-muted/30 rounded-lg">
                   <p>Keine Events an diesem Tag</p>
                   <p className="text-xs mt-2 opacity-70">
-                    Debug: {events.length} Events geladen, {selectedDate ? `Datum: ${formatDateLocal(selectedDate)}` : 'Kein Datum ausgewählt'}
-                  </p>
+                      Debug: {events.length} Events geladen, {selectedDate ? `Datum: ${formatDateLocal(selectedDate)}` : 'Kein Datum ausgewählt'}
+                      {events.length > 0 && (
+                        <span className="block mt-1">
+                          Event-Daten: {JSON.stringify(events.slice(0, 2).map(e => ({ title: e.title, date: e.date })))}
+                        </span>
+                      )}
+                    </p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -709,6 +1124,9 @@ export default function MobileCalendar() {
                 <DialogTitle className="text-lg font-semibold leading-tight">
                   {selectedEvent?.title}
                 </DialogTitle>
+                <DialogDescription className="sr-only">
+                  Detaillierte Informationen zum ausgewählten Event
+                </DialogDescription>
               </div>
             </div>
           </DialogHeader>
@@ -814,7 +1232,14 @@ export default function MobileCalendar() {
       </Dialog>
 
       {/* Create Reminder Modal */}
-      <Dialog open={showCreateReminderModal} onOpenChange={setShowCreateReminderModal}>
+      <Dialog open={showCreateReminderModal} onOpenChange={(open) => {
+        setShowCreateReminderModal(open);
+        if (open) {
+          // Update date when dialog opens
+          const dateToUse = selectedDate || new Date();
+          setReminderDateDisplay(formatDateGerman(dateToUse));
+        }
+      }}>
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-4 pb-2">
             <DialogTitle className="text-lg font-semibold">Termin erstellen</DialogTitle>
@@ -834,9 +1259,24 @@ export default function MobileCalendar() {
             <div>
               <label className="text-sm font-medium mb-1 block">Datum</label>
               <input
-                type="date"
+                type="text"
                 id="reminder-date"
-                defaultValue={selectedDate ? formatDateLocal(selectedDate) : ''}
+                placeholder="DD.MM.YYYY"
+                value={reminderDateDisplay}
+                onChange={(e) => {
+                  const inputValue = e.target.value;
+                  setReminderDateDisplay(inputValue);
+                }}
+                onBlur={(e) => {
+                  // Validate and format on blur
+                  const parsed = parseDateGerman(e.target.value);
+                  if (parsed) {
+                    setReminderDateDisplay(formatDateGerman(parsed));
+                  } else if (e.target.value && selectedDate) {
+                    // If invalid, use selectedDate
+                    setReminderDateDisplay(formatDateGerman(selectedDate));
+                  }
+                }}
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm"
               />
             </div>
@@ -881,7 +1321,14 @@ export default function MobileCalendar() {
                     return;
                   }
                   
-                  const dueDate = new Date(dateInput.value);
+                  // Parse German date format (DD.MM.YYYY)
+                  const parsedDate = parseDateGerman(dateInput.value);
+                  if (!parsedDate) {
+                    toast.error('Bitte gib ein gültiges Datum ein (DD.MM.YYYY)');
+                    return;
+                  }
+                  
+                  const dueDate = new Date(parsedDate);
                   if (timeInput.value) {
                     const [hours, minutes] = timeInput.value.split(':');
                     dueDate.setHours(parseInt(hours), parseInt(minutes));
@@ -919,10 +1366,20 @@ export default function MobileCalendar() {
       </Dialog>
 
       {/* Create Finance Entry Modal */}
-      <Dialog open={showCreateFinanceModal} onOpenChange={setShowCreateFinanceModal}>
+      <Dialog open={showCreateFinanceModal} onOpenChange={(open) => {
+        setShowCreateFinanceModal(open);
+        if (open) {
+          // Update date when dialog opens
+          const dateToUse = selectedDate || new Date();
+          setFinanceDateDisplay(formatDateGerman(dateToUse));
+        }
+      }}>
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-4 pb-2">
             <DialogTitle className="text-lg font-semibold">Finanz-Eintrag erstellen</DialogTitle>
+            <DialogDescription className="sr-only">
+              Erstellen Sie einen neuen Finanz-Eintrag mit Beschreibung, Betrag, Typ und Datum
+            </DialogDescription>
           </DialogHeader>
           
           <div className="px-5 pb-2 space-y-3">
@@ -959,9 +1416,24 @@ export default function MobileCalendar() {
             <div>
               <label className="text-sm font-medium mb-1 block">Datum</label>
               <input
-                type="date"
+                type="text"
                 id="finance-date"
-                defaultValue={selectedDate ? formatDateLocal(selectedDate) : ''}
+                placeholder="DD.MM.YYYY"
+                value={financeDateDisplay}
+                onChange={(e) => {
+                  const inputValue = e.target.value;
+                  setFinanceDateDisplay(inputValue);
+                }}
+                onBlur={(e) => {
+                  // Validate and format on blur
+                  const parsed = parseDateGerman(e.target.value);
+                  if (parsed) {
+                    setFinanceDateDisplay(formatDateGerman(parsed));
+                  } else if (e.target.value && selectedDate) {
+                    // If invalid, use selectedDate
+                    setFinanceDateDisplay(formatDateGerman(selectedDate));
+                  }
+                }}
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm"
               />
             </div>
@@ -989,6 +1461,13 @@ export default function MobileCalendar() {
                     return;
                   }
                   
+                  // Parse German date format (DD.MM.YYYY)
+                  const parsedDate = parseDateGerman(dateInput.value);
+                  if (!parsedDate) {
+                    toast.error('Bitte gib ein gültiges Datum ein (DD.MM.YYYY)');
+                    return;
+                  }
+                  
                   if (!amountInput.value || parseFloat(amountInput.value) <= 0) {
                     toast.error('Bitte gib einen gültigen Betrag ein');
                     return;
@@ -998,7 +1477,7 @@ export default function MobileCalendar() {
                     notes: descriptionInput.value.trim(),
                     amount: Math.round(parseFloat(amountInput.value) * 100), // Convert to Rappen
                     type: typeInput.value as 'einnahme' | 'ausgabe',
-                    date: new Date(dateInput.value),
+                    date: new Date(parsedDate),
                     category: 'Sonstiges',
                     currency: 'CHF',
                     isRecurring: false,

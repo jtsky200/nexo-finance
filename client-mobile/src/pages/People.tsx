@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { 
@@ -216,7 +216,7 @@ export default function MobilePeople() {
       await deletePerson(deletePersonId);
       toast.success('Person gelöscht');
       setDeletePersonId(null);
-      await refetch();
+      // No need to call refetch() - real-time listener (onSnapshot) will automatically update the UI
     } catch (error: any) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Error deleting person:', error);
@@ -423,6 +423,9 @@ export default function MobilePeople() {
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-lg font-semibold">Person hinzufügen</DialogTitle>
+            <DialogDescription className="sr-only">
+              Erstellen Sie eine neue Person mit Name, E-Mail, Telefonnummer und optionalen Notizen
+            </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-3 px-5 pb-2">
@@ -546,6 +549,9 @@ export default function MobilePeople() {
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-lg font-semibold">Person bearbeiten</DialogTitle>
+            <DialogDescription className="sr-only">
+              Bearbeiten Sie die Informationen der ausgewählten Person
+            </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-3 px-5 pb-2">
@@ -670,6 +676,9 @@ export default function MobilePeople() {
           <DialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle>Person löschen?</DialogTitle>
+              <DialogDescription className="sr-only">
+                Bestätigen Sie das Löschen dieser Person. Diese Aktion kann nicht rückgängig gemacht werden.
+              </DialogDescription>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
               Möchten Sie diese Person wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
@@ -701,6 +710,9 @@ export default function MobilePeople() {
           <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
             <DialogHeader className="px-5 pt-5 pb-3">
               <DialogTitle className="text-lg font-semibold">Rechnungen - {selectedPerson.name}</DialogTitle>
+              <DialogDescription className="sr-only">
+                Verwalten Sie Rechnungen für diese Person
+              </DialogDescription>
             </DialogHeader>
             <div className="px-5 pb-2">
               <p className="text-sm text-muted-foreground">

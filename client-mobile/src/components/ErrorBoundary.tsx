@@ -3,6 +3,7 @@ import { AlertCircle, RefreshCw, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useLocation } from 'wouter';
+import { logError } from '@/lib/errorLogger';
 
 interface Props {
   children: ReactNode;
@@ -46,22 +47,17 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Log error to console in development
-    if (process.env.NODE_ENV === 'development') {
-      console.error('ErrorBoundary caught an error:', error, errorInfo);
-    }
+    // Log error with context using centralized error logger
+    logError(error, {
+      componentStack: errorInfo.componentStack,
+      errorBoundary: true,
+    });
 
     // Update state with error details
     this.setState({
       error,
       errorInfo,
     });
-
-    // TODO: Log error to error reporting service (e.g., Sentry, Firebase Crashlytics)
-    // Example:
-    // if (window.Sentry) {
-    //   window.Sentry.captureException(error, { contexts: { react: { componentStack: errorInfo.componentStack } } });
-    // }
   }
 
   handleReset = () => {

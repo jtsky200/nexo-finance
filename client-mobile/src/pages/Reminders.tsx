@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { 
@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { useReminders, createReminder, updateReminder, deleteReminder, Reminder } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
-import { parseLocalDateTime, formatDateForDisplay, dateToDateTimeLocal } from '@/lib/dateTimeUtils';
+import { parseLocalDateTime, formatDateForDisplay, dateToDateTimeLocal, formatDateTimeGerman, parseDateTimeGerman } from '@/lib/dateTimeUtils';
 import { formatErrorForDisplay } from '@/lib/errorHandler';
 import { hapticSuccess, hapticError, hapticSelection } from '@/lib/hapticFeedback';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -37,13 +37,16 @@ export default function MobileReminders() {
   const [formData, setFormData] = useState({
     title: '',
     type: 'termin' as 'termin' | 'zahlung' | 'aufgabe',
-    dueDate: '',
+    dueDate: dateToDateTimeLocal(new Date()), // Internal format: YYYY-MM-DDTHH:mm
     isAllDay: false,
     amount: '',
     currency: 'CHF',
     notes: '',
     recurrenceRule: '',
   });
+  
+  // Display date in German format (DD.MM.YYYY HH:mm)
+  const [dueDateDisplay, setDueDateDisplay] = useState(formatDateTimeGerman(new Date()));
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const formatDate = (date: Date | any) => formatDateForDisplay(date);
@@ -158,16 +161,18 @@ export default function MobileReminders() {
   const closeDialog = () => {
     setDialogOpen(false);
     setEditingReminder(null);
+    const now = dateToDateTimeLocal(new Date());
     setFormData({
       title: '',
       type: 'termin',
-      dueDate: new Date().toISOString().slice(0, 16),
+      dueDate: now,
       isAllDay: false,
       amount: '',
       currency: 'CHF',
       notes: '',
       recurrenceRule: '',
     });
+    setDueDateDisplay(formatDateTimeGerman(now));
   };
 
   const handleSubmit = async () => {
@@ -491,6 +496,9 @@ export default function MobileReminders() {
             <DialogTitle className="text-lg font-semibold">
               {editingReminder ? 'Erinnerung bearbeiten' : 'Erinnerung hinzufügen'}
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              {editingReminder ? 'Bearbeiten Sie die Details der Erinnerung' : 'Erstellen Sie eine neue Erinnerung mit Titel, Typ, Datum und optionalen Notizen'}
+            </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-3 px-5 pb-2">
@@ -526,9 +534,30 @@ export default function MobileReminders() {
             <div>
               <Label>Datum & Uhrzeit *</Label>
               <Input
-                type="datetime-local"
-                value={formData.dueDate}
-                onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                type="text"
+                placeholder="DD.MM.YYYY HH:mm"
+                value={dueDateDisplay}
+                onChange={(e) => {
+                  const inputValue = e.target.value;
+                  setDueDateDisplay(inputValue);
+                  
+                  // Try to parse the German date-time format
+                  const parsed = parseDateTimeGerman(inputValue);
+                  if (parsed) {
+                    setFormData({ ...formData, dueDate: parsed });
+                  }
+                }}
+                onBlur={(e) => {
+                  // Validate and format on blur
+                  const parsed = parseDateTimeGerman(e.target.value);
+                  if (parsed) {
+                    setFormData({ ...formData, dueDate: parsed });
+                    setDueDateDisplay(formatDateTimeGerman(parsed));
+                  } else if (e.target.value) {
+                    // If invalid, try to keep current valid date
+                    setDueDateDisplay(formatDateTimeGerman(formData.dueDate));
+                  }
+                }}
                 className="h-10 min-h-[44px] mt-1"
               />
             </div>
@@ -615,6 +644,9 @@ export default function MobileReminders() {
           >
             <DialogHeader className="text-center">
               <DialogTitle className="text-lg font-semibold">Erinnerung löschen?</DialogTitle>
+              <DialogDescription className="sr-only">
+                Bestätigen Sie das Löschen dieser Erinnerung. Diese Aktion kann nicht rückgängig gemacht werden.
+              </DialogDescription>
             </DialogHeader>
             <p className="text-sm text-muted-foreground text-center leading-relaxed">
               Möchten Sie diese Erinnerung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.

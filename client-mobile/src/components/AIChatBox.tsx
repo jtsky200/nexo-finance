@@ -239,13 +239,17 @@ export function AIChatBox({
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const plusMenuRef = useRef<HTMLDivElement>(null);
+  const plusButtonRef = useRef<HTMLButtonElement>(null);
+  const plusMenuDropdownRef = useRef<HTMLDivElement>(null);
 
-  const handleNavigate = useCallback((route: string) => {
-    localStorage.setItem('nexo_chat_messages', JSON.stringify(messages));
-    localStorage.setItem('nexo_chat_open_popup', 'true');
-    localStorage.setItem('nexo_chat_from_route', route);
+  const handleNavigate = useCallback(async (route: string) => {
     setLocation(route);
-  }, [messages, setLocation]);
+    // Öffne den Chat-Dialog nach Navigation via Event Bus
+    const { eventBus, Events } = await import('@/lib/eventBus');
+    setTimeout(() => {
+      eventBus.emit(Events.CHAT_DIALOG_OPEN);
+    }, 300); // Kurze Verzögerung für sanfte Animation
+  }, [setLocation]);
 
   const displayMessages = useMemo(() => 
     messages.filter((msg) => msg.role !== "system"), 
@@ -282,17 +286,41 @@ export function AIChatBox({
     }
   }, [displayMessages.length, scrollToBottom]);
 
+  // Calculate menu position based on button position
+  const [menuPosition, setMenuPosition] = useState({ bottom: 0, left: 0 });
+  
+  useEffect(() => {
+    if (plusMenuOpen && plusButtonRef.current) {
+      const rect = plusButtonRef.current.getBoundingClientRect();
+      setMenuPosition({
+        bottom: window.innerHeight - rect.top + 8, // 8px margin above button
+        left: rect.left
+      });
+    }
+  }, [plusMenuOpen]);
+
   // Close plus menu when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (plusMenuRef.current && !plusMenuRef.current.contains(event.target as Node)) {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node;
+      const isClickOnMenu = plusMenuDropdownRef.current?.contains(target);
+      const isClickOnButton = plusButtonRef.current?.contains(target);
+      const isClickOnMenuRef = plusMenuRef.current?.contains(target);
+      
+      // Close menu if click is outside menu, button, and menu ref container
+      if (!isClickOnMenu && !isClickOnButton && !isClickOnMenuRef) {
         setPlusMenuOpen(false);
       }
     };
 
     if (plusMenuOpen) {
+      // Listen to both mouse and touch events for better mobile support
       document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('touchstart', handleClickOutside);
+      };
     }
   }, [plusMenuOpen]);
 
@@ -674,50 +702,12 @@ export function AIChatBox({
       <div className="w-full max-w-full mx-auto">
         {/* ChatGPT-style Input Bar */}
         <div className="flex items-center gap-2 px-2" style={{ alignItems: 'center' }}>
-          {/* Plus Menu Dropdown - positioned relative to input */}
-          <div className="relative" ref={plusMenuRef}>
-            {/* Plus Menu Dropdown */}
-            {plusMenuOpen && (
-              <div className="absolute bottom-full left-2 mb-2 bg-background border border-border rounded-lg shadow-lg z-50 min-w-[200px] overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => {
-                    fileInputRef.current?.click();
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors text-left"
-                >
-                  <Paperclip className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-sm">Datei anhängen</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    imageInputRef.current?.click();
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors text-left"
-                >
-                  <Image className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-sm">Bild hinzufügen</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleLanguageToggle();
-                    setPlusMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors text-left"
-                >
-                  <Globe className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-sm">Sprache wechseln</span>
-                </button>
-              </div>
-            )}
-          </div>
 
           {/* Position 6: Input Field - ChatGPT Style with Plus Button inside */}
           <div className="flex-1 relative">
             {/* Plus Button inside input (left side) */}
             <button
+              ref={plusButtonRef}
               type="button"
               onClick={() => setPlusMenuOpen(!plusMenuOpen)}
               className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-transparent hover:bg-muted/50 transition-colors flex items-center justify-center active:scale-95 z-10"
@@ -785,14 +775,49 @@ export function AIChatBox({
   );
 
   return (
-    <div
-      ref={containerRef}
-      className={cn(
-        "flex flex-col bg-background text-foreground",
-        className
+    <>
+      {/* Plus Menu Dropdown - rendered outside form to avoid stacking context issues */}
+      {plusMenuOpen && (
+        <div 
+          ref={plusMenuDropdownRef}
+          className="fixed bg-background border border-border rounded-lg shadow-2xl z-[99999] min-w-[200px] overflow-hidden" 
+          style={{
+            bottom: `${menuPosition.bottom}px`,
+            left: `${menuPosition.left}px`
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              fileInputRef.current?.click();
+              setPlusMenuOpen(false);
+            }}
+            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors text-left"
+          >
+            <Paperclip className="w-5 h-5 text-muted-foreground" />
+            <span className="text-sm">Datei anhängen</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              imageInputRef.current?.click();
+              setPlusMenuOpen(false);
+            }}
+            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted transition-colors text-left"
+          >
+            <Image className="w-5 h-5 text-muted-foreground" />
+            <span className="text-sm">Bild hinzufügen</span>
+          </button>
+        </div>
       )}
-      style={{ height }}
-    >
+      <div
+        ref={containerRef}
+        className={cn(
+          "flex flex-col bg-background text-foreground",
+          className
+        )}
+        style={{ height }}
+      >
       {displayMessages.length === 0 ? (
         <div className="flex flex-col h-full animate-in fade-in duration-300 pb-20">
           {/* Main Content Area - Empty */}
@@ -804,7 +829,7 @@ export function AIChatBox({
 
           {/* Suggested Prompts - Fixed above Input (like ChatGPT) */}
           {normalizedPrompts.length > 0 && (
-            <div className="fixed bottom-24 left-0 right-0 px-4 pb-2 z-20 pointer-events-none">
+            <div className="fixed bottom-24 left-0 right-0 px-4 pb-2 z-[1] pointer-events-none">
               <div className="w-full max-w-2xl mx-auto">
                 <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 pointer-events-auto">
                   <div className="flex gap-3" style={{ width: 'max-content' }}>
@@ -905,7 +930,7 @@ export function AIChatBox({
 
           {/* Suggested Prompts - Fixed above Input when messages exist (like ChatGPT) */}
           {normalizedPrompts.length > 0 && (
-            <div className="fixed bottom-24 left-0 right-0 px-4 pb-2 z-20 pointer-events-none">
+            <div className="fixed bottom-24 left-0 right-0 px-4 pb-2 z-[1] pointer-events-none">
               <div className="w-full max-w-2xl mx-auto">
                 <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 pointer-events-auto">
                   <div className="flex gap-3" style={{ width: 'max-content' }}>
@@ -944,7 +969,8 @@ export function AIChatBox({
           </div>
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 }
 

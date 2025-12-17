@@ -1015,8 +1015,11 @@ exports.updateInvoiceStatus = (0, https_1.onCall)(async (request) => {
         throw new https_1.HttpsError('not-found', 'Invoice not found');
     }
     const invoiceData = invoiceDoc.data();
-    const oldStatus = invoiceData === null || invoiceData === void 0 ? void 0 : invoiceData.status;
-    const amount = (invoiceData === null || invoiceData === void 0 ? void 0 : invoiceData.amount) || 0;
+    if (!invoiceData) {
+        throw new https_1.HttpsError('not-found', 'Invoice data not found');
+    }
+    const oldStatus = invoiceData.status;
+    const amount = invoiceData.amount || 0;
     // Update invoice status
     await invoiceRef.update({
         status,
@@ -1035,7 +1038,7 @@ exports.updateInvoiceStatus = (0, https_1.onCall)(async (request) => {
             amount,
             currency: (personData === null || personData === void 0 ? void 0 : personData.currency) || 'CHF',
             date: admin.firestore.Timestamp.now(),
-            description: `${personData === null || personData === void 0 ? void 0 : personData.name}: ${invoiceData === null || invoiceData === void 0 ? void 0 : invoiceData.description}`,
+            description: `${personData === null || personData === void 0 ? void 0 : personData.name}: ${invoiceData.description}`,
             status: 'paid',
             personId,
             invoiceId,
@@ -1595,15 +1598,18 @@ exports.getCalendarEvents = (0, https_1.onCall)(async (request) => {
         }
         console.log(`Reminder ${reminderDoc.id}: ${reminderData.title} at ${reminderDate.toISOString()}`);
         // Filter by date range if provided - but be more lenient
+        // Compare only the date part, not the time, to avoid timezone issues
         if (startDate && endDate) {
             const start = new Date(startDate);
             start.setHours(0, 0, 0, 0);
             const end = new Date(endDate);
             end.setHours(23, 59, 59, 999);
+            // Normalize reminder date to start of day for comparison
             const reminderDateOnly = new Date(reminderDate);
-            reminderDateOnly.setHours(12, 0, 0, 0);
+            reminderDateOnly.setHours(0, 0, 0, 0);
+            // Use <= and >= for inclusive comparison
             if (reminderDateOnly < start || reminderDateOnly > end) {
-                console.log(`  -> Filtered out (outside range ${start.toISOString()} - ${end.toISOString()})`);
+                console.log(`  -> Filtered out (outside range ${start.toISOString()} - ${end.toISOString()}, reminder: ${reminderDateOnly.toISOString()})`);
                 continue;
             }
         }
@@ -2681,6 +2687,16 @@ exports.getUserSettings = (0, https_1.onCall)(async (request) => {
             language: 'de',
             theme: 'system',
             weatherLocation: 'Zurich, CH', // Default weather location
+            shoppingBudget: { amount: 0, isSet: false },
+            quickAddTemplates: [],
+            currency: 'CHF',
+            canton: '',
+            notificationsEnabled: true,
+            glassEffectEnabled: false,
+            biometricEnabled: false,
+            preferDesktop: false,
+            tutorialHighlights: null,
+            sidebarWidth: 256,
         };
     }
     return settingsDoc.data();

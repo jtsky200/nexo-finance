@@ -4,7 +4,7 @@ import MobileLayout from '@/components/MobileLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { 
   Plus, MoreVertical, Edit, Trash2, FileText, Calculator, Users, Wallet
 } from 'lucide-react';
@@ -232,6 +232,9 @@ export default function MobileTaxes() {
               <DialogTitle>
                 {editProfile ? 'Steuerprofil bearbeiten' : 'Neues Steuerprofil'}
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                {editProfile ? 'Bearbeiten Sie die Details des Steuerprofils' : 'Erstellen Sie ein neues Steuerprofil für ein Steuerjahr'}
+              </DialogDescription>
             </DialogHeader>
             <div className="px-5 pb-2">
               <p className="text-sm text-muted-foreground">
@@ -254,6 +257,9 @@ export default function MobileTaxes() {
           <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
             <DialogHeader className="px-5 pt-5 pb-3">
               <DialogTitle className="text-lg font-semibold">Steuerprofil löschen?</DialogTitle>
+              <DialogDescription className="sr-only">
+                Bestätigen Sie das Löschen dieses Steuerprofils. Diese Aktion kann nicht rückgängig gemacht werden.
+              </DialogDescription>
             </DialogHeader>
             <div className="px-5 pb-2">
               <p className="text-sm text-muted-foreground">

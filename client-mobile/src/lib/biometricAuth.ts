@@ -3,6 +3,9 @@
  * Supports fingerprint, face ID, and other platform authenticators
  */
 
+import { useState, useEffect } from 'react';
+import { useUserSettings } from './firebaseHooks';
+
 export interface BiometricAuthResult {
   success: boolean;
   error?: string;
@@ -198,20 +201,66 @@ export async function authenticateBiometric(
 /**
  * Check if user has biometric enabled (stored in localStorage for demo)
  * In production, this would check with the backend
+ * Note: This is a synchronous function. Use useBiometricAuth() hook for React components.
  */
 export function hasBiometricEnabled(): boolean {
   return localStorage.getItem('biometricEnabled') === 'true';
 }
 
 /**
- * Enable biometric authentication
+ * Hook to use biometric authentication settings
+ */
+export function useBiometricAuth() {
+  const { settings, updateSettings, isLoading } = useUserSettings();
+  const [isEnabled, setIsEnabled] = useState<boolean>(() => {
+    // Try Firebase first, then localStorage as fallback
+    if (settings?.biometricEnabled !== undefined) {
+      return settings.biometricEnabled;
+    }
+    return localStorage.getItem('biometricEnabled') === 'true';
+  });
+
+  // Sync with Firebase UserSettings when settings change
+  useEffect(() => {
+    if (!isLoading && settings?.biometricEnabled !== undefined) {
+      setIsEnabled(settings.biometricEnabled);
+    } else if (!isLoading && !settings?.biometricEnabled) {
+      // Migrate from localStorage to Firebase
+      const saved = localStorage.getItem('biometricEnabled');
+      if (saved !== null) {
+        const value = saved === 'true';
+        updateSettings({ biometricEnabled: value }).then(() => {
+          localStorage.removeItem('biometricEnabled');
+        }).catch(console.error);
+        setIsEnabled(value);
+      }
+    }
+  }, [settings?.biometricEnabled, isLoading, updateSettings]);
+
+  const enable = async () => {
+    setIsEnabled(true);
+    await updateSettings({ biometricEnabled: true });
+    localStorage.setItem('biometricEnabled', 'true'); // Fallback
+  };
+
+  const disable = async () => {
+    setIsEnabled(false);
+    await updateSettings({ biometricEnabled: false });
+    localStorage.setItem('biometricEnabled', 'false'); // Fallback
+  };
+
+  return { isEnabled, enable, disable };
+}
+
+/**
+ * Enable biometric authentication (legacy function, use hook version)
  */
 export function enableBiometric(): void {
   localStorage.setItem('biometricEnabled', 'true');
 }
 
 /**
- * Disable biometric authentication
+ * Disable biometric authentication (legacy function, use hook version)
  */
 export function disableBiometric(): void {
   localStorage.setItem('biometricEnabled', 'false');

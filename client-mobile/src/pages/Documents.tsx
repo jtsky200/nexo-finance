@@ -53,8 +53,16 @@ interface AnalysisResult {
 
 export default function MobileDocuments() {
   const { t } = useTranslation();
-  const { data: people = [], isLoading: peopleLoading } = usePeople();
+  const { data: people = [], isLoading: peopleLoading, error: peopleError } = usePeople();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Handle people loading error
+  useEffect(() => {
+    if (peopleError) {
+      console.error('[Documents] Error loading people:', peopleError);
+      // Don't show toast here, let the component render with empty people list
+    }
+  }, [peopleError]);
   
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,15 +102,43 @@ export default function MobileDocuments() {
   const fetchDocuments = useCallback(async () => {
     try {
       setLoading(true);
-      const getAllDocumentsFunc = httpsCallable(functions, 'getAllDocuments');
-      const result = await getAllDocumentsFunc({ folder: selectedFolder === 'all' ? null : selectedFolder });
-      const data = result.data as { documents: any[], total?: number };
+      console.log('[Documents] Starting fetchDocuments, folder:', selectedFolder);
       
-      const mappedDocs = (data?.documents || []).map((doc: any) => {
+      const getAllDocumentsFunc = httpsCallable(functions, 'getAllDocuments');
+      console.log('[Documents] Calling getAllDocuments function...');
+      
+      const result = await getAllDocumentsFunc({ 
+        folder: selectedFolder === 'all' ? null : selectedFolder 
+      });
+      
+      console.log('[Documents] Function call successful, result:', result);
+      
+      if (!result || !result.data) {
+        console.warn('[Documents] No data in result, setting empty array');
+        setDocuments([]);
+        return;
+      }
+      
+      const data = result.data as { documents?: any[], total?: number };
+      console.log('[Documents] Data received:', { 
+        hasDocuments: !!data.documents, 
+        count: data.documents?.length || 0,
+        total: data.total 
+      });
+      
+      const documentsArray = Array.isArray(data.documents) ? data.documents : [];
+      console.log('[Documents] Processing', documentsArray.length, 'documents');
+      
+      const mappedDocs = documentsArray.map((doc: any, index: number) => {
         try {
-          return {
+          if (!doc || typeof doc !== 'object') {
+            console.warn(`[Documents] Invalid document at index ${index}:`, doc);
+            return null;
+          }
+          
+          const mapped = {
             ...doc,
-            id: doc.id || '',
+            id: doc.id || `doc-${index}`,
             personId: doc.personId || '',
             personName: doc.personName || 'Unbekannt',
             fileName: doc.fileName || 'Unbenannt',
@@ -110,21 +146,31 @@ export default function MobileDocuments() {
             fileUrl: doc.fileUrl || '',
             folder: doc.folder || 'Sonstiges',
             status: doc.status || 'uploaded',
-            createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : null,
-            updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : null,
+            createdAt: doc.createdAt ? (typeof doc.createdAt === 'string' ? doc.createdAt : new Date(doc.createdAt).toISOString()) : null,
+            updatedAt: doc.updatedAt ? (typeof doc.updatedAt === 'string' ? doc.updatedAt : new Date(doc.updatedAt).toISOString()) : null,
           };
+          
+          return mapped;
         } catch (err) {
-          console.error('Error mapping document:', err, doc);
+          console.error(`[Documents] Error mapping document at index ${index}:`, err, doc);
           return null;
         }
-      }).filter((doc): doc is Document => doc !== null);
+      }).filter((doc): doc is Document => doc !== null && doc.id !== '');
       
+      console.log('[Documents] Successfully mapped', mappedDocs.length, 'documents');
       setDocuments(mappedDocs);
     } catch (error: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Error fetching documents:', error);
-      }
-      toast.error('Fehler beim Laden der Dokumente: ' + (error.message || 'Unbekannter Fehler'));
+      console.error('[Documents] Error in fetchDocuments:', error);
+      console.error('[Documents] Error details:', {
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        stack: error?.stack
+      });
+      
+      const errorMessage = error?.message || error?.code || 'Unbekannter Fehler';
+      toast.error('Fehler beim Laden der Dokumente: ' + errorMessage);
+      setDocuments([]); // Set empty array to prevent rendering errors
     } finally {
       setLoading(false);
     }
@@ -148,30 +194,52 @@ export default function MobileDocuments() {
   }, [fetchDocuments]);
 
   const filteredDocuments = useMemo(() => {
-    let result = [...documents];
-    
-    if (selectedPerson !== 'all') {
-      result = result.filter(d => d.personId === selectedPerson);
+    try {
+      if (!Array.isArray(documents)) {
+        console.warn('[Documents] documents is not an array in filteredDocuments useMemo');
+        return [];
+      }
+      
+      let result = documents.filter(d => d && d.id); // Filter out invalid documents
+      
+      if (selectedPerson !== 'all') {
+        result = result.filter(d => d.personId === selectedPerson);
+      }
+      
+      if (selectedFolder !== 'all') {
+        result = result.filter(d => d.folder === selectedFolder);
+      }
+      
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        result = result.filter(d => {
+          try {
+            return (
+              (d.fileName || '').toLowerCase().includes(query) ||
+              (d.personName || '').toLowerCase().includes(query) ||
+              (d.folder || '').toLowerCase().includes(query)
+            );
+          } catch (err) {
+            console.error('[Documents] Error filtering by search query:', err, d);
+            return false;
+          }
+        });
+      }
+      
+      return result.sort((a, b) => {
+        try {
+          const dateA = a.updatedAt || a.createdAt || '';
+          const dateB = b.updatedAt || b.createdAt || '';
+          return dateB.localeCompare(dateA);
+        } catch (err) {
+          console.error('[Documents] Error sorting documents:', err);
+          return 0;
+        }
+      });
+    } catch (error) {
+      console.error('[Documents] Error in filteredDocuments useMemo:', error);
+      return [];
     }
-    
-    if (selectedFolder !== 'all') {
-      result = result.filter(d => d.folder === selectedFolder);
-    }
-    
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(d => 
-        d.fileName.toLowerCase().includes(query) ||
-        d.personName.toLowerCase().includes(query) ||
-        d.folder.toLowerCase().includes(query)
-      );
-    }
-    
-    return result.sort((a, b) => {
-      const dateA = a.updatedAt || a.createdAt || '';
-      const dateB = b.updatedAt || b.createdAt || '';
-      return dateB.localeCompare(dateA);
-    });
   }, [documents, selectedPerson, selectedFolder, searchQuery]);
 
   const handleFileSelect = async (file: File) => {
@@ -313,6 +381,33 @@ export default function MobileDocuments() {
     return <File className="w-5 h-5" />;
   };
 
+  // Safety check - ensure we have valid data
+  useEffect(() => {
+    if (!Array.isArray(documents)) {
+      console.error('[Documents] documents is not an array, resetting:', documents);
+      setDocuments([]);
+    }
+  }, [documents]);
+
+  // Ensure filteredDocuments is always an array and safe to render
+  const safeFilteredDocuments = useMemo(() => {
+    try {
+      if (!Array.isArray(filteredDocuments)) {
+        console.warn('[Documents] filteredDocuments is not an array, returning empty array');
+        return [];
+      }
+      return filteredDocuments.filter((doc): doc is Document => {
+        if (!doc || !doc.id || typeof doc.id !== 'string') {
+          return false;
+        }
+        return true;
+      });
+    } catch (error) {
+      console.error('[Documents] Error in safeFilteredDocuments:', error);
+      return [];
+    }
+  }, [filteredDocuments]);
+
   return (
     <MobileLayout title="Dokumente" showSidebar={true}>
       {/* Filters */}
@@ -428,13 +523,18 @@ export default function MobileDocuments() {
             </Card>
           ))}
         </div>
-      ) : filteredDocuments.length === 0 ? (
+      ) : safeFilteredDocuments.length === 0 ? (
         <div className="mobile-card text-center py-8">
           <p className="text-muted-foreground">Keine Dokumente gefunden</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {filteredDocuments.map((doc) => (
+          {safeFilteredDocuments.map((doc) => {
+            if (!doc || !doc.id) {
+              console.warn('[Documents] Skipping invalid document in render:', doc);
+              return null;
+            }
+            return (
             <Card key={doc.id} className="mobile-card">
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
@@ -490,7 +590,8 @@ export default function MobileDocuments() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 

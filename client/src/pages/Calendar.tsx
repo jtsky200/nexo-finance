@@ -545,6 +545,19 @@ export default function Calendar() {
         : `${newEvent.date}T12:00`; // Default to noon for all-day events
       const baseDate = parseLocalDateTime(dateTimeString);
       
+      // Validate that appointments (termin) cannot be created in the past
+      const eventType = newEvent.category || 'termin';
+      if (eventType === 'termin') {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Set to midnight for date comparison
+        const baseDateOnly = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+        
+        if (baseDateOnly < today) {
+          toast.error('Termine können nicht in der Vergangenheit erstellt werden');
+          return;
+        }
+      }
+      
       if (newEvent.isRecurring) {
         // Create multiple events for recurring
         const dates: Date[] = [baseDate];
@@ -562,7 +575,7 @@ export default function Calendar() {
             title: newEvent.title,
             notes: newEvent.description,
             dueDate: date, // Date object - will be normalized in firebaseHooks
-            type: newEvent.category || 'termin',
+            type: eventType,
             isAllDay: !newEvent.time,
           });
         }
@@ -572,7 +585,7 @@ export default function Calendar() {
           title: newEvent.title,
           notes: newEvent.description,
           dueDate: baseDate, // Date object - will be normalized in firebaseHooks
-          type: newEvent.category || 'termin',
+          type: eventType,
           isAllDay: !newEvent.time,
         });
         toast.success('Termin erstellt');

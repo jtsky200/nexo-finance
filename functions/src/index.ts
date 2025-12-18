@@ -168,7 +168,20 @@ export const createReminder = onCall(async (request) => {
 
   // Validate inputs
   const validatedTitle = validateString(title, 'title', 500, true);
-  const validatedType = validateEnum(type, 'type', ['termin', 'erinnerung'], false) || 'termin';
+  // Handle type validation more gracefully - allow undefined/null and default to 'termin'
+  let validatedType: 'termin' | 'erinnerung' = 'termin';
+  if (type) {
+    try {
+      const enumResult = validateEnum(type, 'type', ['termin', 'erinnerung'], false);
+      if (enumResult) {
+        validatedType = enumResult;
+      }
+    } catch (error: any) {
+      // If validation fails, default to 'termin' instead of throwing
+      console.warn(`[createReminder] Invalid type '${type}', defaulting to 'termin'`);
+      validatedType = 'termin';
+    }
+  }
   const validatedCurrency = validateEnum(currency, 'currency', ['CHF', 'EUR', 'USD'], false);
   const validatedAmount = amount ? validateNumber(amount, 'amount', 0, 1000000000) : null;
   const validatedNotes = validateString(notes, 'notes', 5000, false);
@@ -188,6 +201,19 @@ export const createReminder = onCall(async (request) => {
       normalizedDate.setHours(dateObj.getHours(), dateObj.getMinutes(), dateObj.getSeconds(), dateObj.getMilliseconds());
     }
     parsedDueDate = admin.firestore.Timestamp.fromDate(normalizedDate);
+    
+    // Validate that appointments (termin) cannot be created in the past
+    if (validatedType === 'termin') {
+      const now = new Date();
+      const dueDateObj = parsedDueDate.toDate();
+      // Compare dates at midnight to avoid time-of-day issues
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const dueDateOnly = new Date(dueDateObj.getFullYear(), dueDateObj.getMonth(), dueDateObj.getDate());
+      
+      if (dueDateOnly < today) {
+        throw new HttpsError('invalid-argument', 'Termine können nicht in der Vergangenheit erstellt werden');
+      }
+    }
   } else {
     const now = new Date();
     now.setHours(12, 0, 0, 0); // Default to noon for consistency

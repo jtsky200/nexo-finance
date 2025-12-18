@@ -1329,6 +1329,16 @@ export default function MobileCalendar() {
                     return;
                   }
                   
+                  // Validate that the date is not in the past
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0); // Set to midnight for date comparison
+                  const selectedDateOnly = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
+                  
+                  if (selectedDateOnly < today) {
+                    toast.error('Termine können nicht in der Vergangenheit erstellt werden');
+                    return;
+                  }
+                  
                   const dueDate = new Date(parsedDate);
                   if (timeInput.value) {
                     const [hours, minutes] = timeInput.value.split(':');

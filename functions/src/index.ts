@@ -1740,6 +1740,7 @@ export const getCalendarEvents = onCall(async (request) => {
 
   // Get regular reminders (Termine & Aufgaben) - field is 'dueDate' not 'date'
   // SKIP type='zahlung' as those are already covered by person invoices
+  // IMPORTANT: Include ALL reminders regardless of status (erledigt/completed) so they remain visible
   const remindersSnapshot = await db.collection('reminders').where('userId', '==', userId).get();
   
   console.log(`Found ${remindersSnapshot.docs.length} reminders for user ${userId}`);
@@ -1752,6 +1753,9 @@ export const getCalendarEvents = onCall(async (request) => {
       console.log(`Skipping payment reminder ${reminderDoc.id} - covered by person invoices`);
       continue;
     }
+    
+    // DO NOT skip completed/erledigt reminders - they should still be visible in calendar
+    // Users may want to see past completed events for reference
     
     let reminderDate: Date;
     

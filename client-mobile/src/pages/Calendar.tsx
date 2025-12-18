@@ -90,9 +90,10 @@ export default function MobileCalendar() {
       
       const getEventsFunc = httpsCallable(functions, 'getCalendarEvents');
       
-      // Get events for a wider range (6 months before and 6 months after) to match web version
-      const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 6, 1);
-      const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 6, 0);
+      // Get events for a wider range (12 months before and 12 months after) to ensure all events are loaded
+      // This prevents events from being filtered out due to date range restrictions
+      const startDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 12, 1);
+      const endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 12, 0);
       
       try {
         console.log('[Calendar] Calling getCalendarEvents with:', {

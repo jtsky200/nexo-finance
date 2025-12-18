@@ -18,6 +18,7 @@ import {
   User, Clock, Eye, Trash2, RefreshCw,
   ScanLine, FileImage, File, AlertCircle, Check, X, Loader2
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 
@@ -631,11 +632,14 @@ export default function MobileDocuments() {
                   <SelectValue placeholder="Person auswählen" />
                 </SelectTrigger>
                 <SelectContent>
-                  {people.map((person) => (
-                    <SelectItem key={person.id} value={person.id}>
-                      {person.name}
-                    </SelectItem>
-                  ))}
+                  {Array.isArray(peopleData) && peopleData.map((person) => {
+                    if (!person || !person.id) return null;
+                    return (
+                      <SelectItem key={person.id} value={person.id}>
+                        {person.name || 'Unbekannt'}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>

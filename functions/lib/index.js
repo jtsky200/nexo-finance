@@ -3273,7 +3273,21 @@ exports.getAllDocuments = (0, https_1.onCall)(async (request) => {
                             console.warn('[getAllDocuments] Document data is null for docId:', doc.id);
                             continue;
                         }
-                        allDocuments.push(Object.assign(Object.assign({ id: doc.id, personId: personDoc.id, personName: personData.name || 'Unbekannt' }, data), { createdAt: ((_c = (_b = (_a = data.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null, updatedAt: ((_f = (_e = (_d = data.updatedAt) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null }));
+                        // Safely extract document data with fallbacks
+                        const documentData = {
+                            id: doc.id,
+                            personId: personDoc.id,
+                            personName: personData.name || 'Unbekannt',
+                            fileName: data.fileName || 'Unbenannt',
+                            fileType: data.fileType || '',
+                            fileUrl: data.fileUrl || '',
+                            folder: data.folder || 'Sonstiges',
+                            status: data.status || 'uploaded',
+                            analyzedData: data.analyzedData || null,
+                            createdAt: ((_c = (_b = (_a = data.createdAt) === null || _a === void 0 ? void 0 : _a.toDate) === null || _b === void 0 ? void 0 : _b.call(_a)) === null || _c === void 0 ? void 0 : _c.toISOString()) || null,
+                            updatedAt: ((_f = (_e = (_d = data.updatedAt) === null || _d === void 0 ? void 0 : _d.toDate) === null || _e === void 0 ? void 0 : _e.call(_d)) === null || _f === void 0 ? void 0 : _f.toISOString()) || null,
+                        };
+                        allDocuments.push(documentData);
                     }
                     catch (error) {
                         console.error(`[getAllDocuments] Error processing document ${doc.id}:`, error);

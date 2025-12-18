@@ -3718,14 +3718,22 @@ export const getAllDocuments = onCall(async (request) => {
               continue;
             }
             
-            allDocuments.push({
+            // Safely extract document data with fallbacks
+            const documentData = {
               id: doc.id,
               personId: personDoc.id,
               personName: personData.name || 'Unbekannt',
-              ...data,
+              fileName: data.fileName || 'Unbenannt',
+              fileType: data.fileType || '',
+              fileUrl: data.fileUrl || '',
+              folder: data.folder || 'Sonstiges',
+              status: data.status || 'uploaded',
+              analyzedData: data.analyzedData || null,
               createdAt: data.createdAt?.toDate?.()?.toISOString() || null,
               updatedAt: data.updatedAt?.toDate?.()?.toISOString() || null,
-            });
+            };
+            
+            allDocuments.push(documentData);
           } catch (error: any) {
             console.error(`[getAllDocuments] Error processing document ${doc.id}:`, error);
             // Continue with next document

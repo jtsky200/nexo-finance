@@ -268,3 +268,19 @@ footer::-webkit-scrollbar {
   width: 0 !important;
   height: 0 !important;
 }
+
+/* Christmas Snowflake Animation */
+@keyframes snowflake {
+  0% {
+    transform: translateY(-100vh) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+.animate-snowflake {
+  animation: snowflake linear infinite;
+}

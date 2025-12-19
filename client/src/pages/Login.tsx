@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -10,10 +10,17 @@ import { toast } from 'sonner';
 
 export default function Login() {
   const [, setLocation] = useLocation();
-  const { signIn, signInWithGoogle, error: authError } = useAuth();
+  const { signIn, signInWithGoogle, error: authError, user, loading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Redirect to dashboard when user is authenticated
+  useEffect(() => {
+    if (!loading && user) {
+      setLocation('/dashboard');
+    }
+  }, [user, loading, setLocation]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +29,7 @@ export default function Login() {
       setIsLoading(true);
       await signIn(email, password);
       toast.success('Erfolgreich angemeldet');
-      setLocation('/dashboard');
+      // Redirect will happen automatically via useEffect when user state updates
     } catch (error: any) {
       toast.error('Anmeldung fehlgeschlagen: ' + error.message);
     } finally {
@@ -31,8 +38,35 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Christmas Background */}
+      <div className="absolute inset-0 bg-gradient-to-b from-red-50 via-green-50 to-red-50 dark:from-red-950/20 dark:via-green-950/20 dark:to-red-950/20">
+        {/* Snowflakes Animation */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {Array.from({ length: 50 }).map((_, i) => (
+            <div
+              key={i}
+              className="absolute text-white/30 dark:text-white/10 animate-snowflake"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 5}s`,
+                animationDuration: `${5 + Math.random() * 10}s`,
+                fontSize: `${10 + Math.random() * 20}px`,
+              }}
+            >
+              ❄
+            </div>
+          ))}
+        </div>
+        {/* Christmas Ornaments */}
+        <div className="absolute top-10 left-10 text-4xl animate-bounce" style={{ animationDuration: '3s' }}>🎄</div>
+        <div className="absolute top-20 right-20 text-3xl animate-bounce" style={{ animationDuration: '2.5s', animationDelay: '0.5s' }}>🎁</div>
+        <div className="absolute bottom-20 left-20 text-3xl animate-bounce" style={{ animationDuration: '2.8s', animationDelay: '1s' }}>⭐</div>
+        <div className="absolute bottom-10 right-10 text-4xl animate-bounce" style={{ animationDuration: '3.2s', animationDelay: '1.5s' }}>🎅</div>
+      </div>
+      
+      <Card className="w-full max-w-md relative z-10 shadow-2xl border-2 border-red-200 dark:border-red-800 bg-background/95 backdrop-blur-sm">
         <CardHeader>
           <CardTitle className="text-2xl">Anmelden</CardTitle>
           <CardDescription>
@@ -87,7 +121,7 @@ export default function Login() {
                   setIsLoading(true);
                   await signInWithGoogle();
                   toast.success('Erfolgreich mit Google angemeldet');
-                  setLocation('/dashboard');
+                  // Redirect will happen automatically via useEffect when user state updates
                 } catch (error: any) {
                   const errorMsg = authError || error.message || 'Ein unbekannter Fehler ist aufgetreten';
                   toast.error('Google-Anmeldung fehlgeschlagen: ' + errorMsg);

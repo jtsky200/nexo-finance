@@ -42,8 +42,8 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
   };
 
   const getUserInitials = () => {
-    if (!user?.name) return 'U';
-    const name = user.name || '';
+    if (!user?.displayName && !user?.email) return 'U';
+    const name = user.displayName || user.email?.split('@')[0] || 'U';
     return name
       .split(' ')
       .map((n: string) => n[0])
@@ -53,7 +53,7 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
   };
 
   return (
-    <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6">
+    <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6 relative z-50">
       {/* Left side: Menu button and title */}
       <div className="flex items-center gap-4">
         <Button
@@ -68,16 +68,18 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
       </div>
 
       {/* Right side: Language toggle, theme toggle, and user menu */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 relative z-50">
         {/* Language switcher dropdown */}
-        <LanguageSwitcher />
+        <div className="relative z-50">
+          <LanguageSwitcher />
+        </div>
 
         {/* Theme toggle */}
         <Button
           variant="ghost"
           size="icon"
           onClick={toggleTheme}
-          className="h-9 w-9"
+          className="h-9 w-9 relative z-50"
           title={theme === 'dark' ? t('common.switchToLight', 'Zu hellem Design wechseln') : t('common.switchToDark', 'Zu dunklem Design wechseln')}
         >
           {theme === 'dark' ? (
@@ -88,17 +90,18 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
         </Button>
 
         {/* User menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-              <Avatar>
-                <AvatarFallback className="bg-primary text-primary-foreground">
-                  {getUserInitials()}
-                </AvatarFallback>
-              </Avatar>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
+        <div className="relative z-50">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                <Avatar>
+                  <AvatarFallback className="bg-primary text-primary-foreground">
+                    {getUserInitials()}
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 z-[60]">
             <DropdownMenuLabel>
               <div className="flex flex-col space-y-1">
                 <p className="text-sm font-medium">{user?.displayName || 'User'}</p>
@@ -143,6 +146,7 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       </div>
 
       {/* AI Chat Dialog */}

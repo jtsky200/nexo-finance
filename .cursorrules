@@ -61,11 +61,18 @@ When creating or modifying dialogs (DialogContent components), ALWAYS use these 
    - **CRITICAL: Use the correct URL based on version:**
      - **Web version:** Navigate to https://nexo-jtsky100.web.app/login
      - **Mobile version:** Navigate to https://m-nexo-jtsky100.web.app/aichat
+   - **MANDATORY: Take a screenshot after navigation using `browser_take_screenshot` to verify current page state**
    - **IMPORTANT: Only start ONE browser instance, never two browsers simultaneously**
    - For web version: Login with credentials:
      - Email: antonio10jonathan@yahoo.com
      - Password: 12345678
+   - **MANDATORY: Take a screenshot after entering email using `browser_take_screenshot`**
+   - **MANDATORY: Take a screenshot after entering password using `browser_take_screenshot`**
+   - **MANDATORY: Take a screenshot after clicking login button using `browser_take_screenshot`**
+   - **MANDATORY: Take a screenshot after login completes to verify successful login using `browser_take_screenshot`**
+   - **CRITICAL: After EVERY action (navigate, type, click, wait), take a screenshot to know exactly where you are**
    - Test the reported issue/feature
+   - **MANDATORY: Take a screenshot when testing the feature to verify the current state**
    - Check browser console logs using `browser_console_messages`
    - Check network requests using `browser_network_requests` if needed
    - Take a snapshot using `browser_snapshot` to see current state
@@ -94,8 +101,15 @@ When creating or modifying dialogs (DialogContent components), ALWAYS use these 
    - **CRITICAL: Use the correct URL based on version:**
      - **Web version:** Navigate to https://nexo-jtsky100.web.app/login
      - **Mobile version:** Navigate to https://m-nexo-jtsky100.web.app/aichat
+   - **MANDATORY: Take a screenshot after navigation using `browser_take_screenshot`**
    - For web version: Login again with same credentials (antonio10jonathan@yahoo.com / 12345678)
+   - **MANDATORY: Take a screenshot after entering email using `browser_take_screenshot`**
+   - **MANDATORY: Take a screenshot after entering password using `browser_take_screenshot`**
+   - **MANDATORY: Take a screenshot after clicking login button using `browser_take_screenshot`**
+   - **MANDATORY: Take a screenshot after login completes to verify successful login using `browser_take_screenshot`**
+   - **CRITICAL: After EVERY action (navigate, type, click, wait), take a screenshot to know exactly where you are**
    - Test the fixed feature/issue again
+   - **MANDATORY: Take a screenshot when testing the fixed feature to verify the current state**
    - Check browser console logs again for any remaining errors
    - Check network requests if relevant
    - Take a screenshot using `browser_take_screenshot`
@@ -104,15 +118,34 @@ When creating or modifying dialogs (DialogContent components), ALWAYS use these 
 
 6. **Browser Management:**
    - **CRITICAL: Only use ONE browser instance at a time**
+   - **FORBIDDEN: NEVER navigate to "about:blank" - this URL is strictly prohibited**
+   - **FORBIDDEN: NEVER open any URL that is not explicitly specified by the user**
+   - **ONLY navigate to these specific URLs:**
+     - Web version: https://nexo-jtsky100.web.app/login
+     - Mobile version: https://m-nexo-jtsky100.web.app/aichat
    - Before starting a new browser session, ensure any previous browser is closed
+   - **If you detect that a second browser instance has been opened:**
+     - Immediately terminate/kill the second browser process
+     - The second browser typically opens "about:blank" which is forbidden
+     - Only keep ONE browser instance open with the correct URL
    - Never have multiple browser tabs/instances open simultaneously
    - Close browser after testing is complete
+   - **If browser_navigate results in "about:blank", immediately close that browser and navigate again to the correct URL**
 
 7. **Error Documentation:**
    - Log all console errors found
    - Document network request failures
    - Note any visual issues observed
    - Report findings clearly to user
+
+8. **Problem Resolution Requirements:**
+   - **CRITICAL: You MUST fully solve problems without user intervention**
+   - **If buttons/features don't work for you during testing, they won't work for the user either**
+   - **NEVER mark a problem as "solved" or "fixed" unless you have verified it works in your own testing**
+   - **If you cannot click/test a button during live testing, you MUST investigate and fix the root cause**
+   - **Do NOT assume something will work for the user if it doesn't work for you**
+   - **Continue debugging until the feature actually works in your live testing**
+   - **Only report success after you have successfully tested the feature yourself**
 
 **This workflow must be followed EXACTLY - no shortcuts, no hallucinations, no assumptions.**
 

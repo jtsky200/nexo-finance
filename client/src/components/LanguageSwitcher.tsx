@@ -29,7 +29,8 @@ export default function LanguageSwitcher() {
         <Button
           variant="ghost"
           size="sm"
-          className="font-semibold gap-2 relative z-[9999] pointer-events-auto"
+          className="font-semibold gap-2 relative z-[9999]"
+          style={{ pointerEvents: 'auto' }}
         >
           <Globe className="w-4 h-4" />
           {currentLanguage.code.toUpperCase()}

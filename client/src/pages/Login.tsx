@@ -39,49 +39,70 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Elegant Professional Christmas Background */}
+      {/* Dynamic Festive Christmas Background */}
       <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-blue-900 to-slate-950 dark:from-slate-950 dark:via-slate-900 dark:to-black">
-        {/* Elegant Snowflakes Pattern */}
+        {/* Enhanced Snowflakes Pattern */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {Array.from({ length: 35 }).map((_, i) => (
+          {Array.from({ length: 50 }).map((_, i) => (
             <div
               key={i}
-              className="absolute text-white/20 dark:text-white/10 animate-snowflake"
+              className="absolute text-white/25 dark:text-white/15 animate-snowflake"
               style={{
                 left: `${Math.random() * 100}%`,
                 top: `${Math.random() * 100}%`,
                 animationDelay: `${Math.random() * 5}s`,
                 animationDuration: `${8 + Math.random() * 12}s`,
-                fontSize: `${8 + Math.random() * 12}px`,
+                fontSize: `${8 + Math.random() * 16}px`,
               }}
             >
-              ✦
+              ❄
+            </div>
+          ))}
+        </div>
+
+        {/* Twinkling Stars */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {Array.from({ length: 20 }).map((_, i) => (
+            <div
+              key={`star-${i}`}
+              className="absolute text-amber-300/40 dark:text-amber-200/30 animate-twinkle"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 3}s`,
+                animationDuration: `${2 + Math.random() * 2}s`,
+                fontSize: `${12 + Math.random() * 8}px`,
+              }}
+            >
+              ⭐
             </div>
           ))}
         </div>
         
-        {/* Subtle Elegant Christmas Elements - Green and Gold Only */}
-        <div className="absolute top-0 left-0 w-full h-full opacity-8">
-          <div className="absolute top-20 left-20 w-48 h-48 bg-gradient-to-br from-emerald-600/25 to-emerald-800/10 rounded-full blur-3xl"></div>
-          <div className="absolute top-40 right-32 w-40 h-40 bg-gradient-to-br from-amber-500/20 to-amber-600/8 rounded-full blur-3xl"></div>
-          <div className="absolute bottom-32 left-32 w-52 h-52 bg-gradient-to-br from-emerald-500/20 to-emerald-700/8 rounded-full blur-3xl"></div>
-          <div className="absolute bottom-20 right-20 w-36 h-36 bg-gradient-to-br from-amber-400/15 to-amber-500/6 rounded-full blur-3xl"></div>
-          <div className="absolute top-1/2 left-1/2 w-56 h-56 bg-gradient-to-br from-emerald-400/15 to-emerald-600/5 rounded-full blur-3xl transform -translate-x-1/2 -translate-y-1/2"></div>
+        {/* Dynamic Pulsing Christmas Orbs - Green and Gold */}
+        <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+          <div className="absolute top-20 left-20 w-48 h-48 bg-gradient-to-br from-emerald-600/30 to-emerald-800/15 rounded-full blur-3xl animate-pulse-slow"></div>
+          <div className="absolute top-40 right-32 w-40 h-40 bg-gradient-to-br from-amber-500/25 to-amber-600/12 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: '0.5s' }}></div>
+          <div className="absolute bottom-32 left-32 w-52 h-52 bg-gradient-to-br from-emerald-500/25 to-emerald-700/12 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: '1s' }}></div>
+          <div className="absolute bottom-20 right-20 w-36 h-36 bg-gradient-to-br from-amber-400/20 to-amber-500/10 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: '1.5s' }}></div>
+          <div className="absolute top-1/2 left-1/2 w-56 h-56 bg-gradient-to-br from-emerald-400/20 to-emerald-600/8 rounded-full blur-3xl transform -translate-x-1/2 -translate-y-1/2 animate-pulse-slow" style={{ animationDelay: '0.75s' }}></div>
+          <div className="absolute top-1/4 right-1/4 w-44 h-44 bg-gradient-to-br from-amber-300/15 to-amber-400/8 rounded-full blur-3xl animate-pulse-slow" style={{ animationDelay: '1.25s' }}></div>
         </div>
 
-        {/* Elegant Light Rays */}
-        <div className="absolute inset-0 bg-gradient-radial from-transparent via-transparent to-black/30 pointer-events-none"></div>
+        {/* Elegant Light Rays with Movement */}
+        <div className="absolute inset-0 bg-gradient-radial from-transparent via-transparent to-black/30 pointer-events-none animate-gradient-shift"></div>
         
-        {/* Subtle Elegant Accent Lines - Green and Gold */}
-        <div className="absolute top-0 left-1/4 w-px h-full bg-gradient-to-b from-transparent via-emerald-500/15 to-transparent pointer-events-none"></div>
-        <div className="absolute top-0 right-1/4 w-px h-full bg-gradient-to-b from-transparent via-amber-500/12 to-transparent pointer-events-none"></div>
-        <div className="absolute top-0 left-1/2 w-px h-full bg-gradient-to-b from-transparent via-emerald-400/10 to-transparent pointer-events-none"></div>
+        {/* Dynamic Accent Lines - Green and Gold with Animation */}
+        <div className="absolute top-0 left-1/4 w-px h-full bg-gradient-to-b from-transparent via-emerald-500/20 to-transparent pointer-events-none animate-fade-pulse"></div>
+        <div className="absolute top-0 right-1/4 w-px h-full bg-gradient-to-b from-transparent via-amber-500/18 to-transparent pointer-events-none animate-fade-pulse" style={{ animationDelay: '0.5s' }}></div>
+        <div className="absolute top-0 left-1/2 w-px h-full bg-gradient-to-b from-transparent via-emerald-400/15 to-transparent pointer-events-none animate-fade-pulse" style={{ animationDelay: '1s' }}></div>
+        <div className="absolute top-0 left-3/4 w-px h-full bg-gradient-to-b from-transparent via-amber-400/12 to-transparent pointer-events-none animate-fade-pulse" style={{ animationDelay: '1.5s' }}></div>
       </div>
       
-      <Card className="w-full max-w-md relative z-10 shadow-2xl border border-emerald-500/15 dark:border-emerald-400/20 bg-background/98 backdrop-blur-xl ring-1 ring-emerald-500/8 dark:ring-emerald-400/12">
+      <Card className="w-full max-w-md relative z-10 shadow-2xl border border-emerald-500/20 dark:border-emerald-400/25 bg-background/98 backdrop-blur-xl ring-1 ring-emerald-500/12 dark:ring-emerald-400/18 animate-card-glow">
         <CardHeader className="text-center pb-6">
           <div className="mb-4 flex justify-center">
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-600 to-emerald-700 dark:from-emerald-500 dark:to-emerald-600 flex items-center justify-center shadow-lg ring-2 ring-amber-400/20">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-600 to-emerald-700 dark:from-emerald-500 dark:to-emerald-600 flex items-center justify-center shadow-lg ring-2 ring-amber-400/30 animate-icon-pulse">
               <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>

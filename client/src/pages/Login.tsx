@@ -39,14 +39,14 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Professional Christmas Background with Festive Colors */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#0d1b2a] via-[#1b263b] to-[#0f1419] dark:from-[#0a0d14] dark:via-[#0f1419] dark:to-[#050709]">
+      {/* Elegant Professional Christmas Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-blue-900 to-slate-950 dark:from-slate-950 dark:via-slate-900 dark:to-black">
         {/* Elegant Snowflakes Pattern */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {Array.from({ length: 40 }).map((_, i) => (
+          {Array.from({ length: 35 }).map((_, i) => (
             <div
               key={i}
-              className="absolute text-white/25 dark:text-white/15 animate-snowflake"
+              className="absolute text-white/20 dark:text-white/10 animate-snowflake"
               style={{
                 left: `${Math.random() * 100}%`,
                 top: `${Math.random() * 100}%`,
@@ -55,33 +55,33 @@ export default function Login() {
                 fontSize: `${8 + Math.random() * 12}px`,
               }}
             >
-              ❄
+              ✦
             </div>
           ))}
         </div>
         
-        {/* Christmas Color Elements - Red and Green */}
-        <div className="absolute top-0 left-0 w-full h-full opacity-15">
-          <div className="absolute top-20 left-20 w-40 h-40 bg-gradient-to-br from-red-600/40 to-red-800/20 rounded-full blur-3xl"></div>
-          <div className="absolute top-40 right-32 w-36 h-36 bg-gradient-to-br from-emerald-600/40 to-emerald-800/20 rounded-full blur-3xl"></div>
-          <div className="absolute bottom-32 left-32 w-44 h-44 bg-gradient-to-br from-red-500/30 to-red-700/15 rounded-full blur-3xl"></div>
-          <div className="absolute bottom-20 right-20 w-32 h-32 bg-gradient-to-br from-emerald-500/40 to-emerald-700/20 rounded-full blur-3xl"></div>
-          <div className="absolute top-1/2 left-1/2 w-48 h-48 bg-gradient-to-br from-amber-500/20 to-amber-600/10 rounded-full blur-3xl transform -translate-x-1/2 -translate-y-1/2"></div>
+        {/* Subtle Elegant Christmas Elements - Green and Gold Only */}
+        <div className="absolute top-0 left-0 w-full h-full opacity-8">
+          <div className="absolute top-20 left-20 w-48 h-48 bg-gradient-to-br from-emerald-600/25 to-emerald-800/10 rounded-full blur-3xl"></div>
+          <div className="absolute top-40 right-32 w-40 h-40 bg-gradient-to-br from-amber-500/20 to-amber-600/8 rounded-full blur-3xl"></div>
+          <div className="absolute bottom-32 left-32 w-52 h-52 bg-gradient-to-br from-emerald-500/20 to-emerald-700/8 rounded-full blur-3xl"></div>
+          <div className="absolute bottom-20 right-20 w-36 h-36 bg-gradient-to-br from-amber-400/15 to-amber-500/6 rounded-full blur-3xl"></div>
+          <div className="absolute top-1/2 left-1/2 w-56 h-56 bg-gradient-to-br from-emerald-400/15 to-emerald-600/5 rounded-full blur-3xl transform -translate-x-1/2 -translate-y-1/2"></div>
         </div>
 
         {/* Elegant Light Rays */}
-        <div className="absolute inset-0 bg-gradient-radial from-transparent via-transparent to-black/20 pointer-events-none"></div>
+        <div className="absolute inset-0 bg-gradient-radial from-transparent via-transparent to-black/30 pointer-events-none"></div>
         
-        {/* Christmas Accent Lines - Red and Green */}
-        <div className="absolute top-0 left-1/4 w-px h-full bg-gradient-to-b from-transparent via-emerald-500/20 to-transparent pointer-events-none"></div>
-        <div className="absolute top-0 right-1/4 w-px h-full bg-gradient-to-b from-transparent via-red-500/20 to-transparent pointer-events-none"></div>
-        <div className="absolute top-0 left-1/2 w-px h-full bg-gradient-to-b from-transparent via-amber-500/15 to-transparent pointer-events-none"></div>
+        {/* Subtle Elegant Accent Lines - Green and Gold */}
+        <div className="absolute top-0 left-1/4 w-px h-full bg-gradient-to-b from-transparent via-emerald-500/15 to-transparent pointer-events-none"></div>
+        <div className="absolute top-0 right-1/4 w-px h-full bg-gradient-to-b from-transparent via-amber-500/12 to-transparent pointer-events-none"></div>
+        <div className="absolute top-0 left-1/2 w-px h-full bg-gradient-to-b from-transparent via-emerald-400/10 to-transparent pointer-events-none"></div>
       </div>
       
-      <Card className="w-full max-w-md relative z-10 shadow-2xl border border-red-500/20 dark:border-red-400/30 bg-background/98 backdrop-blur-xl ring-1 ring-red-500/10 dark:ring-red-400/20">
+      <Card className="w-full max-w-md relative z-10 shadow-2xl border border-emerald-500/15 dark:border-emerald-400/20 bg-background/98 backdrop-blur-xl ring-1 ring-emerald-500/8 dark:ring-emerald-400/12">
         <CardHeader className="text-center pb-6">
           <div className="mb-4 flex justify-center">
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-red-600 to-red-700 dark:from-red-500 dark:to-red-600 flex items-center justify-center shadow-lg ring-2 ring-emerald-500/30">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-600 to-emerald-700 dark:from-emerald-500 dark:to-emerald-600 flex items-center justify-center shadow-lg ring-2 ring-amber-400/20">
               <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
@@ -105,7 +105,7 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="ihre@email.com"
                 required
-                className="h-11 border-red-500/20 focus:border-red-500/50 focus:ring-red-500/20 dark:border-red-400/30 dark:focus:border-red-400/50"
+                className="h-11 border-emerald-500/15 focus:border-emerald-500/40 focus:ring-emerald-500/15 dark:border-emerald-400/20 dark:focus:border-emerald-400/40"
               />
             </div>
 
@@ -118,7 +118,7 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
-                className="h-11 border-red-500/20 focus:border-red-500/50 focus:ring-red-500/20 dark:border-red-400/30 dark:focus:border-red-400/50"
+                className="h-11 border-emerald-500/15 focus:border-emerald-500/40 focus:ring-emerald-500/15 dark:border-emerald-400/20 dark:focus:border-emerald-400/40"
               />
             </div>
 

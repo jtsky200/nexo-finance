@@ -38,64 +38,18 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Premium Elegant Christmas Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#0a0e1a] via-[#1a1f35] to-[#0f1419] dark:from-[#050709] dark:via-[#0a0e1a] dark:to-black">
-        {/* Refined Snowflakes - Subtle and Elegant */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {Array.from({ length: 25 }).map((_, i) => (
-            <div
-              key={i}
-              className="absolute text-white/15 dark:text-white/8 animate-snowflake"
-              style={{
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 5}s`,
-                animationDuration: `${10 + Math.random() * 15}s`,
-                fontSize: `${6 + Math.random() * 10}px`,
-              }}
-            >
-              ✦
-            </div>
-          ))}
-        </div>
-        
-        {/* Premium Ambient Light Orbs - Very Subtle */}
-        <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-gradient-to-br from-emerald-600/8 to-emerald-800/3 rounded-full blur-[120px]"></div>
-          <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-gradient-to-br from-amber-500/6 to-amber-600/2 rounded-full blur-[100px]"></div>
-          <div className="absolute top-1/2 left-1/2 w-[500px] h-[500px] bg-gradient-to-br from-emerald-500/5 to-emerald-700/2 rounded-full blur-[150px] transform -translate-x-1/2 -translate-y-1/2"></div>
-        </div>
-
-        {/* Premium Depth Layer */}
-        <div className="absolute inset-0 bg-gradient-radial from-transparent via-transparent to-black/40 pointer-events-none"></div>
-      </div>
-      
-      {/* Premium Glass Card with Sophisticated Design */}
-      <Card className="w-full max-w-md relative z-10 border border-white/10 dark:border-white/5 bg-white/5 dark:bg-white/[0.02] backdrop-blur-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.37)] ring-1 ring-white/10 dark:ring-white/5">
-        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-amber-500/5 rounded-lg pointer-events-none"></div>
-        <CardHeader className="text-center pb-8 relative z-10">
-          <div className="mb-6 flex justify-center">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/20 to-amber-500/20 rounded-full blur-xl"></div>
-              <div className="relative w-20 h-20 rounded-full bg-gradient-to-br from-emerald-600 to-emerald-700 dark:from-emerald-500 dark:to-emerald-600 flex items-center justify-center shadow-[0_8px_16px_rgba(16,185,129,0.3)] ring-1 ring-white/20">
-                <svg className="w-9 h-9 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-              </div>
-            </div>
-          </div>
-          <CardTitle className="text-3xl font-bold text-foreground tracking-tight">
-            Anmelden
-          </CardTitle>
-          <CardDescription className="text-base mt-3 text-muted-foreground/80">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle className="text-2xl">Anmelden</CardTitle>
+          <CardDescription>
             Melden Sie sich bei Ihrem Nexo-Konto an
           </CardDescription>
         </CardHeader>
-        <CardContent className="relative z-10">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2.5">
-              <Label htmlFor="email" className="text-sm font-medium text-foreground/90">E-Mail</Label>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">E-Mail</Label>
               <Input
                 id="email"
                 type="email"
@@ -103,12 +57,11 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="ihre@email.com"
                 required
-                className="h-12 border-border/50 bg-background/50 backdrop-blur-sm focus:border-emerald-500/50 focus:ring-emerald-500/20 focus:bg-background/80 transition-all duration-200"
               />
             </div>
 
-            <div className="space-y-2.5">
-              <Label htmlFor="password" className="text-sm font-medium text-foreground/90">Passwort</Label>
+            <div className="space-y-2">
+              <Label htmlFor="password">Passwort</Label>
               <Input
                 id="password"
                 type="password"
@@ -116,31 +69,26 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
-                className="h-12 border-border/50 bg-background/50 backdrop-blur-sm focus:border-emerald-500/50 focus:ring-emerald-500/20 focus:bg-background/80 transition-all duration-200"
               />
             </div>
 
-            <Button 
-              type="submit" 
-              className="w-full h-12 bg-black hover:bg-gray-900 dark:bg-white dark:hover:bg-gray-100 dark:text-black text-white font-medium shadow-[0_4px_14px_0_rgba(0,0,0,0.39)] hover:shadow-[0_6px_20px_0_rgba(0,0,0,0.49)] transition-all duration-300" 
-              disabled={isLoading}
-            >
+            <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? 'Wird angemeldet...' : 'Anmelden'}
             </Button>
 
-            <div className="relative my-6">
+            <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <Separator className="bg-border/30" />
+                <Separator />
               </div>
-              <div className="relative flex justify-center text-xs uppercase tracking-wider">
-                <span className="bg-background/80 backdrop-blur-sm px-3 text-muted-foreground/70">Oder</span>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">Oder</span>
               </div>
             </div>
 
             <Button
               type="button"
               variant="outline"
-              className="w-full h-12 border-border/50 bg-background/30 backdrop-blur-sm hover:bg-background/50 hover:border-border transition-all duration-200"
+              className="w-full"
               onClick={async () => {
                 try {
                   setIsLoading(true);
@@ -177,12 +125,12 @@ export default function Login() {
               Mit Google anmelden
             </Button>
 
-            <div className="text-center text-sm text-muted-foreground/80 pt-2">
+            <div className="text-center text-sm text-muted-foreground">
               Noch kein Konto?{' '}
               <Button
                 type="button"
                 variant="link"
-                className="p-0 h-auto font-medium text-foreground/90 hover:text-foreground underline-offset-4"
+                className="p-0 h-auto"
                 onClick={() => setLocation('/register')}
               >
                 Jetzt registrieren

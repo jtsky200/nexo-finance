@@ -39,44 +39,63 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Christmas Background */}
-      <div className="absolute inset-0 bg-gradient-to-b from-red-50 via-green-50 to-red-50 dark:from-red-950/20 dark:via-green-950/20 dark:to-red-950/20">
-        {/* Snowflakes Animation */}
+      {/* Professional Christmas Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#1a1f2e] via-[#16213e] to-[#0f1419] dark:from-[#0a0d14] dark:via-[#0f1419] dark:to-[#050709]">
+        {/* Elegant Snowflakes Pattern */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {Array.from({ length: 50 }).map((_, i) => (
+          {Array.from({ length: 30 }).map((_, i) => (
             <div
               key={i}
-              className="absolute text-white/30 dark:text-white/10 animate-snowflake"
+              className="absolute text-white/20 dark:text-white/10 animate-snowflake"
               style={{
                 left: `${Math.random() * 100}%`,
                 top: `${Math.random() * 100}%`,
                 animationDelay: `${Math.random() * 5}s`,
-                animationDuration: `${5 + Math.random() * 10}s`,
-                fontSize: `${10 + Math.random() * 20}px`,
+                animationDuration: `${8 + Math.random() * 12}s`,
+                fontSize: `${8 + Math.random() * 12}px`,
               }}
             >
-              ❄
+              ✦
             </div>
           ))}
         </div>
-        {/* Christmas Ornaments */}
-        <div className="absolute top-10 left-10 text-4xl animate-bounce" style={{ animationDuration: '3s' }}>🎄</div>
-        <div className="absolute top-20 right-20 text-3xl animate-bounce" style={{ animationDuration: '2.5s', animationDelay: '0.5s' }}>🎁</div>
-        <div className="absolute bottom-20 left-20 text-3xl animate-bounce" style={{ animationDuration: '2.8s', animationDelay: '1s' }}>⭐</div>
-        <div className="absolute bottom-10 right-10 text-4xl animate-bounce" style={{ animationDuration: '3.2s', animationDelay: '1.5s' }}>🎅</div>
+        
+        {/* Subtle Geometric Christmas Elements */}
+        <div className="absolute top-0 left-0 w-full h-full opacity-10">
+          <div className="absolute top-20 left-20 w-32 h-32 border-2 border-emerald-500/30 rounded-full blur-xl"></div>
+          <div className="absolute top-40 right-32 w-24 h-24 border-2 border-red-500/30 rounded-full blur-xl"></div>
+          <div className="absolute bottom-32 left-32 w-40 h-40 border-2 border-amber-500/20 rounded-full blur-xl"></div>
+          <div className="absolute bottom-20 right-20 w-28 h-28 border-2 border-emerald-500/30 rounded-full blur-xl"></div>
+        </div>
+
+        {/* Elegant Light Rays */}
+        <div className="absolute inset-0 bg-gradient-radial from-transparent via-transparent to-black/20 pointer-events-none"></div>
+        
+        {/* Subtle Christmas Accent Lines */}
+        <div className="absolute top-0 left-1/4 w-px h-full bg-gradient-to-b from-transparent via-emerald-500/10 to-transparent pointer-events-none"></div>
+        <div className="absolute top-0 right-1/4 w-px h-full bg-gradient-to-b from-transparent via-red-500/10 to-transparent pointer-events-none"></div>
       </div>
       
-      <Card className="w-full max-w-md relative z-10 shadow-2xl border-2 border-red-200 dark:border-red-800 bg-background/95 backdrop-blur-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">Anmelden</CardTitle>
-          <CardDescription>
+      <Card className="w-full max-w-md relative z-10 shadow-2xl border border-emerald-500/20 dark:border-emerald-400/30 bg-background/98 backdrop-blur-xl ring-1 ring-emerald-500/10 dark:ring-emerald-400/20">
+        <CardHeader className="text-center pb-6">
+          <div className="mb-4 flex justify-center">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 dark:from-emerald-400 dark:to-emerald-500 flex items-center justify-center shadow-lg">
+              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            </div>
+          </div>
+          <CardTitle className="text-3xl font-bold bg-gradient-to-r from-emerald-600 to-emerald-400 dark:from-emerald-400 dark:to-emerald-300 bg-clip-text text-transparent">
+            Anmelden
+          </CardTitle>
+          <CardDescription className="text-base mt-2">
             Melden Sie sich bei Ihrem Nexo-Konto an
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">E-Mail</Label>
+              <Label htmlFor="email" className="text-sm font-medium">E-Mail</Label>
               <Input
                 id="email"
                 type="email"
@@ -84,11 +103,12 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="ihre@email.com"
                 required
+                className="h-11 border-emerald-500/20 focus:border-emerald-500/50 focus:ring-emerald-500/20 dark:border-emerald-400/30 dark:focus:border-emerald-400/50"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Passwort</Label>
+              <Label htmlFor="password" className="text-sm font-medium">Passwort</Label>
               <Input
                 id="password"
                 type="password"
@@ -96,10 +116,15 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
+                className="h-11 border-emerald-500/20 focus:border-emerald-500/50 focus:ring-emerald-500/20 dark:border-emerald-400/30 dark:focus:border-emerald-400/50"
               />
             </div>
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button 
+              type="submit" 
+              className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-700 hover:to-emerald-600 text-white shadow-lg hover:shadow-xl transition-all duration-200" 
+              disabled={isLoading}
+            >
               {isLoading ? 'Wird angemeldet...' : 'Anmelden'}
             </Button>
 

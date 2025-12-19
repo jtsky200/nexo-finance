@@ -269,18 +269,27 @@ footer::-webkit-scrollbar {
   height: 0 !important;
 }
 
-/* Christmas Snowflake Animation */
+/* Professional Christmas Snowflake Animation */
 @keyframes snowflake {
   0% {
-    transform: translateY(-100vh) rotate(0deg);
+    transform: translateY(-100vh) rotate(0deg) translateX(0);
+    opacity: 0.8;
+  }
+  50% {
     opacity: 1;
   }
   100% {
-    transform: translateY(100vh) rotate(360deg);
+    transform: translateY(100vh) rotate(360deg) translateX(20px);
     opacity: 0;
   }
 }
 
 .animate-snowflake {
   animation: snowflake linear infinite;
+  will-change: transform, opacity;
+}
+
+/* Radial Gradient for Professional Background */
+.bg-gradient-radial {
+  background: radial-gradient(circle at center, var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to));
 }

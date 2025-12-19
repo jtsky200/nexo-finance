@@ -53,6 +53,69 @@ When creating or modifying dialogs (DialogContent components), ALWAYS use these 
 </DialogContent>
 ```
 
+## Live Testing and Debugging Workflow
+
+**CRITICAL: When user reports issues/störungen, follow this EXACT workflow:**
+
+1. **Initial Live Testing:**
+   - **CRITICAL: Use the correct URL based on version:**
+     - **Web version:** Navigate to https://nexo-jtsky100.web.app/login
+     - **Mobile version:** Navigate to https://m-nexo-jtsky100.web.app/aichat
+   - **IMPORTANT: Only start ONE browser instance, never two browsers simultaneously**
+   - For web version: Login with credentials:
+     - Email: antonio10jonathan@yahoo.com
+     - Password: 12345678
+   - Test the reported issue/feature
+   - Check browser console logs using `browser_console_messages`
+   - Check network requests using `browser_network_requests` if needed
+   - Take a snapshot using `browser_snapshot` to see current state
+   - Document all errors and issues found
+
+2. **Code Investigation and Fixing:**
+   - Search codebase for related code sections
+   - Read relevant files to understand the issue
+   - Identify root cause of the problem
+   - Implement fixes in code
+   - Check for linter errors and fix them
+   - Review the changes to ensure they address the issue
+
+3. **Request Build/Deploy Permission:**
+   - **NEVER build or deploy automatically**
+   - Ask user: "Soll ich die Änderungen jetzt bauen und deployen?" or "Should I build and deploy the changes now?"
+   - Wait for explicit user confirmation ("ja", "yes", "build", "deploy", etc.)
+
+4. **Build and Deploy (after user confirmation):**
+   - Run `npm run build` (or `npm run build:mobile` if needed)
+   - Run `firebase deploy --only hosting` (or appropriate deploy command)
+   - Commit and push changes to Git
+
+5. **Post-Deployment Verification:**
+   - **MANDATORY: Test again on live site after deployment**
+   - **CRITICAL: Use the correct URL based on version:**
+     - **Web version:** Navigate to https://nexo-jtsky100.web.app/login
+     - **Mobile version:** Navigate to https://m-nexo-jtsky100.web.app/aichat
+   - For web version: Login again with same credentials (antonio10jonathan@yahoo.com / 12345678)
+   - Test the fixed feature/issue again
+   - Check browser console logs again for any remaining errors
+   - Check network requests if relevant
+   - Take a screenshot using `browser_take_screenshot`
+   - Verify in the screenshot that the issue is actually resolved
+   - Confirm to user that the issue is fixed
+
+6. **Browser Management:**
+   - **CRITICAL: Only use ONE browser instance at a time**
+   - Before starting a new browser session, ensure any previous browser is closed
+   - Never have multiple browser tabs/instances open simultaneously
+   - Close browser after testing is complete
+
+7. **Error Documentation:**
+   - Log all console errors found
+   - Document network request failures
+   - Note any visual issues observed
+   - Report findings clearly to user
+
+**This workflow must be followed EXACTLY - no shortcuts, no hallucinations, no assumptions.**
+
 ## General Development Rules
 
 - Always test changes locally when possible before suggesting deployment

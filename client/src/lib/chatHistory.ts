@@ -41,24 +41,28 @@ export function getChatHistory(): ChatConversation[] {
  */
 export async function saveChatConversation(conversation: ChatConversation): Promise<void> {
   try {
-    if (conversation.id && conversation.id.startsWith('chat_')) {
-      // Update existing conversation
+    // Check if conversation has a Firebase ID (starts with proper format)
+    // Temporary IDs from createNewChat() start with 'chat_' but are not in Firebase yet
+    if (conversation.id && !conversation.id.startsWith('chat_')) {
+      // Update existing conversation (has Firebase ID)
       await updateChatConversation(conversation.id, {
         title: conversation.title,
         messages: conversation.messages,
       });
     } else {
-      // Create new conversation
+      // Create new conversation (temporary ID or no ID)
       const result = await createChatConversation({
         title: conversation.title,
         messages: conversation.messages,
       });
       
-      // Update the conversation ID
+      // Update the conversation ID with the Firebase ID
       conversation.id = result.id;
     }
   } catch (error) {
-    console.error('Fehler beim Speichern der Chat-Historie:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Fehler beim Speichern der Chat-Historie:', error);
+    }
     throw error;
   }
 }

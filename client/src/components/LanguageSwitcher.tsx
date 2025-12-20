@@ -27,15 +27,14 @@ export default function LanguageSwitcher() {
     <div style={{ position: 'relative', zIndex: 10003, pointerEvents: 'auto' }}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="font-semibold gap-2"
-            style={{ pointerEvents: 'auto', position: 'relative' }}
+          <button
+            type="button"
+            className="inline-flex items-center justify-center gap-2 rounded-md text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 px-3"
+            style={{ pointerEvents: 'auto', position: 'relative', zIndex: 10004 }}
           >
             <Globe className="w-4 h-4" />
             {currentLanguage.code.toUpperCase()}
-          </Button>
+          </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48" style={{ zIndex: 10004, pointerEvents: 'auto' }}>
         {languages.map((lang) => (

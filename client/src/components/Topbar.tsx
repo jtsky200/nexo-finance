@@ -93,17 +93,17 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
         <div className="relative" style={{ zIndex: 10003, pointerEvents: 'auto' }}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
-                className="relative h-10 w-10 rounded-full" 
-                style={{ pointerEvents: 'auto', position: 'relative' }}
+              <button
+                type="button"
+                className="relative h-10 w-10 rounded-full inline-flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground"
+                style={{ pointerEvents: 'auto', position: 'relative', zIndex: 10004 }}
               >
                 <Avatar>
                   <AvatarFallback className="bg-primary text-primary-foreground">
                     {getUserInitials()}
                   </AvatarFallback>
                 </Avatar>
-              </Button>
+              </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56" style={{ zIndex: 10004, pointerEvents: 'auto' }}>
               <DropdownMenuLabel>

@@ -53,14 +53,15 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
   };
 
   return (
-    <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6 relative z-[9999]" style={{ pointerEvents: 'auto' }}>
+    <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6 relative" style={{ zIndex: 10000, pointerEvents: 'auto' }}>
       {/* Left side: Menu button and title */}
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
           size="icon"
           onClick={onMenuClick}
-          className="lg:hidden pointer-events-auto relative z-[9999]"
+          className="lg:hidden"
+          style={{ zIndex: 10001, pointerEvents: 'auto', position: 'relative' }}
         >
           <Menu className="w-5 h-5" />
         </Button>
@@ -68,9 +69,9 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
       </div>
 
       {/* Right side: Language toggle, theme toggle, and user menu */}
-      <div className="flex items-center gap-2 relative z-[9999]" style={{ pointerEvents: 'auto' }}>
+      <div className="flex items-center gap-2 relative" style={{ zIndex: 10001, pointerEvents: 'auto' }}>
         {/* Language switcher dropdown */}
-        <div className="relative z-[9999]" style={{ pointerEvents: 'auto' }}>
+        <div className="relative" style={{ zIndex: 10002, pointerEvents: 'auto' }}>
           <LanguageSwitcher />
         </div>
 
@@ -79,8 +80,8 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
           variant="ghost"
           size="icon"
           onClick={toggleTheme}
-          className="h-9 w-9 relative z-[9999]"
-          style={{ pointerEvents: 'auto' }}
+          className="h-9 w-9"
+          style={{ zIndex: 10002, pointerEvents: 'auto', position: 'relative' }}
           title={theme === 'dark' ? t('common.switchToLight', 'Zu hellem Design wechseln') : t('common.switchToDark', 'Zu dunklem Design wechseln')}
         >
           {theme === 'dark' ? (
@@ -91,10 +92,10 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
         </Button>
 
         {/* User menu */}
-        <div className="relative z-[9999]" style={{ pointerEvents: 'auto' }}>
+        <div className="relative" style={{ zIndex: 10002, pointerEvents: 'auto' }}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-10 w-10 rounded-full z-[9999]" style={{ pointerEvents: 'auto' }}>
+              <Button variant="ghost" className="relative h-10 w-10 rounded-full" style={{ zIndex: 10003, pointerEvents: 'auto' }}>
                 <Avatar>
                   <AvatarFallback className="bg-primary text-primary-foreground">
                     {getUserInitials()}
@@ -102,7 +103,7 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 z-[9999]">
+            <DropdownMenuContent align="end" className="w-56" style={{ zIndex: 10004 }}>
               <DropdownMenuLabel>
                 <div className="flex flex-col space-y-1">
                   <p className="text-sm font-medium">{user?.displayName || 'User'}</p>

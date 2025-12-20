@@ -29,14 +29,14 @@ export default function LanguageSwitcher() {
         <Button
           variant="ghost"
           size="sm"
-          className="font-semibold gap-2 relative z-[9999]"
-          style={{ pointerEvents: 'auto' }}
+          className="font-semibold gap-2 relative"
+          style={{ zIndex: 10003, pointerEvents: 'auto' }}
         >
           <Globe className="w-4 h-4" />
           {currentLanguage.code.toUpperCase()}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48 z-[9999]">
+      <DropdownMenuContent align="end" className="w-48" style={{ zIndex: 10004 }}>
         {languages.map((lang) => (
           <DropdownMenuItem
             key={lang.code}

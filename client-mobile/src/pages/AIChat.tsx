@@ -217,6 +217,7 @@ export default function AIChat() {
         isSavingRef.current = true;
         try {
           const chat = getChatConversation(currentChatId, chatHistory);
+          // If chat exists in history, update it; otherwise create a new one
           if (chat) {
             // Generate title from first user message if not set
             const firstUserMessage = messages.find(m => m.role === 'user');
@@ -228,9 +229,26 @@ export default function AIChat() {
             chat.updatedAt = new Date().toISOString();
             
             await saveChatConversation(chat);
-            // Don't refetch immediately - let it happen naturally or on next interaction
-            // refetchHistory(); // Removed to prevent race condition
+          } else {
+            // Chat doesn't exist in history yet, create it
+            const firstUserMessage = messages.find(m => m.role === 'user');
+            const newChat: ChatConversation = {
+              id: currentChatId,
+              userId: '',
+              title: firstUserMessage ? generateChatTitle(firstUserMessage.content) : 'Neue Konversation',
+              messages: messages,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            await saveChatConversation(newChat);
+            // Update currentChatId with the Firebase ID if it was a temporary ID
+            if (newChat.id.startsWith('chat_')) {
+              // The ID will be updated by saveChatConversation
+              setCurrentChatId(newChat.id);
+            }
           }
+          // Don't refetch immediately - let it happen naturally or on next interaction
+          // refetchHistory(); // Removed to prevent race condition
         } catch (error) {
           const isDev = typeof (globalThis as any).process !== 'undefined' && (globalThis as any).process?.env?.NODE_ENV === 'development';
           if (isDev) {
@@ -338,6 +356,7 @@ export default function AIChat() {
       try {
         const newChat = createNewChat();
         await saveChatConversation(newChat);
+        // saveChatConversation updates newChat.id with the Firebase ID
         setCurrentChatId(newChat.id);
         await refetchHistory();
       } catch (error) {

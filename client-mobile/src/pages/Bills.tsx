@@ -101,11 +101,11 @@ export default function MobileBills() {
       await createReminder({
         title: newBill.title,
         type: 'zahlung',
-        status: 'offen',
+        status: 'offen' as any,
         amount: Math.round(parseFloat(newBill.amount) * 100),
         dueDate: newBill.dueDate ? new Date(newBill.dueDate) : new Date(),
         description: newBill.iban ? `IBAN: ${newBill.iban}` : '',
-      });
+      } as any);
       
       toast.success('Rechnung hinzugefügt');
       hapticSuccess();
@@ -469,7 +469,7 @@ export default function MobileBills() {
 
               <Button
                 onClick={handleAddBill}
-                className="w-full mobile-btn bg-primary text-primary-foreground mt-4"
+                className="w-auto mx-auto mobile-btn bg-primary text-primary-foreground mt-4"
               >
                 Rechnung hinzufügen
               </Button>

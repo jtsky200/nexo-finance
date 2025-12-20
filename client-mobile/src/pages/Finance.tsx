@@ -868,7 +868,7 @@ export default function MobileFinance() {
 
               <Button
                 onClick={handleAddEntry}
-                className={`w-full mobile-btn mt-4 ${
+                className={`w-auto mx-auto mobile-btn mt-4 ${
                   entryType === 'einnahme' 
                     ? 'bg-green-600 hover:bg-green-700 text-white' 
                     : 'bg-red-600 hover:bg-red-700 text-white'

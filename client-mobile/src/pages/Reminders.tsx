@@ -341,7 +341,7 @@ export default function MobileReminders() {
             hapticSelection();
             openDialog();
           }}
-          className="flex-1 h-12 min-h-[44px]"
+          className="w-auto mx-auto h-12 min-h-[44px]"
         >
           <Plus className="w-5 h-5 mr-2" />
           Erinnerung hinzufügen

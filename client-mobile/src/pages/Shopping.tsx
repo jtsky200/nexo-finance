@@ -2046,7 +2046,7 @@ export default function MobileShopping() {
 
               <Button
                 onClick={handleAddItem}
-                className="w-full mobile-btn bg-primary text-primary-foreground mt-4"
+                className="w-auto mx-auto mobile-btn bg-primary text-primary-foreground mt-4"
               >
                 Hinzufügen
               </Button>

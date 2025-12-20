@@ -257,7 +257,7 @@ export default function Dashboard() {
             <Button 
               variant="ghost" 
               size="sm" 
-              className="w-full mt-3 text-muted-foreground"
+              className="w-auto mx-auto mt-3 text-muted-foreground"
               onClick={() => setLocation('/reminders')}
             >
               {t('dashboard.viewAll', 'Alle anzeigen')}
@@ -356,7 +356,7 @@ export default function Dashboard() {
             <Button 
               variant="ghost" 
               size="sm" 
-              className="w-full mt-3 text-muted-foreground"
+              className="w-auto mx-auto mt-3 text-muted-foreground"
               onClick={() => setLocation('/bills')}
             >
               {t('dashboard.viewAll', 'Alle anzeigen')}
@@ -385,7 +385,7 @@ export default function Dashboard() {
               <Button 
                 size="sm" 
                 variant="outline" 
-                className="w-full"
+                className="w-auto mx-auto"
                 onClick={() => setLocation('/taxes')}
               >
                 {t('dashboard.viewTaxProfile')}

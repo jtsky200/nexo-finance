@@ -71,9 +71,7 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
       {/* Right side: Language toggle, theme toggle, and user menu */}
       <div className="flex items-center gap-2 relative" style={{ zIndex: 10001, pointerEvents: 'auto' }}>
         {/* Language switcher dropdown */}
-        <div className="relative" style={{ zIndex: 10002, pointerEvents: 'auto' }}>
-          <LanguageSwitcher />
-        </div>
+        <LanguageSwitcher />
 
         {/* Theme toggle */}
         <Button
@@ -92,10 +90,14 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
         </Button>
 
         {/* User menu */}
-        <div className="relative" style={{ zIndex: 10002, pointerEvents: 'auto' }}>
+        <div className="relative" style={{ zIndex: 10003, pointerEvents: 'auto' }}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-10 w-10 rounded-full" style={{ zIndex: 10003, pointerEvents: 'auto' }}>
+              <Button 
+                variant="ghost" 
+                className="relative h-10 w-10 rounded-full" 
+                style={{ pointerEvents: 'auto', position: 'relative' }}
+              >
                 <Avatar>
                   <AvatarFallback className="bg-primary text-primary-foreground">
                     {getUserInitials()}
@@ -103,7 +105,7 @@ export default function Topbar({ title, onMenuClick }: TopbarProps) {
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56" style={{ zIndex: 10004 }}>
+            <DropdownMenuContent align="end" className="w-56" style={{ zIndex: 10004, pointerEvents: 'auto' }}>
               <DropdownMenuLabel>
                 <div className="flex flex-col space-y-1">
                   <p className="text-sm font-medium">{user?.displayName || 'User'}</p>

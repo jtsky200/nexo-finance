@@ -24,19 +24,20 @@ export default function LanguageSwitcher() {
   const currentLanguage = languages.find(lang => lang.code === i18n.language) || languages[0];
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="font-semibold gap-2 relative"
-          style={{ zIndex: 10003, pointerEvents: 'auto' }}
-        >
-          <Globe className="w-4 h-4" />
-          {currentLanguage.code.toUpperCase()}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48" style={{ zIndex: 10004 }}>
+    <div style={{ position: 'relative', zIndex: 10003, pointerEvents: 'auto' }}>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="font-semibold gap-2"
+            style={{ pointerEvents: 'auto', position: 'relative' }}
+          >
+            <Globe className="w-4 h-4" />
+            {currentLanguage.code.toUpperCase()}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48" style={{ zIndex: 10004, pointerEvents: 'auto' }}>
         {languages.map((lang) => (
           <DropdownMenuItem
             key={lang.code}
@@ -54,5 +55,6 @@ export default function LanguageSwitcher() {
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+    </div>
   );
 }

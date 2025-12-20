@@ -122,7 +122,7 @@ export function TutorialHighlight({ onComplete, onOpenChat }: TutorialHighlightP
   const tooltipStyle = getTooltipStyle();
 
   return (
-    <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 9999 }}>
+    <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 9998 }}>
       {/* Overlay mit Loch für das Ziel-Element */}
       <svg className="absolute inset-0 w-full h-full">
         <defs>

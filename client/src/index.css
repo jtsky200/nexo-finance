@@ -262,6 +262,26 @@ article::-webkit-scrollbar,
 main::-webkit-scrollbar,
 aside::-webkit-scrollbar,
 nav::-webkit-scrollbar,
+/* Ensure Topbar buttons are always clickable and above everything */
+header[class*="h-16"] {
+  z-index: 10000 !important;
+  pointer-events: auto !important;
+  position: relative !important;
+}
+
+header[class*="h-16"] button {
+  z-index: 10001 !important;
+  pointer-events: auto !important;
+  position: relative !important;
+}
+
+header[class*="h-16"] [role="button"],
+header[class*="h-16"] [data-radix-dropdown-menu-trigger] {
+  z-index: 10002 !important;
+  pointer-events: auto !important;
+  position: relative !important;
+}
+
 header::-webkit-scrollbar,
 footer::-webkit-scrollbar {
   display: none !important;

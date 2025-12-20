@@ -107,7 +107,7 @@ export function TutorialHighlight({ onComplete, onOpenChat }: TutorialHighlightP
     let top = targetRect.bottom + margin;
     let left = targetRect.left + (targetRect.width / 2) - (tooltipWidth / 2);
 
-    // Korrigiere Position wenn außerhalb des Viewports
+    // Korrigiere Position wenn ausserhalb des Viewports
     if (left < margin) left = margin;
     if (left + tooltipWidth > window.innerWidth - margin) {
       left = window.innerWidth - tooltipWidth - margin;

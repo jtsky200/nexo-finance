@@ -60,7 +60,7 @@ async function callFunctionWithTimeout<T = any>(
         case 'aborted':
           throw new Error('Anfrage wurde abgebrochen');
         case 'out-of-range':
-          throw new Error('Wert außerhalb des gültigen Bereichs');
+          throw new Error('Wert ausserhalb des gültigen Bereichs');
         case 'unimplemented':
           throw new Error('Funktion nicht implementiert');
         case 'internal':

@@ -100,7 +100,7 @@ export default function ChatSidebar({
               <button
                 onClick={onClose}
                 className="p-2 hover:bg-muted rounded-lg transition-colors"
-                aria-label="Menü schließen"
+                aria-label="Menü schliessen"
                 tabIndex={open ? 0 : -1}
               >
                 <X className="w-5 h-5" />

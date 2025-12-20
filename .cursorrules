@@ -179,3 +179,46 @@ When creating or modifying dialogs (DialogContent components), ALWAYS use these 
 - Follow existing code patterns and conventions in the codebase
 - Ensure all linter errors are resolved before suggesting deployment
 
+## German Language Rules (Swiss Grammar)
+
+**CRITICAL: Swiss German Grammar Rules - ALWAYS FOLLOW:**
+
+- **FORBIDDEN: NEVER use "ß" (Eszett) character in ANY German text**
+- **MANDATORY: ALWAYS use "ss" instead of "ß" in ALL German text**
+- **Examples:**
+  - ✅ CORRECT: "müssen" → "müssen" (already correct)
+  - ✅ CORRECT: "Straße" → "Strasse"
+  - ✅ CORRECT: "groß" → "gross"
+  - ✅ CORRECT: "Fuß" → "Fuss"
+  - ✅ CORRECT: "Maße" → "Masse"
+  - ✅ CORRECT: "Maß" → "Mass"
+  - ✅ CORRECT: "außen" → "aussen"
+  - ✅ CORRECT: "draußen" → "draussen"
+  - ✅ CORRECT: "heißen" → "heissen"
+  - ✅ CORRECT: "schließen" → "schliessen"
+  - ✅ CORRECT: "größer" → "grösser"
+  - ✅ CORRECT: "besser" → "besser" (already correct)
+  - ✅ CORRECT: "müssen" → "müssen" (already correct)
+  - ❌ FORBIDDEN: "Straße", "groß", "Fuß", "Maße", "außen", "heißen", "schließen", "größer"
+
+- **This rule applies to:**
+  - All user-facing German text (UI labels, messages, tooltips, etc.)
+  - All German comments in code
+  - All German documentation
+  - All German error messages
+  - All German console logs (when in German)
+  - All German variable names (if using German)
+  - All German function names (if using German)
+
+- **This rule does NOT apply to:**
+  - Code syntax, keywords, or programming language elements
+  - English text
+  - Other languages
+  - File names (unless they contain German text)
+  - URLs or technical identifiers
+
+- **When in doubt:**
+  - Search for "ß" in the file before committing
+  - Replace ALL instances of "ß" with "ss"
+  - Verify that the replacement makes sense in context
+

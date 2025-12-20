@@ -411,7 +411,7 @@ export function AIChatBox({
     // Validierung: Maximal 10MB
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
     if (file.size > MAX_FILE_SIZE) {
-      toast.error(`Datei ist zu groß. Maximal ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(0)}MB erlaubt.`);
+      toast.error(`Datei ist zu gross. Maximal ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(0)}MB erlaubt.`);
       return;
     }
     
@@ -440,7 +440,7 @@ export function AIChatBox({
           reader.readAsDataURL(file);
         }),
         new Promise<string>((_, reject) => 
-          setTimeout(() => reject(new Error('Upload-Timeout: Die Datei ist zu groß oder die Verbindung zu langsam.')), 30000)
+          setTimeout(() => reject(new Error('Upload-Timeout: Die Datei ist zu gross oder die Verbindung zu langsam.')), 30000)
         ),
       ]);
 
@@ -489,7 +489,7 @@ export function AIChatBox({
     // Validierung: Maximal 5MB für Bilder
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
     if (file.size > MAX_IMAGE_SIZE) {
-      toast.error(`Bild ist zu groß. Maximal ${(MAX_IMAGE_SIZE / 1024 / 1024).toFixed(0)}MB erlaubt.`);
+      toast.error(`Bild ist zu gross. Maximal ${(MAX_IMAGE_SIZE / 1024 / 1024).toFixed(0)}MB erlaubt.`);
       return;
     }
     
@@ -518,7 +518,7 @@ export function AIChatBox({
           reader.readAsDataURL(file);
         }),
         new Promise<string>((_, reject) => 
-          setTimeout(() => reject(new Error('Upload-Timeout: Das Bild ist zu groß oder die Verbindung zu langsam.')), 30000)
+          setTimeout(() => reject(new Error('Upload-Timeout: Das Bild ist zu gross oder die Verbindung zu langsam.')), 30000)
         ),
       ]);
 
@@ -606,7 +606,7 @@ export function AIChatBox({
         // Validierung: Maximal 10MB Audio
         const MAX_AUDIO_SIZE = 10 * 1024 * 1024; // 10MB
         if (blob.size > MAX_AUDIO_SIZE) {
-          toast.error('Audio-Aufnahme ist zu groß. Bitte kürze die Aufnahme.');
+          toast.error('Audio-Aufnahme ist zu gross. Bitte kürze die Aufnahme.');
           stream.getTracks().forEach(track => track.stop());
           return;
         }

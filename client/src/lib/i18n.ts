@@ -419,7 +419,7 @@ const resources = {
         delete: 'Löschen',
         cancel: 'Abbrechen',
         save: 'Speichern',
-        close: 'Schließen',
+        close: 'Schliessen',
         search: 'Suchen',
         filter: 'Filtern',
         sort: 'Sortieren',

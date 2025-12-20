@@ -3082,7 +3082,7 @@ export default function MobileShopping() {
 
           <DialogFooter className="px-5 pb-3 pt-2 gap-2.5 flex-shrink-0">
             <Button variant="outline" onClick={() => setShowListDialog(false)} className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium">
-              Schließen
+              Schliessen
             </Button>
             <Button onClick={() => {
               setShowListDialog(false);

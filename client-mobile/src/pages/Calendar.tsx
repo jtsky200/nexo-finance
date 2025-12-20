@@ -1090,7 +1090,7 @@ export default function MobileCalendar() {
               onClick={() => setShowDayDialog(false)}
               className="h-11 min-h-[44px] w-full rounded-xl text-sm font-medium"
             >
-              Schließen
+              Schliessen
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1226,7 +1226,7 @@ export default function MobileCalendar() {
               onClick={() => setShowEventDialog(false)}
               className="h-11 min-h-[44px] w-full rounded-xl text-sm font-medium"
             >
-              Schließen
+              Schliessen
             </Button>
           </DialogFooter>
         </DialogContent>

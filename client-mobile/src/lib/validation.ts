@@ -172,7 +172,7 @@ export function validateCurrency(amount: string | number): { valid: boolean; err
   }
 
   if (num > 1000000000) {
-    return { valid: false, error: 'Betrag ist zu groß' };
+    return { valid: false, error: 'Betrag ist zu gross' };
   }
 
   return { valid: true };

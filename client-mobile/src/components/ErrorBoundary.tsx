@@ -112,7 +112,7 @@ function ErrorFallback({
             <CardTitle>Ein Fehler ist aufgetreten</CardTitle>
           </div>
           <CardDescription>
-            Die Anwendung ist auf einen unerwarteten Fehler gestoßen. Bitte versuchen Sie es erneut.
+            Die Anwendung ist auf einen unerwarteten Fehler gestossen. Bitte versuchen Sie es erneut.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

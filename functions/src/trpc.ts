@@ -3266,7 +3266,7 @@ Wenn ein Benutzer einen Termin, eine Erinnerung oder eine Aktivität erwähnt, d
 
 ERKENNE OUTDOOR-AKTIVITÄTEN an folgenden Begriffen:
 - "spazieren gehen", "Spaziergang", "laufen", "joggen", "wandern"
-- "im Park", "draußen", "outdoor", "im Freien", "außen"
+- "im Park", "draussen", "outdoor", "im Freien", "aussen"
 - "Fahrrad fahren", "radfahren", "biken"
 - "Picknick", "Grillen", "Camping"
 - "Sport", "Training" (wenn im Freien)
@@ -3748,7 +3748,7 @@ Die Einkaufsliste hilft dir, nichts zu vergessen und organisiert zu bleiben.`,
 3. Die App teilt den Betrag automatisch auf
 4. Du erhältst Erinnerungen für jede Rate
 
-So kannst du größere Ausgaben über mehrere Monate verteilen.`,
+So kannst du grössere Ausgaben über mehrere Monate verteilen.`,
     };
   }
   

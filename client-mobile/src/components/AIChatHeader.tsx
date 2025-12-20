@@ -111,7 +111,7 @@ export default function AIChatHeader({
     
     if (action.path) {
       if (action.action === 'create' || action.action === 'scan') {
-        // Speichere die Aktion in localStorage, damit die Zielseite weiß, was zu tun ist
+        // Speichere die Aktion in localStorage, damit die Zielseite weiss, was zu tun ist
         localStorage.setItem('nexo_quick_action', action.action);
       }
       setLocation(action.path);

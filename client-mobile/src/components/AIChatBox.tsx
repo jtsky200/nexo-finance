@@ -370,7 +370,7 @@ export function AIChatBox({
   const handleFileUpload = useCallback(async (file: File) => {
     const MAX_FILE_SIZE = 10 * 1024 * 1024;
     if (file.size > MAX_FILE_SIZE) {
-      toast.error(`Datei ist zu groß. Maximal ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(0)}MB erlaubt.`);
+      toast.error(`Datei ist zu gross. Maximal ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(0)}MB erlaubt.`);
       return;
     }
     
@@ -444,7 +444,7 @@ export function AIChatBox({
     
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
     if (file.size > MAX_IMAGE_SIZE) {
-      toast.error(`Bild ist zu groß. Maximal ${(MAX_IMAGE_SIZE / 1024 / 1024).toFixed(0)}MB erlaubt.`);
+      toast.error(`Bild ist zu gross. Maximal ${(MAX_IMAGE_SIZE / 1024 / 1024).toFixed(0)}MB erlaubt.`);
       return;
     }
     
@@ -558,7 +558,7 @@ export function AIChatBox({
         
         const MAX_AUDIO_SIZE = 10 * 1024 * 1024;
         if (blob.size > MAX_AUDIO_SIZE) {
-          toast.error('Audio-Aufnahme ist zu groß. Bitte kürze die Aufnahme.');
+          toast.error('Audio-Aufnahme ist zu gross. Bitte kürze die Aufnahme.');
           stream.getTracks().forEach(track => track.stop());
           return;
         }

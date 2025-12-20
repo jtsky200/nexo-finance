@@ -244,7 +244,7 @@ export default function MobileTaxes() {
             </div>
             <DialogFooter className="px-5 pb-3 pt-2">
               <Button variant="outline" onClick={handleDialogClose} className="h-11 min-h-[44px] w-full rounded-xl text-sm font-medium">
-                Schließen
+                Schliessen
               </Button>
             </DialogFooter>
           </DialogContent>

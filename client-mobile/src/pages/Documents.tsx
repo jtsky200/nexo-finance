@@ -263,7 +263,7 @@ export default function MobileDocuments() {
     
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
     if (file.size > MAX_FILE_SIZE) {
-      toast.error('Datei ist zu groß. Maximal 10MB erlaubt.');
+      toast.error('Datei ist zu gross. Maximal 10MB erlaubt.');
       return;
     }
 
@@ -708,7 +708,7 @@ export default function MobileDocuments() {
           
           <DialogFooter className="px-5 pb-3 pt-2">
             <Button variant="outline" onClick={() => setShowPreview(false)} className="h-11 min-h-[44px] w-full rounded-xl text-sm font-medium">
-              Schließen
+              Schliessen
             </Button>
           </DialogFooter>
         </DialogContent>

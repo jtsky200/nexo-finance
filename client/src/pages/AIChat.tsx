@@ -21,7 +21,7 @@ import {
 
 const SYSTEM_MESSAGE: Message = {
   role: 'system',
-  content: 'Du bist ein hilfreicher Assistent für die Nexo-Anwendung. Du hilfst Benutzern bei Fragen zu Finanzen, Rechnungen, Terminen und anderen Funktionen der App.',
+  content: 'Du bist ein hilfreicher Assistent für die Nexo-Anwendung. Du hilfst Benutzern bei Fragen zu Finanzen, Rechnungen, Terminen und anderen Funktionen der App. WICHTIG: Verwende IMMER "ss" statt "ß" in allen deutschen Texten (Schweizer Grammatik).',
 };
 
 export default function AIChat() {

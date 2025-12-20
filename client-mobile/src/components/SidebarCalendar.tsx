@@ -704,7 +704,7 @@ export default function SidebarCalendar() {
                   }, 100);
                 } catch (error) {
                   console.error('Dialog close error:', error);
-                  toast.error('Fehler beim Schließen des Dialogs');
+                  toast.error('Fehler beim Schliessen des Dialogs');
                 }
               }}
               className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium"
@@ -716,7 +716,7 @@ export default function SidebarCalendar() {
               onClick={() => setShowDayDialog(false)}
               className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium"
             >
-              Schließen
+              Schliessen
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1055,7 +1055,7 @@ export default function SidebarCalendar() {
               onClick={() => setShowEventDialog(false)}
               className="h-11 min-h-[44px] w-full rounded-xl text-sm font-medium"
             >
-              Schließen
+              Schliessen
             </Button>
           </DialogFooter>
         </DialogContent>

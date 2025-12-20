@@ -16,7 +16,7 @@ import { useChatHistory, createNewChat, saveChatConversation, getChatConversatio
 
 const SYSTEM_MESSAGE: Message = {
   role: 'system',
-  content: 'Du bist ein hilfreicher Assistent für die Nexo-Anwendung. Du hilfst Benutzern bei Fragen zu Finanzen, Rechnungen, Terminen und anderen Funktionen der App.',
+  content: 'Du bist ein hilfreicher Assistent für die Nexo-Anwendung. Du hilfst Benutzern bei Fragen zu Finanzen, Rechnungen, Terminen und anderen Funktionen der App. WICHTIG: Verwende IMMER "ss" statt "ß" in allen deutschen Texten (Schweizer Grammatik).',
 };
 
 interface AIChatDialogProps {
@@ -93,7 +93,7 @@ export default function AIChatDialog({ open, onOpenChange, pendingReminder, onRe
     };
   }, [isDragging]);
 
-  // ESC-Taste zum Schließen
+  // ESC-Taste zum Schliessen
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && open) {
@@ -374,7 +374,7 @@ export default function AIChatDialog({ open, onOpenChange, pendingReminder, onRe
               onClick={(e) => { e.stopPropagation(); onOpenChange(false); }}
               onMouseDown={(e) => e.stopPropagation()}
               className="rounded-full p-2 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              aria-label="Schließen"
+              aria-label="Schliessen"
             >
               <X className="h-5 w-5" />
             </button>

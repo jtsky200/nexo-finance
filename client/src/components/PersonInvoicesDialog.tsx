@@ -385,7 +385,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
 
   const handleConvertToInstallment = async () => {
     if (!invoiceToConvert || !convertInstallmentAmount || parseFloat(convertInstallmentAmount) <= 0) {
-      toast.error('Bitte Rate-Betrag eingeben (größer als 0)');
+      toast.error('Bitte Rate-Betrag eingeben (grösser als 0)');
       return;
     }
 
@@ -2210,7 +2210,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                           }
                           const amount = parseFloat(paymentAmount);
                           if (amount <= 0) {
-                            toast.error('Betrag muss größer als 0 sein');
+                            toast.error('Betrag muss grösser als 0 sein');
                             return;
                           }
                           // Intelligente Erkennung der Einheit für Validierung
@@ -2229,7 +2229,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                           const installmentPaidAmountChf = paidAmountChf;
                           const remaining = installmentAmountChf - installmentPaidAmountChf;
                           if (amount > remaining) {
-                            toast.error(`Betrag darf nicht größer als ${formatAmount(remaining * 100)} sein`);
+                            toast.error(`Betrag darf nicht grösser als ${formatAmount(remaining * 100)} sein`);
                             return;
                           }
                           try {

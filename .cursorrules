@@ -4,14 +4,33 @@
 
 **CRITICAL: DO NOT BUILD OR DEPLOY WITHOUT USER CONFIRMATION**
 
-- NEVER run `npm run build:mobile` or `npm run build` without explicit user confirmation
-- NEVER run `firebase deploy` or any deployment commands without explicit user confirmation
-- ALWAYS ask the user "Soll ich die Änderungen jetzt bauen?" or "Should I build the changes now?" before building
-- ALWAYS ask the user "Soll ich die Änderungen jetzt deployen?" or "Should I deploy the changes now?" before deploying
-- Wait for the user's explicit "yes", "ja", "build", "deploy", or similar confirmation before executing any build or deployment
-- If the user says "build again", "deploy again" or similar, that counts as confirmation
-- After successful deployment, ALWAYS push changes to Git with an appropriate commit message
-- Use `git add .`, `git commit -m "message"`, and `git push` after deployment is confirmed successful
+**ABSOLUTE PROHIBITION:**
+- **FORBIDDEN: NEVER run `npm run build:mobile` or `npm run build` without explicit user confirmation**
+- **FORBIDDEN: NEVER run `firebase deploy` or any deployment commands without explicit user confirmation**
+- **FORBIDDEN: NEVER assume the user wants to build/deploy even if they said "ja" to something else**
+- **FORBIDDEN: NEVER build/deploy "just to test" or "to see if it works"**
+- **FORBIDDEN: NEVER build/deploy because "the code is ready"**
+
+**MANDATORY WORKFLOW - YOU MUST FOLLOW THIS EXACT SEQUENCE:**
+
+1. **BEFORE ANY BUILD:**
+   - Stop and ask: "Soll ich die Änderungen jetzt bauen?" or "Should I build the changes now?"
+   - Wait for explicit user confirmation
+   - Only proceed if user says "ja", "yes", "build", "bauen", or explicitly confirms
+
+2. **BEFORE ANY DEPLOY:**
+   - Stop and ask: "Soll ich die Änderungen jetzt deployen?" or "Should I deploy the changes now?"
+   - Wait for explicit user confirmation
+   - Only proceed if user says "ja", "yes", "deploy", "deployen", or explicitly confirms
+
+3. **EXPLICIT CONFIRMATION REQUIRED:**
+   - User must explicitly say "ja", "yes", "build", "deploy", "bauen", "deployen"
+   - "ja" alone is NOT confirmation for build/deploy unless the question was specifically about build/deploy
+   - If user says "ja" to a different question, you MUST ask again specifically about build/deploy
+
+4. **AFTER DEPLOYMENT:**
+   - ALWAYS push changes to Git with an appropriate commit message
+   - Use `git add .`, `git commit -m "message"`, and `git push` after deployment is confirmed successful
 
 ## Dialog Styling Rules
 
@@ -87,9 +106,12 @@ When creating or modifying dialogs (DialogContent components), ALWAYS use these 
    - Review the changes to ensure they address the issue
 
 3. **Request Build/Deploy Permission:**
-   - **NEVER build or deploy automatically**
-   - Ask user: "Soll ich die Änderungen jetzt bauen und deployen?" or "Should I build and deploy the changes now?"
-   - Wait for explicit user confirmation ("ja", "yes", "build", "deploy", etc.)
+   - **ABSOLUTELY FORBIDDEN: NEVER build or deploy automatically**
+   - **STOP: Before running ANY build command, you MUST ask: "Soll ich die Änderungen jetzt bauen?"**
+   - **STOP: Before running ANY deploy command, you MUST ask: "Soll ich die Änderungen jetzt deployen?"**
+   - **WAIT: You MUST wait for explicit user confirmation ("ja", "yes", "build", "deploy", etc.)**
+   - **VERIFY: Make sure the user's "ja" or "yes" is specifically for build/deploy, not for something else**
+   - **IF IN DOUBT: Ask again specifically about build/deploy**
 
 4. **Build and Deploy (after user confirmation):**
    - Run `npm run build` (or `npm run build:mobile` if needed)

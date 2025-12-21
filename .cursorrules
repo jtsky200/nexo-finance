@@ -2,9 +2,10 @@
 
 ## Build and Deployment Rules
 
-**CRITICAL: DO NOT BUILD OR DEPLOY WITHOUT USER CONFIRMATION**
+### CRITICAL: DO NOT BUILD OR DEPLOY WITHOUT USER CONFIRMATION
 
 **ABSOLUTE PROHIBITION:**
+
 - **FORBIDDEN: NEVER run `npm run build:mobile` or `npm run build` without explicit user confirmation**
 - **FORBIDDEN: NEVER run `firebase deploy` or any deployment commands without explicit user confirmation**
 - **FORBIDDEN: NEVER assume the user wants to build/deploy even if they said "ja" to something else**
@@ -34,7 +35,7 @@
 
 ## Dialog Styling Rules
 
-**CRITICAL: All dialogs must use consistent styling to avoid excessive white space**
+### CRITICAL: All dialogs must use consistent styling to avoid excessive white space
 
 When creating or modifying dialogs (DialogContent components), ALWAYS use these exact classes:
 
@@ -58,6 +59,7 @@ When creating or modifying dialogs (DialogContent components), ALWAYS use these 
   - Standard padding and gap for footer buttons
 
 **Examples of correct dialog structure:**
+
 ```tsx
 <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
   <DialogHeader className="px-5 pt-5 pb-3">
@@ -78,12 +80,12 @@ When creating or modifying dialogs (DialogContent components), ALWAYS use these 
 
 1. **Initial Live Testing:**
    - **CRITICAL: Use the correct URL based on version:**
-     - **Web version:** Navigate to https://nexo-jtsky100.web.app/login
-     - **Mobile version:** Navigate to https://m-nexo-jtsky100.web.app/aichat
+     - **Web version:** Navigate to <https://nexo-jtsky100.web.app/login>
+     - **Mobile version:** Navigate to <https://m-nexo-jtsky100.web.app/aichat>
    - **MANDATORY: Take a screenshot after navigation using `browser_take_screenshot` to verify current page state**
    - **IMPORTANT: Only start ONE browser instance, never two browsers simultaneously**
    - For web version: Login with credentials:
-     - Email: antonio10jonathan@yahoo.com
+     - Email: <antonio10jonathan@yahoo.com>
      - Password: 12345678
    - **MANDATORY: Take a screenshot after entering email using `browser_take_screenshot`**
    - **MANDATORY: Take a screenshot after entering password using `browser_take_screenshot`**
@@ -121,10 +123,10 @@ When creating or modifying dialogs (DialogContent components), ALWAYS use these 
 5. **Post-Deployment Verification:**
    - **MANDATORY: Test again on live site after deployment**
    - **CRITICAL: Use the correct URL based on version:**
-     - **Web version:** Navigate to https://nexo-jtsky100.web.app/login
-     - **Mobile version:** Navigate to https://m-nexo-jtsky100.web.app/aichat
+     - **Web version:** Navigate to <https://nexo-jtsky100.web.app/login>
+     - **Mobile version:** Navigate to <https://m-nexo-jtsky100.web.app/aichat>
    - **MANDATORY: Take a screenshot after navigation using `browser_take_screenshot`**
-   - For web version: Login again with same credentials (antonio10jonathan@yahoo.com / 12345678)
+   - For web version: Login again with same credentials (<antonio10jonathan@yahoo.com> / 12345678)
    - **MANDATORY: Take a screenshot after entering email using `browser_take_screenshot`**
    - **MANDATORY: Take a screenshot after entering password using `browser_take_screenshot`**
    - **MANDATORY: Take a screenshot after clicking login button using `browser_take_screenshot`**
@@ -143,8 +145,8 @@ When creating or modifying dialogs (DialogContent components), ALWAYS use these 
    - **FORBIDDEN: NEVER navigate to "about:blank" - this URL is strictly prohibited**
    - **FORBIDDEN: NEVER open any URL that is not explicitly specified by the user**
    - **ONLY navigate to these specific URLs:**
-     - Web version: https://nexo-jtsky100.web.app/login
-     - Mobile version: https://m-nexo-jtsky100.web.app/aichat
+     - Web version: <https://nexo-jtsky100.web.app/login>
+     - Mobile version: <https://m-nexo-jtsky100.web.app/aichat>
    - Before starting a new browser session, ensure any previous browser is closed
    - **If you detect that a second browser instance has been opened:**
      - Immediately terminate/kill the second browser process
@@ -221,4 +223,3 @@ When creating or modifying dialogs (DialogContent components), ALWAYS use these 
   - Search for "ß" in the file before committing
   - Replace ALL instances of "ß" with "ss"
   - Verify that the replacement makes sense in context
-

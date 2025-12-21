@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 export default function Register() {
   const [, setLocation] = useLocation();
   const { signUp, signInWithGoogle } = useAuth();
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -19,6 +20,11 @@ export default function Register() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!name.trim()) {
+      toast.error('Bitte geben Sie Ihren Namen ein');
+      return;
+    }
+
     if (password !== confirmPassword) {
       toast.error('Passwörter stimmen nicht überein');
       return;
@@ -31,9 +37,9 @@ export default function Register() {
 
     try {
       setIsLoading(true);
-      await signUp(email, password);
+      await signUp(email, password, name.trim());
       toast.success('Konto erfolgreich erstellt');
-      setLocation('/dashboard');
+      setLocation('/onboarding');
     } catch (error: any) {
       toast.error('Registrierung fehlgeschlagen: ' + error.message);
     } finally {
@@ -52,6 +58,18 @@ export default function Register() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Max Mustermann"
+                required
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">E-Mail</Label>
               <Input
@@ -110,7 +128,7 @@ export default function Register() {
                   setIsLoading(true);
                   await signInWithGoogle();
                   toast.success('Erfolgreich mit Google registriert');
-                  setLocation('/dashboard');
+                  setLocation('/onboarding');
                 } catch (error: any) {
                   toast.error('Google-Registrierung fehlgeschlagen: ' + error.message);
                 } finally {

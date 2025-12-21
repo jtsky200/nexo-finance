@@ -4,64 +4,66 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { validateEmail, validatePassword } from '@/lib/validation';
 
-export default function MobileLogin() {
+export default function MobileRegister() {
   const [, setLocation] = useLocation();
-  const { loginWithGoogle, loginWithEmail } = useAuth();
+  const { signUp, signInWithGoogle } = useAuth();
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleGoogleLogin = async () => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Google login clicked');
-    }
-    if (isLoading) return;
-    
-    setIsLoading(true);
-    try {
-      await loginWithGoogle();
-      setLocation('/');
-    } catch (error: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Google login error:', error);
-      }
-      toast.error(error.message || 'Login fehlgeschlagen');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Email login clicked');
-    }
     
+    if (!name.trim()) {
+      toast.error('Bitte geben Sie Ihren Namen ein');
+      return;
+    }
+
     // Validate email
     const emailValidation = validateEmail(email);
     if (!emailValidation.valid) {
       toast.error(emailValidation.error || 'Ungültige E-Mail-Adresse');
       return;
     }
-    
+
     // Validate password
     const passwordValidation = validatePassword(password);
     if (!passwordValidation.valid) {
       toast.error(passwordValidation.error || 'Ungültiges Passwort');
       return;
     }
-    
+
+    if (password !== confirmPassword) {
+      toast.error('Passwörter stimmen nicht überein');
+      return;
+    }
+
     if (isLoading) return;
     
     setIsLoading(true);
     try {
-      await loginWithEmail(email, password);
-      setLocation('/');
+      await signUp(email, password, name.trim());
+      toast.success('Konto erfolgreich erstellt');
+      setLocation('/onboarding');
     } catch (error: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Email login error:', error);
-      }
-      toast.error(error.message || 'Login fehlgeschlagen');
+      toast.error(error.message || 'Registrierung fehlgeschlagen');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleSignUp = async () => {
+    if (isLoading) return;
+    
+    setIsLoading(true);
+    try {
+      await signInWithGoogle();
+      toast.success('Erfolgreich mit Google registriert');
+      setLocation('/onboarding');
+    } catch (error: any) {
+      toast.error(error.message || 'Google-Registrierung fehlgeschlagen');
     } finally {
       setIsLoading(false);
     }
@@ -74,15 +76,15 @@ export default function MobileLogin() {
         <span className="text-3xl font-bold text-primary-foreground">N</span>
       </div>
       
-      <h1 className="text-2xl font-bold mb-2">Nexo</h1>
+      <h1 className="text-2xl font-bold mb-2">Registrieren</h1>
       <p className="text-muted-foreground mb-8 text-center">
-        Melden Sie sich an, um fortzufahren
+        Erstellen Sie ein neues Nexo-Konto
       </p>
 
-      {/* Google Login - Native button */}
+      {/* Google Sign Up */}
       <button
         type="button"
-        onClick={handleGoogleLogin}
+        onClick={handleGoogleSignUp}
         disabled={isLoading}
         className="w-full h-12 px-6 rounded-lg font-medium text-base border border-border bg-background flex items-center justify-center gap-3 active:bg-muted disabled:opacity-50 mb-4"
       >
@@ -104,7 +106,7 @@ export default function MobileLogin() {
             d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
           />
         </svg>
-        {isLoading ? 'Laden...' : 'Mit Google anmelden'}
+        {isLoading ? 'Laden...' : 'Mit Google registrieren'}
       </button>
 
       <div className="flex items-center gap-4 w-full mb-4">
@@ -113,14 +115,23 @@ export default function MobileLogin() {
         <div className="flex-1 h-px bg-border" />
       </div>
 
-      {/* Email Login - Native form */}
-      <form onSubmit={handleEmailLogin} className="w-full space-y-3">
+      {/* Email Sign Up Form */}
+      <form onSubmit={handleSubmit} className="w-full space-y-3">
+        <input
+          type="text"
+          placeholder="Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full h-12 px-4 rounded-lg text-base bg-background border border-border outline-none focus:border-primary"
+          required
+        />
         <input
           type="email"
           placeholder="E-Mail"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="w-full h-12 px-4 rounded-lg text-base bg-background border border-border outline-none focus:border-primary"
+          required
         />
         <input
           type="password"
@@ -128,25 +139,34 @@ export default function MobileLogin() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="w-full h-12 px-4 rounded-lg text-base bg-background border border-border outline-none focus:border-primary"
+          required
+        />
+        <input
+          type="password"
+          placeholder="Passwort bestätigen"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          className="w-full h-12 px-4 rounded-lg text-base bg-background border border-border outline-none focus:border-primary"
+          required
         />
         <button
           type="submit"
           disabled={isLoading}
           className="w-full h-12 px-6 rounded-lg font-medium text-base bg-primary text-primary-foreground active:opacity-80 disabled:opacity-50"
         >
-          {isLoading ? 'Laden...' : 'Anmelden'}
+          {isLoading ? 'Wird erstellt...' : 'Konto erstellen'}
         </button>
       </form>
 
-      {/* Link to Register */}
+      {/* Link to Login */}
       <p className="text-sm text-muted-foreground mt-6 text-center">
-        Noch kein Konto?{' '}
+        Bereits ein Konto?{' '}
         <button
           type="button"
-          onClick={() => setLocation('/register')}
+          onClick={() => setLocation('/login')}
           className="text-primary underline font-medium"
         >
-          Jetzt registrieren
+          Jetzt anmelden
         </button>
       </p>
 
@@ -159,3 +179,4 @@ export default function MobileLogin() {
     </div>
   );
 }
+

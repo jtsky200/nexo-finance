@@ -5,6 +5,8 @@ import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import AIChatFloatingButton from './AIChatFloatingButton';
 import { TutorialHighlight } from './TutorialHighlight';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 interface LayoutProps {
   children: ReactNode;
@@ -16,9 +18,11 @@ export default function Layout({ children, title }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [location, setLocation] = useLocation();
   const { user, loading } = useAuth();
+  const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(false);
   
   // Verstecke den Floating Chat Button auf der AI-Chat-Seite
   const isAIChatPage = location === '/ai-chat';
+  const isOnboardingPage = location === '/onboarding';
 
   useEffect(() => {
     if (!loading && !user) {
@@ -26,7 +30,30 @@ export default function Layout({ children, title }: LayoutProps) {
     }
   }, [user, loading, setLocation]);
 
-  if (loading) {
+  // Check onboarding status for protected routes (not login, register, or onboarding)
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      if (loading || !user || isOnboardingPage || location === '/login' || location === '/register') {
+        return;
+      }
+
+      try {
+        setIsCheckingOnboarding(true);
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        if (!userDoc.exists() || !userDoc.data().onboardingCompleted) {
+          setLocation('/onboarding');
+        }
+      } catch (error) {
+        console.error('Error checking onboarding status:', error);
+      } finally {
+        setIsCheckingOnboarding(false);
+      }
+    };
+
+    checkOnboarding();
+  }, [user, loading, location, isOnboardingPage, setLocation]);
+
+  if (loading || isCheckingOnboarding) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

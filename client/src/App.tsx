@@ -16,6 +16,7 @@ import Taxes from "./pages/Taxes";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import Onboarding from "./pages/Onboarding";
 import Calendar from "./pages/Calendar";
 import Documents from "./pages/Documents";
 import AIChat from "./pages/AIChat";
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/onboarding" component={Onboarding} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/reminders" component={Reminders} />
       <Route path="/finance" component={Finance} />

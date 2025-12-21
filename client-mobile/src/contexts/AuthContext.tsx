@@ -7,7 +7,8 @@ import {
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithRedirect,
-  getRedirectResult
+  getRedirectResult,
+  updateProfile
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
@@ -16,7 +17,7 @@ interface AuthContextType {
   loading: boolean;
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, displayName?: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<void>;
@@ -100,10 +101,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, displayName?: string) => {
     try {
       setError(null);
       const result = await createUserWithEmailAndPassword(auth, email, password);
+      if (displayName && result.user) {
+        await updateProfile(result.user, { displayName });
+      }
       if (process.env.NODE_ENV === 'development') {
         console.log('Sign-up successful:', result.user.email);
       }

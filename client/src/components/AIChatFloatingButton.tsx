@@ -6,8 +6,10 @@ import { cn } from '@/lib/utils';
 import { useChatReminders, markChatReminderAsRead, type ChatReminder } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
 import { eventBus, Events } from '@/lib/eventBus';
+import { useTranslation } from 'react-i18next';
 
 export default function AIChatFloatingButton() {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [pendingReminder, setPendingReminder] = useState<ChatReminder | null>(null);
   const processedRemindersRef = useRef<Set<string>>(new Set());
@@ -43,7 +45,7 @@ export default function AIChatFloatingButton() {
           setIsOpen(true);
           eventBus.emit(Events.CHAT_DIALOG_OPEN, { reminder: newestReminder });
           // Show a subtle notification
-          toast.info('Neue Erinnerung', {
+          toast.info(t('reminders.newReminder', 'Neue Erinnerung'), {
             description: newestReminder.reminderTitle,
             duration: 3000,
           });
@@ -77,7 +79,7 @@ export default function AIChatFloatingButton() {
           'transition-all duration-200 hover:scale-110'
         )}
         size="icon"
-        aria-label="Assistent öffnen"
+        aria-label={t('aiChat.openAssistant')}
       >
         {isOpen ? (
           <X className="h-6 w-6" />

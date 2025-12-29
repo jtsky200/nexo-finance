@@ -27,9 +27,9 @@ import {
 import { Switch } from '@/components/ui/switch';
 
 const reminderSchema = z.object({
-  title: z.string().min(1, 'Titel ist erforderlich'),
+  title: z.string().min(1),
   type: z.enum(['termin', 'zahlung', 'aufgabe']),
-  dueDate: z.string().min(1, 'Datum ist erforderlich'),
+  dueDate: z.string().min(1),
   isAllDay: z.boolean(),
   amount: z.string().optional(),
   currency: z.string(),
@@ -85,7 +85,7 @@ export default function AddReminderDialog({ open, onOpenChange, onSuccess }: Add
         notes: data.notes,
       });
 
-      toast.success('Erinnerung erfolgreich erstellt');
+      toast.success(t('reminders.created', 'Erinnerung erfolgreich erstellt'));
       reset();
       onOpenChange(false);
       // Call onSuccess callback to refresh data
@@ -93,7 +93,7 @@ export default function AddReminderDialog({ open, onOpenChange, onSuccess }: Add
         onSuccess();
       }
     } catch (error: any) {
-      toast.error('Fehler beim Erstellen der Erinnerung: ' + error.message);
+      toast.error(t('reminders.createError', 'Fehler beim Erstellen der Erinnerung') + ': ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -105,17 +105,17 @@ export default function AddReminderDialog({ open, onOpenChange, onSuccess }: Add
         <DialogHeader>
           <DialogTitle>{t('reminders.add')}</DialogTitle>
           <DialogDescription>
-            Erstellen Sie eine neue Erinnerung für Termine, Zahlungen oder Aufgaben
+            {t('reminders.addDescription', 'Erstellen Sie eine neue Erinnerung für Termine, Zahlungen oder Aufgaben')}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="title">Titel *</Label>
+            <Label htmlFor="title">{t('reminders.title', 'Titel')} *</Label>
             <Input
               id="title"
               {...register('title')}
-              placeholder="z.B. Zahnarzttermin"
+              placeholder={t('reminders.titlePlaceholder', 'z.B. Zahnarzttermin')}
             />
             {errors.title && (
               <p className="text-sm text-destructive">{errors.title.message}</p>
@@ -159,7 +159,7 @@ export default function AddReminderDialog({ open, onOpenChange, onSuccess }: Add
               id="isAllDay"
               onCheckedChange={(checked) => setValue('isAllDay', checked)}
             />
-            <Label htmlFor="isAllDay">Ganztägig</Label>
+            <Label htmlFor="isAllDay">{t('reminders.allDay', 'Ganztägig')}</Label>
           </div>
 
           {isPayment && (
@@ -175,7 +175,7 @@ export default function AddReminderDialog({ open, onOpenChange, onSuccess }: Add
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="currency">Währung</Label>
+                <Label htmlFor="currency">{t('finance.currency', 'Währung')}</Label>
                 <Select
                   defaultValue="CHF"
                   onValueChange={(value) => setValue('currency', value)}
@@ -198,7 +198,7 @@ export default function AddReminderDialog({ open, onOpenChange, onSuccess }: Add
             <Textarea
               id="notes"
               {...register('notes')}
-              placeholder="Optionale Notizen..."
+              placeholder={t('common.optionalNotes', 'Optionale Notizen...')}
               rows={3}
             />
           </div>

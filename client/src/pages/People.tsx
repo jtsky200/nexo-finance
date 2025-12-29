@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { usePeople, createPerson, deletePerson, updatePerson } from '@/lib/firebaseHooks';
 import PersonInvoicesDialog from '@/components/PersonInvoicesDialog';
 import { toast } from 'sonner';
+import ContextMenu from '@/components/ContextMenu';
 
 export default function People() {
   const { t } = useTranslation();
@@ -132,7 +133,7 @@ export default function People() {
 
   const handleAddPerson = async () => {
     if (!newPerson.name.trim()) {
-      toast.error('Name ist erforderlich');
+      toast.error(t('people.errors.nameRequired', 'Name ist erforderlich'));
       return;
     }
 
@@ -147,18 +148,18 @@ export default function People() {
         notes: newPerson.notes.trim() || null,
       });
       
-      toast.success(newPerson.type === 'child' ? 'Kind hinzugefügt' : 'Person hinzugefügt');
+      toast.success(newPerson.type === 'child' ? t('people.childAdded', 'Kind hinzugefügt') : t('people.personAdded', 'Person hinzugefügt'));
       setNewPerson({ name: '', email: '', phone: '', currency: 'CHF', type: 'household', relationship: 'both', notes: '' });
       setShowAddDialog(false);
       refetch();
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('common.error', 'Fehler') + ': ' + error.message);
     }
   };
 
   const handleEditPerson = async () => {
     if (!selectedPerson || !selectedPerson.name.trim()) {
-      toast.error('Name ist erforderlich');
+      toast.error(t('people.errors.nameRequired', 'Name ist erforderlich'));
       return;
     }
 
@@ -172,12 +173,12 @@ export default function People() {
         notes: selectedPerson.notes?.trim() || '',
       });
       
-      toast.success('Person aktualisiert');
+      toast.success(t('people.personUpdated', 'Person aktualisiert'));
       setShowEditDialog(false);
       setSelectedPerson(null);
       refetch();
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('common.error', 'Fehler') + ': ' + error.message);
     }
   };
 
@@ -186,11 +187,11 @@ export default function People() {
 
     try {
       await deletePerson(deletePersonId);
-      toast.success('Person gelöscht');
+      toast.success(t('people.personDeleted', 'Person gelöscht'));
       setDeletePersonId(null);
       // No need to call refetch() - real-time listener (onSnapshot) will automatically update the UI
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('common.error', 'Fehler') + ': ' + error.message);
     }
   };
 
@@ -204,8 +205,36 @@ export default function People() {
     setShowEditDialog(true);
   };
 
-  const renderPersonCard = (person: any, isExternal: boolean) => (
-    <Card key={person.id}>
+  const renderPersonCard = (person: any, isExternal: boolean) => {
+    // Build context menu actions
+    const contextMenuActions = [
+      {
+        id: 'view',
+        label: t('common.details', 'Details'),
+        icon: <Eye className="w-4 h-4" />,
+        onClick: () => {
+          setSelectedPerson(person);
+          setShowInvoicesDialog(true);
+        },
+      },
+      {
+        id: 'edit',
+        label: t('common.edit', 'Bearbeiten'),
+        icon: <Edit2 className="w-4 h-4" />,
+        onClick: () => openEditDialog(person),
+      },
+      {
+        id: 'delete',
+        label: t('common.delete', 'Löschen'),
+        icon: <Trash2 className="w-4 h-4" />,
+        onClick: () => setDeletePersonId(person.id),
+        variant: 'destructive' as const,
+      },
+    ];
+
+    return (
+      <ContextMenu key={person.id} actions={contextMenuActions}>
+        <Card>
       <CardContent className="pt-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -218,28 +247,28 @@ export default function People() {
                 {person.type === 'child' && (
                   <Badge variant="outline" className="text-xs border-purple-300 text-purple-700">
                     <Baby className="w-3 h-3 mr-1" />
-                    Kind
+                    {t('people.child', 'Kind')}
                   </Badge>
                 )}
                 {isExternal && person.relationship && (
                   <Badge variant="outline" className="text-xs">
-                    {person.relationship === 'creditor' ? 'Ich schulde' : 
-                     person.relationship === 'debtor' ? 'Schuldet mir' : 'Beides'}
+                    {person.relationship === 'creditor' ? t('people.iOwe', 'Ich schulde') : 
+                     person.relationship === 'debtor' ? t('people.owesMe', 'Schuldet mir') : t('people.relationships.both', 'Beides')}
                   </Badge>
                 )}
                 {person.hasOpenInvoices ? (
-                  <Badge className="bg-red-500 text-white text-xs">Offene Schulden</Badge>
+                  <Badge className="bg-red-500 text-white text-xs">{t('people.openDebts', 'Offene Schulden')}</Badge>
                 ) : (
-                  <Badge className="bg-green-500 text-white text-xs">Alles bezahlt</Badge>
+                  <Badge className="bg-green-500 text-white text-xs">{t('people.allPaid', 'Alles bezahlt')}</Badge>
                 )}
               </div>
               <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                 <FileText className="w-4 h-4 flex-shrink-0" />
                 <span>
-                  {person.invoiceCount} {person.invoiceCount === 1 ? 'Rechnung' : 'Rechnungen'}
+                  {person.invoiceCount} {person.invoiceCount === 1 ? t('people.invoice', 'Rechnung') : t('people.invoices', 'Rechnungen')}
                   {person.installmentPlanCount > 0 && (
                     <span className="text-primary font-medium ml-1">
-                      ({person.installmentPlanCount} in Raten)
+                      ({person.installmentPlanCount} {t('people.inInstallments', 'in Raten')})
                     </span>
                   )}
                 </span>
@@ -253,22 +282,22 @@ export default function People() {
                 {person.incomingOpen > 0 && (
                   <div className="flex items-center gap-1 text-green-600">
                     <ArrowDownLeft className="w-4 h-4" />
-                    <span className="text-sm">Bekomme: {formatAmount(person.incomingOpen)}</span>
+                    <span className="text-sm">{t('people.willReceive', 'Bekomme')}: {formatAmount(person.incomingOpen)}</span>
                   </div>
                 )}
                 {person.outgoingOpen > 0 && (
                   <div className="flex items-center gap-1 text-red-600">
                     <ArrowUpRight className="w-4 h-4" />
-                    <span className="text-sm">Schulde: {formatAmount(person.outgoingOpen)}</span>
+                    <span className="text-sm">{t('people.iOwe', 'Schulde')}: {formatAmount(person.outgoingOpen)}</span>
                   </div>
                 )}
                 {!person.hasOpenInvoices && (
-                  <span className="text-sm text-muted-foreground">Keine offenen Beträge</span>
+                  <span className="text-sm text-muted-foreground">{t('people.noOpenAmounts', 'Keine offenen Beträge')}</span>
                 )}
               </div>
             ) : (
               <div className="text-right">
-                <p className="text-xs text-muted-foreground">Offen</p>
+                <p className="text-xs text-muted-foreground">{t('people.open', 'Offen')}</p>
                 <p className={`font-bold ${person.incomingOpen > 0 ? 'text-red-600' : 'text-green-600'}`}>
                   {formatAmount(person.incomingOpen)}
                 </p>
@@ -285,7 +314,7 @@ export default function People() {
                 }}
               >
                 <Eye className="w-4 h-4 mr-1" />
-                Details
+                {t('common.details', 'Details')}
               </Button>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -297,7 +326,7 @@ export default function People() {
                     <Edit2 className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Bearbeiten</TooltipContent>
+                <TooltipContent>{t('common.edit', 'Bearbeiten')}</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -310,17 +339,19 @@ export default function People() {
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Löschen</TooltipContent>
+                <TooltipContent>{t('common.delete', 'Löschen')}</TooltipContent>
               </Tooltip>
             </div>
           </div>
         </div>
       </CardContent>
     </Card>
-  );
+    </ContextMenu>
+    );
+  };
 
   return (
-    <Layout title="Personen & Schulden">
+    <Layout title={t('people.title', 'Personen & Schulden')}>
       <div className="space-y-6">
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
@@ -328,11 +359,11 @@ export default function People() {
             <TabsList>
               <TabsTrigger value="household" className="gap-2">
                 <Home className="w-4 h-4" />
-                Haushalt ({householdPeople.length})
+                {t('people.household', 'Haushalt')} ({householdPeople.length})
               </TabsTrigger>
               <TabsTrigger value="external" className="gap-2">
                 <Building2 className="w-4 h-4" />
-                Externe ({externalPeople.length})
+                {t('people.external', 'Externe')} ({externalPeople.length})
               </TabsTrigger>
             </TabsList>
             
@@ -340,12 +371,12 @@ export default function People() {
               {activeTab === 'household' && (
                 <Button variant="outline" onClick={() => openAddDialog('child')}>
                   <Baby className="w-4 h-4 mr-2" />
-                  Kind hinzufügen
+                  {t('people.addChild', 'Kind hinzufügen')}
                 </Button>
               )}
               <Button onClick={() => openAddDialog(activeTab === 'household' ? 'household' : 'external')}>
                 <UserPlus className="w-4 h-4 mr-2" />
-                {activeTab === 'household' ? 'Haushaltsmitglied' : 'Externe Person'}
+                {activeTab === 'household' ? t('people.householdMember', 'Haushaltsmitglied') : t('people.externalPerson', 'Externe Person')}
               </Button>
             </div>
           </div>
@@ -356,25 +387,25 @@ export default function People() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <Card>
                 <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground mb-1">Mitglieder</p>
+                  <p className="text-sm text-muted-foreground mb-1">{t('people.members', 'Mitglieder')}</p>
                   <p className="text-2xl font-bold">{householdStats.total}</p>
                 </CardContent>
               </Card>
               <Card className="border-red-200">
                 <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground mb-1">Offene Rechnungen</p>
+                  <p className="text-sm text-muted-foreground mb-1">{t('people.openInvoices', 'Offene Rechnungen')}</p>
                   <p className="text-2xl font-bold text-red-600">{formatAmount(householdStats.openDebts)}</p>
                 </CardContent>
               </Card>
               <Card className="border-green-200">
                 <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground mb-1">Bezahlt</p>
+                  <p className="text-sm text-muted-foreground mb-1">{t('people.paid', 'Bezahlt')}</p>
                   <p className="text-2xl font-bold text-green-600">{formatAmount(householdStats.paid)}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground mb-1">Mit Schulden</p>
+                  <p className="text-sm text-muted-foreground mb-1">{t('people.withDebts', 'Mit Schulden')}</p>
                   <p className="text-2xl font-bold">{householdStats.withDebts}</p>
                 </CardContent>
               </Card>
@@ -387,7 +418,7 @@ export default function People() {
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
-                      placeholder="Name, E-Mail oder Telefon suchen..."
+                      placeholder={t('people.searchPlaceholder', 'Name, E-Mail oder Telefon suchen...')}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-10"
@@ -399,9 +430,9 @@ export default function People() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Alle</SelectItem>
-                      <SelectItem value="withDebt">Mit Schulden</SelectItem>
-                      <SelectItem value="noDebt">Ohne Schulden</SelectItem>
+                      <SelectItem value="all">{t('common.all', 'Alle')}</SelectItem>
+                      <SelectItem value="withDebt">{t('people.withDebts', 'Mit Schulden')}</SelectItem>
+                      <SelectItem value="noDebt">{t('people.withoutDebts', 'Ohne Schulden')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -410,7 +441,7 @@ export default function People() {
 
             {/* People List */}
             {isLoading ? (
-              <Card><CardContent className="py-8 text-center text-muted-foreground">Laden...</CardContent></Card>
+              <Card><CardContent className="py-8 text-center text-muted-foreground">{t('common.loading', 'Laden...')}</CardContent></Card>
             ) : filteredHousehold.length > 0 ? (
               <div className="space-y-3">
                 {filteredHousehold.map(person => renderPersonCard(person, false))}
@@ -421,12 +452,12 @@ export default function People() {
                   <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
                   <p className="text-muted-foreground mb-4">
                     {searchQuery || filterStatus !== 'all' 
-                      ? 'Keine Personen gefunden' 
-                      : 'Noch keine Haushaltsmitglieder'}
+                      ? t('people.noPeopleFound', 'Keine Personen gefunden')
+                      : t('people.noHouseholdMembers', 'Noch keine Haushaltsmitglieder')}
                   </p>
                   <Button onClick={() => openAddDialog('household')}>
                     <UserPlus className="w-4 h-4 mr-2" />
-                    Mitglied hinzufügen
+                    {t('people.addMember', 'Mitglied hinzufügen')}
                   </Button>
                 </CardContent>
               </Card>
@@ -439,25 +470,25 @@ export default function People() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <Card>
                 <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground mb-1">Externe Personen</p>
+                  <p className="text-sm text-muted-foreground mb-1">{t('people.externalPersons', 'Externe Personen')}</p>
                   <p className="text-2xl font-bold">{externalStats.total}</p>
                 </CardContent>
               </Card>
               <Card className="border-green-200">
                 <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground mb-1">Bekomme ich (Forderungen)</p>
+                  <p className="text-sm text-muted-foreground mb-1">{t('people.willReceiveClaims', 'Bekomme ich (Forderungen)')}</p>
                   <p className="text-2xl font-bold text-green-600">{formatAmount(externalStats.theyOweMe)}</p>
                 </CardContent>
               </Card>
               <Card className="border-red-200">
                 <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground mb-1">Schulde ich (Verbindlichkeiten)</p>
+                  <p className="text-sm text-muted-foreground mb-1">{t('people.iOweLiabilities', 'Schulde ich (Verbindlichkeiten)')}</p>
                   <p className="text-2xl font-bold text-red-600">{formatAmount(externalStats.iOweThem)}</p>
                 </CardContent>
               </Card>
               <Card className={externalStats.balance >= 0 ? 'border-green-200' : 'border-red-200'}>
                 <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground mb-1">Bilanz</p>
+                  <p className="text-sm text-muted-foreground mb-1">{t('people.balance', 'Bilanz')}</p>
                   <p className={`text-2xl font-bold ${externalStats.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {externalStats.balance >= 0 ? '+' : ''}{formatAmount(externalStats.balance)}
                   </p>
@@ -472,7 +503,7 @@ export default function People() {
                   <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
-                      placeholder="Name, E-Mail oder Telefon suchen..."
+                      placeholder={t('people.searchPlaceholder', 'Name, E-Mail oder Telefon suchen...')}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-10"
@@ -484,11 +515,11 @@ export default function People() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Alle</SelectItem>
-                      <SelectItem value="debtor">Schulden mir</SelectItem>
-                      <SelectItem value="creditor">Ich schulde</SelectItem>
-                      <SelectItem value="withDebt">Mit offenen Beträgen</SelectItem>
-                      <SelectItem value="noDebt">Alles bezahlt</SelectItem>
+                      <SelectItem value="all">{t('common.all', 'Alle')}</SelectItem>
+                      <SelectItem value="debtor">{t('people.owesMe', 'Schulden mir')}</SelectItem>
+                      <SelectItem value="creditor">{t('people.iOwe', 'Ich schulde')}</SelectItem>
+                      <SelectItem value="withDebt">{t('people.withOpenAmounts', 'Mit offenen Beträgen')}</SelectItem>
+                      <SelectItem value="noDebt">{t('people.allPaid', 'Alles bezahlt')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -497,7 +528,7 @@ export default function People() {
 
             {/* People List */}
             {isLoading ? (
-              <Card><CardContent className="py-8 text-center text-muted-foreground">Laden...</CardContent></Card>
+              <Card><CardContent className="py-8 text-center text-muted-foreground">{t('common.loading', 'Laden...')}</CardContent></Card>
             ) : filteredExternal.length > 0 ? (
               <div className="space-y-3">
                 {filteredExternal.map(person => renderPersonCard(person, true))}
@@ -508,12 +539,12 @@ export default function People() {
                   <Building2 className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
                   <p className="text-muted-foreground mb-4">
                     {searchQuery || filterStatus !== 'all' 
-                      ? 'Keine Personen gefunden' 
-                      : 'Noch keine externen Personen'}
+                      ? t('people.noPeopleFound', 'Keine Personen gefunden')
+                      : t('people.noExternalPersons', 'Noch keine externen Personen')}
                   </p>
                   <Button onClick={() => openAddDialog('external')}>
                     <UserPlus className="w-4 h-4 mr-2" />
-                    Externe Person hinzufügen
+                    {t('people.addExternalPerson', 'Externe Person hinzufügen')}
                   </Button>
                 </CardContent>
               </Card>
@@ -527,14 +558,14 @@ export default function People() {
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>
-              {newPerson.type === 'household' ? 'Haushaltsmitglied hinzufügen' : 
-               newPerson.type === 'child' ? 'Kind hinzufügen' : 
-               'Externe Person hinzufügen'}
+              {newPerson.type === 'household' ? t('people.addHouseholdMember', 'Haushaltsmitglied hinzufügen') : 
+               newPerson.type === 'child' ? t('people.addChild', 'Kind hinzufügen') : 
+               t('people.addExternalPerson', 'Externe Person hinzufügen')}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Typ</Label>
+              <Label>{t('people.type', 'Typ')}</Label>
               <Select value={newPerson.type} onValueChange={(v: any) => setNewPerson({ ...newPerson, type: v })}>
                 <SelectTrigger className="mt-2">
                   <SelectValue />
@@ -542,17 +573,17 @@ export default function People() {
                 <SelectContent>
                   <SelectItem value="household">
                     <span className="flex items-center gap-2">
-                      <Home className="w-4 h-4" /> Haushaltsmitglied
+                      <Home className="w-4 h-4" /> {t('people.types.household', 'Haushaltsmitglied')}
                     </span>
                   </SelectItem>
                   <SelectItem value="child">
                     <span className="flex items-center gap-2">
-                      <Baby className="w-4 h-4" /> Kind
+                      <Baby className="w-4 h-4" /> {t('people.types.child', 'Kind')}
                     </span>
                   </SelectItem>
                   <SelectItem value="external">
                     <span className="flex items-center gap-2">
-                      <Building2 className="w-4 h-4" /> Externe Person
+                      <Building2 className="w-4 h-4" /> {t('people.types.external', 'Externe Person')}
                     </span>
                   </SelectItem>
                 </SelectContent>
@@ -561,7 +592,7 @@ export default function People() {
 
             {newPerson.type === 'external' && (
               <div>
-                <Label>Beziehung</Label>
+                <Label>{t('people.relationship', 'Beziehung')}</Label>
                 <Select value={newPerson.relationship} onValueChange={(v: any) => setNewPerson({ ...newPerson, relationship: v })}>
                   <SelectTrigger className="mt-2">
                     <SelectValue />
@@ -569,17 +600,17 @@ export default function People() {
                   <SelectContent>
                     <SelectItem value="debtor">
                       <span className="flex items-center gap-2">
-                        <ArrowDownLeft className="w-4 h-4 text-green-600" /> Schuldet mir Geld
+                        <ArrowDownLeft className="w-4 h-4 text-green-600" /> {t('people.relationships.debtor', 'Schuldet mir Geld')}
                       </span>
                     </SelectItem>
                     <SelectItem value="creditor">
                       <span className="flex items-center gap-2">
-                        <ArrowUpRight className="w-4 h-4 text-red-600" /> Ich schulde Geld
+                        <ArrowUpRight className="w-4 h-4 text-red-600" /> {t('people.relationships.creditor', 'Ich schulde Geld')}
                       </span>
                     </SelectItem>
                     <SelectItem value="both">
                       <span className="flex items-center gap-2">
-                        Beides möglich
+                        {t('people.relationships.bothPossible', 'Beides möglich')}
                       </span>
                     </SelectItem>
                   </SelectContent>
@@ -588,11 +619,11 @@ export default function People() {
             )}
 
             <div>
-              <Label>Name *</Label>
+              <Label>{t('people.name', 'Name')} *</Label>
               <Input
                 value={newPerson.name}
                 onChange={(e) => setNewPerson({ ...newPerson, name: e.target.value })}
-                placeholder="Name eingeben"
+                placeholder={t('people.namePlaceholder', 'Name eingeben')}
                 className="mt-2"
               />
             </div>
@@ -600,17 +631,17 @@ export default function People() {
             {newPerson.type !== 'child' && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>E-Mail</Label>
+                  <Label>{t('people.email', 'E-Mail')}</Label>
                   <Input
                     type="email"
                     value={newPerson.email}
                     onChange={(e) => setNewPerson({ ...newPerson, email: e.target.value })}
-                    placeholder="email@beispiel.ch"
+                    placeholder={t('people.emailPlaceholder', 'email@beispiel.ch')}
                     className="mt-2"
                   />
                 </div>
                 <div>
-                  <Label>Telefon</Label>
+                  <Label>{t('people.phone', 'Telefon')}</Label>
                   <Input
                     type="tel"
                     value={newPerson.phone}
@@ -623,19 +654,19 @@ export default function People() {
             )}
 
             <div>
-              <Label>Notizen</Label>
+              <Label>{t('people.notes', 'Notizen')}</Label>
               <Textarea
                 value={newPerson.notes}
                 onChange={(e) => setNewPerson({ ...newPerson, notes: e.target.value })}
-                placeholder="Optionale Notizen..."
+                placeholder={t('people.notesPlaceholder', 'Optionale Notizen...')}
                 className="mt-2"
                 rows={2}
               />
             </div>
           </div>
           <DialogFooter className="mt-4">
-            <Button variant="outline" onClick={() => setShowAddDialog(false)}>Abbrechen</Button>
-            <Button onClick={handleAddPerson}>Hinzufügen</Button>
+            <Button variant="outline" onClick={() => setShowAddDialog(false)}>{t('common.cancel', 'Abbrechen')}</Button>
+            <Button onClick={handleAddPerson}>{t('common.add', 'Hinzufügen')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -645,11 +676,11 @@ export default function People() {
         <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
-              <DialogTitle>Person bearbeiten</DialogTitle>
+              <DialogTitle>{t('people.editPerson', 'Person bearbeiten')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <Label>Typ</Label>
+                <Label>{t('people.type', 'Typ')}</Label>
                 <Select value={selectedPerson.type || 'household'} onValueChange={(v: any) => setSelectedPerson({ ...selectedPerson, type: v })}>
                   <SelectTrigger className="mt-2">
                     <SelectValue />
@@ -657,17 +688,17 @@ export default function People() {
                   <SelectContent>
                     <SelectItem value="household">
                       <span className="flex items-center gap-2">
-                        <Home className="w-4 h-4" /> Haushaltsmitglied
+                        <Home className="w-4 h-4" /> {t('people.types.household', 'Haushaltsmitglied')}
                       </span>
                     </SelectItem>
                     <SelectItem value="child">
                       <span className="flex items-center gap-2">
-                        <Baby className="w-4 h-4" /> Kind
+                        <Baby className="w-4 h-4" /> {t('people.types.child', 'Kind')}
                       </span>
                     </SelectItem>
                     <SelectItem value="external">
                       <span className="flex items-center gap-2">
-                        <Building2 className="w-4 h-4" /> Externe Person
+                        <Building2 className="w-4 h-4" /> {t('people.types.external', 'Externe Person')}
                       </span>
                     </SelectItem>
                   </SelectContent>
@@ -676,22 +707,22 @@ export default function People() {
 
               {selectedPerson.type === 'external' && (
                 <div>
-                  <Label>Beziehung</Label>
+                  <Label>{t('people.relationship', 'Beziehung')}</Label>
                   <Select value={selectedPerson.relationship || 'both'} onValueChange={(v: any) => setSelectedPerson({ ...selectedPerson, relationship: v })}>
                     <SelectTrigger className="mt-2">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="debtor">Schuldet mir Geld</SelectItem>
-                      <SelectItem value="creditor">Ich schulde Geld</SelectItem>
-                      <SelectItem value="both">Beides möglich</SelectItem>
+                      <SelectItem value="debtor">{t('people.relationships.debtor', 'Schuldet mir Geld')}</SelectItem>
+                      <SelectItem value="creditor">{t('people.relationships.creditor', 'Ich schulde Geld')}</SelectItem>
+                      <SelectItem value="both">{t('people.relationships.bothPossible', 'Beides möglich')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               )}
 
               <div>
-                <Label>Name *</Label>
+                <Label>{t('people.name', 'Name')} *</Label>
                 <Input
                   value={selectedPerson.name}
                   onChange={(e) => setSelectedPerson({ ...selectedPerson, name: e.target.value })}
@@ -702,7 +733,7 @@ export default function People() {
               {selectedPerson.type !== 'child' && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>E-Mail</Label>
+                    <Label>{t('people.email', 'E-Mail')}</Label>
                     <Input
                       type="email"
                       value={selectedPerson.email || ''}
@@ -711,7 +742,7 @@ export default function People() {
                     />
                   </div>
                   <div>
-                    <Label>Telefon</Label>
+                    <Label>{t('people.phone', 'Telefon')}</Label>
                     <Input
                       type="tel"
                       value={selectedPerson.phone || ''}
@@ -723,7 +754,7 @@ export default function People() {
               )}
 
               <div>
-                <Label>Notizen</Label>
+                <Label>{t('people.notes', 'Notizen')}</Label>
                 <Textarea
                   value={selectedPerson.notes || ''}
                   onChange={(e) => setSelectedPerson({ ...selectedPerson, notes: e.target.value })}
@@ -733,8 +764,8 @@ export default function People() {
               </div>
             </div>
             <DialogFooter className="mt-4">
-              <Button variant="outline" onClick={() => setShowEditDialog(false)}>Abbrechen</Button>
-              <Button onClick={handleEditPerson}>Speichern</Button>
+              <Button variant="outline" onClick={() => setShowEditDialog(false)}>{t('common.cancel', 'Abbrechen')}</Button>
+              <Button onClick={handleEditPerson}>{t('common.save', 'Speichern')}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -754,15 +785,15 @@ export default function People() {
       <AlertDialog open={!!deletePersonId} onOpenChange={(open) => !open && setDeletePersonId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Person löschen?</AlertDialogTitle>
+            <AlertDialogTitle>{t('people.confirmDelete', 'Person löschen?')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Diese Person und alle zugehörigen Rechnungen werden dauerhaft gelöscht.
+              {t('people.confirmDeleteDescriptionWeb', 'Diese Person und alle zugehörigen Rechnungen werden dauerhaft gelöscht.')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel', 'Abbrechen')}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeletePerson} className="bg-red-600 hover:bg-red-700">
-              Löschen
+              {t('common.delete', 'Löschen')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -16,6 +16,7 @@ import { functions } from "@/lib/firebase";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "wouter";
+import DOMPurify from "dompurify";
 
 /**
  * Message type matching server-side LLM Message interface
@@ -138,6 +139,8 @@ const navRouteMap: Record<string, { path: string; icon: LucideIcon }> = {
 
 // Komponente für AI-Nachrichten mit Navigation-Link-Support
 function AIMessageContent({ content, onNavigate }: { content: string; onNavigate?: (route: string) => void }) {
+  const { t } = useTranslation();
+  
   // Parse den Content und ersetze [nav:route|Label] durch anklickbare Links
   const renderedContent = useMemo(() => {
     const segments: React.ReactNode[] = [];
@@ -169,8 +172,37 @@ function AIMessageContent({ content, onNavigate }: { content: string; onNavigate
     for (const matchInfo of matches) {
       // Text vor dem Match
       if (matchInfo.index > lastIndex) {
-        const textBefore = safeContent.slice(lastIndex, matchInfo.index);
-        segments.push(<span key={`text-${keyIndex++}`} dangerouslySetInnerHTML={{ __html: formatMarkdown(textBefore) }} />);
+        let textBefore = safeContent.slice(lastIndex, matchInfo.index);
+        
+        // Entferne Bullet Points vor Navigation-Buttons
+        // Prüfe ob es ein Navigation-Button ist und ob der Text davor mit einem Bullet Point endet
+        if (matchInfo.type === 'nav') {
+          // Entferne Bullet Points am Ende (z.B. "- " oder "• " am Zeilenende oder am Ende des Textes)
+          // Prüfe ob die letzte Zeile nur aus einem Bullet Point besteht
+          const lines = textBefore.split('\n');
+          if (lines.length > 0) {
+            const lastLine = lines[lines.length - 1];
+            // Wenn die letzte Zeile nur ein Bullet Point ist, entferne sie
+            if (/^[-*•]\s*$/.test(lastLine.trim())) {
+              lines.pop();
+              textBefore = lines.join('\n');
+            } else {
+              // Entferne Bullet Point am Ende der letzten Zeile
+              lines[lines.length - 1] = lines[lines.length - 1].replace(/([-*•])\s*$/, '').trim();
+              textBefore = lines.join('\n');
+            }
+          }
+        }
+        
+        if (textBefore.trim()) {
+          const markdownHtml = formatMarkdown(textBefore);
+          const sanitizedHtml = DOMPurify.sanitize(markdownHtml, {
+            ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'hr', 'code', 'pre', 'blockquote', 'a'],
+            ALLOWED_ATTR: ['href', 'class', 'target', 'rel'],
+            ALLOW_DATA_ATTR: false
+          });
+          segments.push(<span key={`text-${keyIndex++}`} dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />);
+        }
       }
       
       if (matchInfo.type === 'nav' && matchInfo.label) {
@@ -194,7 +226,7 @@ function AIMessageContent({ content, onNavigate }: { content: string; onNavigate
                 }
               }}
               className="inline-flex items-center gap-1.5 px-2 py-1 mx-0.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary font-medium text-sm transition-all duration-200 cursor-pointer border border-primary/20 hover:border-primary/40 hover:shadow-sm"
-              title={`Zu ${label} navigieren`}
+              title={t('aiChat.navigateTo', { label })}
             >
               <IconComponent className="size-4" />
               <span className="underline decoration-dotted underline-offset-2">{escapeHtml(label)}</span>
@@ -227,11 +259,30 @@ function AIMessageContent({ content, onNavigate }: { content: string; onNavigate
     // Restlicher Text
     if (lastIndex < safeContent.length) {
       const textAfter = safeContent.slice(lastIndex);
-      segments.push(<span key={`text-${keyIndex++}`} dangerouslySetInnerHTML={{ __html: formatMarkdown(textAfter) }} />);
+      const markdownHtml = formatMarkdown(textAfter);
+      const sanitizedHtml = DOMPurify.sanitize(markdownHtml, {
+        ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'hr', 'code', 'pre', 'blockquote', 'a'],
+        ALLOWED_ATTR: ['href', 'class', 'target', 'rel'],
+        ALLOW_DATA_ATTR: false
+      });
+      segments.push(<span key={`text-${keyIndex++}`} dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />);
     }
     
-    return segments.length > 0 ? segments : [<span key="full" dangerouslySetInnerHTML={{ __html: formatMarkdown(safeContent) }} />];
-  }, [content, onNavigate]);
+    // Sanitize final content if no segments
+    const finalContent = segments.length > 0 
+      ? segments 
+      : (() => {
+          const markdownHtml = formatMarkdown(safeContent);
+          const sanitizedHtml = DOMPurify.sanitize(markdownHtml, {
+            ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'hr', 'code', 'pre', 'blockquote', 'a'],
+            ALLOWED_ATTR: ['href', 'class', 'target', 'rel'],
+            ALLOW_DATA_ATTR: false
+          });
+          return [<span key="full" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />];
+        })();
+    
+    return finalContent;
+  }, [content, onNavigate, t]);
 
   return (
     <div className="prose prose-sm max-w-none">
@@ -247,27 +298,79 @@ function escapeHtml(text: string): string {
   return div.innerHTML;
 }
 
-// Einfacher Markdown-Formatierer mit XSS-Schutz
+// Markdown-Formatierer mit Header-, Listen- und Trennlinien-Unterstützung
 function formatMarkdown(text: string): string {
   // Zuerst HTML escapen für Sicherheit
-  let escaped = escapeHtml(text);
+  const escaped = escapeHtml(text);
   
-  // Dann Markdown-Formatierungen anwenden (nach dem Escaping)
+  // Zeile für Zeile verarbeiten
+  const lines = escaped.split('\n');
+  const htmlLines: string[] = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    
+    // Trennlinie: --- oder ___
+    if (/^-{3,}$/.test(line.trim()) || /^_{3,}$/.test(line.trim())) {
+      htmlLines.push('<hr class="my-3 border-t border-border" />');
+      continue;
+    }
+    
+    // Nummerierte Überschriften: "1. TEXT" wo TEXT grossgeschrieben ist
+    const numberedHeader = line.match(/^(\d+)\.\s+([A-ZÄÖÜÀ-Ž].*)$/);
+    if (numberedHeader && numberedHeader[2] === numberedHeader[2].toUpperCase()) {
+      const headerText = applyInlineStyles(numberedHeader[0]);
+      htmlLines.push(`<div class="font-bold text-foreground mt-4 mb-2">${headerText}</div>`);
+      continue;
+    }
+    
+    // Nummerierte Listen: "1. Text", "2. Text" etc. (nicht nur Überschriften)
+    const numberedList = line.match(/^(\d+)\.\s+(.+)$/);
+    if (numberedList) {
+      const number = numberedList[1];
+      const itemText = numberedList[2];
+      const styledText = applyInlineStyles(itemText);
+      htmlLines.push(`<div class="flex items-start gap-2 ml-2 mb-1"><span class="text-muted-foreground font-medium">${number}.</span><span>${styledText}</span></div>`);
+      continue;
+    }
+    
+    // Listen-Items: - Text oder * Text
+    if (/^[-*•]\s+/.test(line)) {
+      const itemText = line.replace(/^[-*•]\s+/, '');
+      const styledText = applyInlineStyles(itemText);
+      htmlLines.push(`<div class="flex items-start gap-2 ml-2 mb-1"><span class="text-muted-foreground mt-0.5">•</span><span>${styledText}</span></div>`);
+      continue;
+    }
+    
+    // Normale Zeile mit Inline-Styles
+    const styledLine = applyInlineStyles(line);
+    
+    if (styledLine.trim() === '') {
+      htmlLines.push('<div class="h-2"></div>');
+    } else {
+      htmlLines.push(`<div class="mb-1">${styledLine}</div>`);
+    }
+  }
+  
+  return htmlLines.join('');
+}
+
+// Inline-Styles anwenden (Bold, Italic, Code)
+function applyInlineStyles(text: string): string {
+  let result = text;
+  
   // Bold: **text** oder __text__
-  escaped = escaped
+  result = result
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/__(.+?)__/g, '<strong>$1</strong>');
   
-  // Italic: *text* oder _text_ (nur wenn nicht Teil von **)
-  escaped = escaped.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+  // Italic: *text* (nur einzelne Sternchen)
+  result = result.replace(/(?<!\*)\*(?!\*)([^*]+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
   
   // Inline code: `code`
-  escaped = escaped.replace(/`(.+?)`/g, '<code class="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">$1</code>');
+  result = result.replace(/`([^`]+?)`/g, '<code class="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">$1</code>');
   
-  // Line breaks
-  escaped = escaped.replace(/\n/g, '<br />');
-  
-  return escaped;
+  return result;
 }
 
 /**
@@ -286,15 +389,19 @@ export function AIChatBox({
   messages,
   onSendMessage,
   isLoading = false,
-  placeholder = "Nachricht eingeben...",
+  placeholder,
   className,
   height = "600px",
-  emptyStateMessage = "Beginne eine Unterhaltung mit dem Assistenten",
+  emptyStateMessage,
   suggestedPrompts,
 }: AIChatBoxProps) {
   const { t, i18n } = useTranslation();
   const [, setLocation] = useLocation();
   const [input, setInput] = useState("");
+  
+  // Fallbacks für placeholder und emptyStateMessage
+  const placeholderText = placeholder || t('common.typeMessage');
+  const emptyStateText = emptyStateMessage || t('aiChat.emptyStateMessage');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputAreaRef = useRef<HTMLFormElement>(null);
@@ -353,12 +460,20 @@ export function AIChatBox({
     }
   }, []);
 
-  // Auto-scroll when new messages arrive
+  // Auto-scroll when new messages arrive or content changes (streaming)
   useEffect(() => {
     if (displayMessages.length > 0) {
       scrollToBottom();
     }
   }, [displayMessages.length, scrollToBottom]);
+
+  // Auto-scroll during streaming (when last message content changes)
+  const lastMessageContent = displayMessages[displayMessages.length - 1]?.content;
+  useEffect(() => {
+    if (displayMessages.length > 0 && lastMessageContent) {
+      scrollToBottom();
+    }
+  }, [lastMessageContent, displayMessages.length, scrollToBottom]);
 
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
@@ -368,13 +483,13 @@ export function AIChatBox({
     if (!trimmedInput || isLoading) return;
     
     if (trimmedInput.length > 10000) {
-      toast.error('Nachricht ist zu lang. Bitte kürze sie auf maximal 10.000 Zeichen.');
+      toast.error(t('aiChat.messageTooLong'));
       return;
     }
     
     // Verhindere zu schnelle aufeinanderfolgende Anfragen
     if (isLoading) {
-      toast.info('Bitte warte auf die Antwort...');
+      toast.info(t('aiChat.waitForResponse'));
       return;
     }
 
@@ -389,7 +504,7 @@ export function AIChatBox({
       textareaRef.current?.focus();
     } catch (error) {
       console.error('Error sending message:', error);
-      toast.error('Fehler beim Senden der Nachricht. Bitte versuche es erneut.');
+      toast.error(t('aiChat.errors.sendErrorRetry'));
     }
   }, [input, isLoading, onSendMessage, scrollToBottom]);
 
@@ -411,17 +526,17 @@ export function AIChatBox({
     // Validierung: Maximal 10MB
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
     if (file.size > MAX_FILE_SIZE) {
-      toast.error(`Datei ist zu gross. Maximal ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(0)}MB erlaubt.`);
+      toast.error(t('aiChat.fileTooLarge', { maxSize: (MAX_FILE_SIZE / 1024 / 1024).toFixed(0) }));
       return;
     }
     
     // Validierung: Dateiname
     if (!file.name || file.name.length > 255) {
-      toast.error('Ungültiger Dateiname.');
+      toast.error(t('aiChat.invalidFilename'));
       return;
     }
 
-    const loadingToast = toast.loading('Datei wird hochgeladen...');
+    const loadingToast = toast.loading(t('aiChat.uploadingFile'));
     
     try {
       // Timeout für FileReader (30 Sekunden)
@@ -431,16 +546,16 @@ export function AIChatBox({
           reader.onload = () => {
             const result = reader.result as string;
             if (!result || !result.includes(',')) {
-              reject(new Error('Ungültiges Dateiformat'));
+              reject(new Error(t('aiChat.invalidFileFormat')));
               return;
             }
             resolve(result.split(',')[1]);
           };
-          reader.onerror = () => reject(new Error('Fehler beim Lesen der Datei'));
+          reader.onerror = () => reject(new Error(t('aiChat.fileReadError')));
           reader.readAsDataURL(file);
         }),
         new Promise<string>((_, reject) => 
-          setTimeout(() => reject(new Error('Upload-Timeout: Die Datei ist zu gross oder die Verbindung zu langsam.')), 30000)
+          setTimeout(() => reject(new Error(t('aiChat.uploadTimeout'))), 30000)
         ),
       ]);
 
@@ -454,27 +569,27 @@ export function AIChatBox({
           fileType: file.type,
         }),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Upload-Timeout: Die Verbindung ist zu langsam.')), 60000)
+          setTimeout(() => reject(new Error(t('aiChat.uploadConnectionTimeout'))), 60000)
         ),
       ]) as any;
 
       if (!result?.data) {
-        throw new Error('Keine Antwort vom Server erhalten');
+        throw new Error(t('aiChat.noServerResponse'));
       }
 
       const data = result.data as { fileUrl: string; fileName: string };
       if (!data.fileUrl || !data.fileName) {
-        throw new Error('Ungültige Server-Antwort');
+        throw new Error(t('aiChat.invalidServerResponse'));
       }
 
       toast.dismiss(loadingToast);
       onSendMessage(`[Datei: ${data.fileName}](${data.fileUrl})`);
-      toast.success('Datei erfolgreich hochgeladen');
+      toast.success(t('aiChat.fileUploadSuccess'));
     } catch (error: any) {
       toast.dismiss(loadingToast);
-      const errorMsg = error.message || 'Unbekannter Fehler';
+      const errorMsg = error.message || t('aiChat.unknownError');
       console.error('File upload error:', error);
-      toast.error(`Fehler beim Hochladen: ${errorMsg}`);
+      toast.error(t('aiChat.uploadError', { error: errorMsg }));
     }
   }, [onSendMessage]);
 
@@ -482,24 +597,24 @@ export function AIChatBox({
   const handleImageUpload = useCallback(async (file: File) => {
     // Validierung: Nur Bilder
     if (!file.type.startsWith('image/')) {
-      toast.error('Bitte wähle ein Bild aus (JPG, PNG, GIF, etc.)');
+      toast.error(t('aiChat.selectImage'));
       return;
     }
     
     // Validierung: Maximal 5MB für Bilder
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
     if (file.size > MAX_IMAGE_SIZE) {
-      toast.error(`Bild ist zu gross. Maximal ${(MAX_IMAGE_SIZE / 1024 / 1024).toFixed(0)}MB erlaubt.`);
+      toast.error(t('aiChat.imageTooLarge', { maxSize: (MAX_IMAGE_SIZE / 1024 / 1024).toFixed(0) }));
       return;
     }
     
     // Validierung: Dateiname
     if (!file.name || file.name.length > 255) {
-      toast.error('Ungültiger Dateiname.');
+      toast.error(t('aiChat.invalidFilename'));
       return;
     }
 
-    const loadingToast = toast.loading('Bild wird hochgeladen...');
+    const loadingToast = toast.loading(t('aiChat.uploadingImage'));
 
     try {
       // Timeout für FileReader (30 Sekunden)
@@ -509,16 +624,16 @@ export function AIChatBox({
           reader.onload = () => {
             const result = reader.result as string;
             if (!result || !result.includes(',')) {
-              reject(new Error('Ungültiges Bildformat'));
+              reject(new Error(t('aiChat.invalidImageFormat')));
               return;
             }
             resolve(result.split(',')[1]);
           };
-          reader.onerror = () => reject(new Error('Fehler beim Lesen des Bildes'));
+          reader.onerror = () => reject(new Error(t('aiChat.imageReadError')));
           reader.readAsDataURL(file);
         }),
         new Promise<string>((_, reject) => 
-          setTimeout(() => reject(new Error('Upload-Timeout: Das Bild ist zu gross oder die Verbindung zu langsam.')), 30000)
+          setTimeout(() => reject(new Error(t('aiChat.imageUploadTimeout'))), 30000)
         ),
       ]);
 
@@ -532,27 +647,27 @@ export function AIChatBox({
           fileType: file.type,
         }),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Upload-Timeout: Die Verbindung ist zu langsam.')), 60000)
+          setTimeout(() => reject(new Error(t('aiChat.uploadConnectionTimeout'))), 60000)
         ),
       ]) as any;
 
       if (!result?.data) {
-        throw new Error('Keine Antwort vom Server erhalten');
+        throw new Error(t('aiChat.noServerResponse'));
       }
 
       const data = result.data as { imageUrl: string; fileName: string };
       if (!data.imageUrl || !data.fileName) {
-        throw new Error('Ungültige Server-Antwort');
+        throw new Error(t('aiChat.invalidServerResponse'));
       }
 
       toast.dismiss(loadingToast);
       onSendMessage(`![${data.fileName}](${data.imageUrl})`);
-      toast.success('Bild erfolgreich hochgeladen');
+      toast.success(t('aiChat.imageUploadSuccess'));
     } catch (error: any) {
       toast.dismiss(loadingToast);
-      const errorMsg = error.message || 'Unbekannter Fehler';
+      const errorMsg = error.message || t('aiChat.unknownError');
       console.error('Image upload error:', error);
-      toast.error(`Fehler beim Hochladen: ${errorMsg}`);
+      toast.error(t('aiChat.uploadError', { error: errorMsg }));
     }
   }, [onSendMessage]);
 
@@ -563,11 +678,11 @@ export function AIChatBox({
       try {
         mediaRecorder.stop();
         setIsRecording(false);
-        toast.info('Aufnahme wird verarbeitet...');
+        toast.info(t('aiChat.processingRecording'));
       } catch (error) {
         console.error('Error stopping recording:', error);
         setIsRecording(false);
-        toast.error('Fehler beim Stoppen der Aufnahme');
+        toast.error(t('aiChat.stopRecordingError'));
       }
       return;
     }
@@ -575,14 +690,14 @@ export function AIChatBox({
     try {
       // Prüfe ob Mikrofon verfügbar ist
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        toast.error('Mikrofon-Zugriff wird von diesem Browser nicht unterstützt.');
+        toast.error(t('aiChat.microphoneNotSupported'));
         return;
       }
 
       const stream = await Promise.race([
         navigator.mediaDevices.getUserMedia({ audio: true }),
         new Promise<MediaStream>((_, reject) => 
-          setTimeout(() => reject(new Error('Mikrofon-Zugriff-Timeout')), 10000)
+          setTimeout(() => reject(new Error(t('aiChat.microphoneTimeout'))), 10000)
         ),
       ]);
 
@@ -606,12 +721,12 @@ export function AIChatBox({
         // Validierung: Maximal 10MB Audio
         const MAX_AUDIO_SIZE = 10 * 1024 * 1024; // 10MB
         if (blob.size > MAX_AUDIO_SIZE) {
-          toast.error('Audio-Aufnahme ist zu gross. Bitte kürze die Aufnahme.');
+          toast.error(t('aiChat.audioTooLarge'));
           stream.getTracks().forEach(track => track.stop());
           return;
         }
 
-        const loadingToast = toast.loading('Audio wird transkribiert...');
+        const loadingToast = toast.loading(t('aiChat.transcribingAudio'));
 
         try {
           const base64 = await Promise.race<string>([
@@ -620,16 +735,16 @@ export function AIChatBox({
               reader.onload = () => {
                 const result = reader.result as string;
                 if (!result || !result.includes(',')) {
-                  reject(new Error('Ungültiges Audioformat'));
+                  reject(new Error(t('aiChat.invalidAudioFormat')));
                   return;
                 }
                 resolve(result.split(',')[1]);
               };
-              reader.onerror = () => reject(new Error('Fehler beim Lesen der Audio-Datei'));
+              reader.onerror = () => reject(new Error(t('aiChat.audioReadError')));
               reader.readAsDataURL(blob);
             }),
             new Promise<string>((_, reject) => 
-              setTimeout(() => reject(new Error('Audio-Verarbeitung-Timeout')), 30000)
+              setTimeout(() => reject(new Error(t('aiChat.audioProcessingTimeout'))), 30000)
             ),
           ]);
 
@@ -642,12 +757,12 @@ export function AIChatBox({
               mimeType: 'audio/webm',
             }),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Transkription-Timeout: Die Verbindung ist zu langsam.')), 60000)
+              setTimeout(() => reject(new Error(t('aiChat.transcriptionTimeout'))), 60000)
             ),
           ]) as any;
 
           if (!result?.data) {
-            throw new Error('Keine Antwort vom Server erhalten');
+            throw new Error(t('aiChat.noServerResponse'));
           }
 
           const data = result.data as { transcription: string };
@@ -655,15 +770,15 @@ export function AIChatBox({
             setInput(data.transcription.trim());
             textareaRef.current?.focus();
             toast.dismiss(loadingToast);
-            toast.success('Spracheingabe erfolgreich');
+            toast.success(t('aiChat.voiceInputSuccess'));
           } else {
-            throw new Error('Keine Transkription erhalten');
+            throw new Error(t('aiChat.noTranscription'));
           }
         } catch (error: any) {
           toast.dismiss(loadingToast);
-          const errorMsg = error.message || 'Unbekannter Fehler';
+          const errorMsg = error.message || t('aiChat.unknownError');
           console.error('Transcription error:', error);
-          toast.error(`Fehler bei der Transkription: ${errorMsg}`);
+          toast.error(t('aiChat.transcriptionError', { error: errorMsg }));
         } finally {
           stream.getTracks().forEach(track => track.stop());
         }
@@ -671,7 +786,7 @@ export function AIChatBox({
 
       recorder.onerror = (event: any) => {
         console.error('MediaRecorder error:', event);
-        toast.error('Fehler bei der Aufnahme');
+        toast.error(t('aiChat.recordingError'));
         setIsRecording(false);
         stream.getTracks().forEach(track => track.stop());
       };
@@ -680,25 +795,25 @@ export function AIChatBox({
       recordingTimeout = setTimeout(() => {
         if (recorder.state === 'recording') {
           recorder.stop();
-          toast.warning('Maximale Aufnahmezeit erreicht (5 Minuten)');
+          toast.warning(t('aiChat.maxRecordingTime'));
         }
       }, 5 * 60 * 1000);
 
       recorder.start();
       setMediaRecorder(recorder);
       setIsRecording(true);
-      toast.info('Aufnahme gestartet... (Klicke erneut zum Stoppen)');
+      toast.info(t('aiChat.recordingStarted'));
     } catch (error: any) {
       setIsRecording(false);
-      const errorMsg = error.message || 'Unbekannter Fehler';
+      const errorMsg = error.message || t('aiChat.unknownError');
       console.error('Microphone access error:', error);
       
       if (errorMsg.includes('permission') || errorMsg.includes('denied')) {
-        toast.error('Mikrofon-Zugriff wurde verweigert. Bitte erlaube den Zugriff in den Browser-Einstellungen.');
+        toast.error(t('aiChat.microphonePermissionDenied'));
       } else if (errorMsg.includes('not found') || errorMsg.includes('not available')) {
-        toast.error('Kein Mikrofon gefunden. Bitte verbinde ein Mikrofon.');
+        toast.error(t('aiChat.microphoneNotFound'));
       } else {
-        toast.error(`Mikrofon-Fehler: ${errorMsg}`);
+        toast.error(t('aiChat.microphoneError', { error: errorMsg }));
       }
     }
   }, [isRecording, mediaRecorder]);
@@ -709,7 +824,7 @@ export function AIChatBox({
     const newLang = currentLang === 'de' ? 'en' : 'de';
     i18n.changeLanguage(newLang);
     localStorage.setItem('language', newLang);
-    toast.success(newLang === 'de' ? 'Sprache auf Deutsch geändert' : 'Language changed to English');
+    toast.success(t('aiChat.languageChanged', { lang: newLang === 'de' ? t('common.german') : t('common.english') }));
   }, [i18n]);
 
   // Render input form - wird in beiden Zuständen verwendet
@@ -751,7 +866,7 @@ export function AIChatBox({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-all duration-150"
-              aria-label="Datei anhängen"
+              aria-label={t('aiChat.attachFile')}
               disabled={isLoading}
             >
               <Paperclip className="size-5" />
@@ -760,7 +875,7 @@ export function AIChatBox({
               type="button"
               onClick={() => imageInputRef.current?.click()}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-all duration-150"
-              aria-label="Bild hinzufügen"
+              aria-label={t('aiChat.addImage')}
               disabled={isLoading}
             >
               <Image className="size-5" />
@@ -780,7 +895,7 @@ export function AIChatBox({
               }
             }}
             onKeyDown={handleKeyDown}
-            placeholder={placeholder}
+            placeholder={placeholderText}
             className="flex-1 resize-none border-0 bg-transparent py-2.5 px-2 text-sm text-foreground placeholder:text-muted-foreground focus:ring-0 focus:outline-none min-h-[44px] max-h-[150px] transition-all duration-200"
             rows={1}
             disabled={isLoading}
@@ -793,7 +908,7 @@ export function AIChatBox({
               type="button"
               onClick={handleLanguageToggle}
               className="p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-all duration-150"
-              aria-label="Sprache wechseln"
+              aria-label={t('aiChat.changeLanguage')}
               disabled={isLoading}
             >
               <Globe className="size-5" />
@@ -807,7 +922,7 @@ export function AIChatBox({
                   ? "text-red-500 bg-red-500/10 hover:bg-red-500/20"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
               )}
-              aria-label="Spracheingabe"
+              aria-label={t('aiChat.voiceInput')}
               disabled={isLoading}
             >
               <Mic className="size-5" />
@@ -821,7 +936,7 @@ export function AIChatBox({
                   ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm"
                   : "text-muted-foreground/50 cursor-not-allowed"
               )}
-              aria-label={isLoading ? "Wird gesendet..." : "Nachricht senden"}
+              aria-label={isLoading ? t('aiChat.sending') : t('aiChat.sendMessage')}
             >
               {isLoading ? (
                 <Loader2 className="size-5 animate-spin" />
@@ -845,12 +960,12 @@ export function AIChatBox({
       style={{ height }}
     >
       {displayMessages.length === 0 ? (
-        /* Empty State - Alles kompakt zusammen oben */
-        <div className="flex flex-col p-4 animate-in fade-in duration-300">
+        /* Empty State - Vertikal zentriert */
+        <div className="flex flex-col flex-1 justify-center p-4 animate-in fade-in duration-300">
           {/* Suggested Prompts */}
           {normalizedPrompts.length > 0 && (
             <div className="w-full max-w-2xl mx-auto mb-4">
-              <p className="text-sm text-muted-foreground text-center mb-4">{emptyStateMessage}</p>
+              <p className="text-sm text-muted-foreground text-center mb-4">{emptyStateText}</p>
               <div className="grid grid-cols-2 gap-2.5">
                 {normalizedPrompts.map((prompt, index) => {
                   const IconComponent = iconMap[prompt.icon as keyof typeof iconMap];
@@ -897,7 +1012,7 @@ export function AIChatBox({
                       className={cn(
                         "max-w-[85%] select-text",
                         message.role === "user"
-                          ? "bg-primary text-primary-foreground rounded-2xl px-4 py-3"
+                          ? "bg-primary text-primary-foreground rounded-lg px-4 py-3"
                           : "text-foreground"
                       )}
                       onClick={(e) => {

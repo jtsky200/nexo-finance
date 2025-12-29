@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { 
@@ -26,15 +27,18 @@ interface WorkScheduleDialogProps {
   onDataChanged?: () => void;
 }
 
-const SCHEDULE_TYPES = [
-  { value: 'full', label: 'Vollzeit', icon: Briefcase, bg: 'bg-slate-700', text: 'text-white' },
-  { value: 'half-am', label: 'Morgen', icon: Sun, bg: 'bg-amber-600', text: 'text-white' },
-  { value: 'half-pm', label: 'Nachmittag', icon: Moon, bg: 'bg-indigo-600', text: 'text-white' },
-  { value: 'off', label: 'Frei', icon: Coffee, bg: 'bg-emerald-600', text: 'text-white' },
-];
+// SCHEDULE_TYPES will be defined inside the component to use t()
 
 export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }: WorkScheduleDialogProps) {
+  const { t } = useTranslation();
   const { data: people = [], isLoading: peopleLoading } = usePeople();
+  
+  const SCHEDULE_TYPES = useMemo(() => [
+    { value: 'full', label: t('calendar.workSchedule.types.full', 'Vollzeit'), icon: Briefcase, bg: 'bg-slate-700', text: 'text-white' },
+    { value: 'half-am', label: t('calendar.workSchedule.types.morning', 'Morgen'), icon: Sun, bg: 'bg-amber-600', text: 'text-white' },
+    { value: 'half-pm', label: t('calendar.workSchedule.types.afternoon', 'Nachmittag'), icon: Moon, bg: 'bg-indigo-600', text: 'text-white' },
+    { value: 'off', label: t('calendar.workSchedule.types.off', 'Frei'), icon: Coffee, bg: 'bg-emerald-600', text: 'text-white' },
+  ], [t]);
   const [schedules, setSchedules] = useState<WorkSchedule[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<string>('');
@@ -123,7 +127,7 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
 
   const applyToSelected = async () => {
     if (selectedDates.size === 0 || !selectedPerson) {
-      toast.error('Bitte wähle zuerst Tage aus');
+      toast.error(t('calendar.workSchedule.selectDaysFirst', 'Bitte wähle zuerst Tage aus'));
       return;
     }
 
@@ -143,12 +147,12 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
         })
       );
       await Promise.all(promises);
-      toast.success(`${selectedDates.size} Tage aktualisiert`);
+      toast.success(t('calendar.workSchedule.daysUpdated', '{{count}} Tage aktualisiert', { count: selectedDates.size }));
       setSelectedDates(new Set());
       fetchSchedules();
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      toast.error('Fehler beim Speichern');
+      toast.error(t('calendar.workSchedule.saveError', 'Fehler beim Speichern'));
     }
   };
 
@@ -159,7 +163,7 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
       fetchSchedules();
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      toast.error('Fehler beim Löschen');
+      toast.error(t('calendar.workSchedule.deleteError', 'Fehler beim Löschen'));
     }
   };
 
@@ -207,7 +211,30 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
 
   const isToday = (date: Date) => date.toDateString() === new Date().toDateString();
 
-  const monthNames = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  const monthNames = useMemo(() => [
+    t('calendar.months.january'),
+    t('calendar.months.february'),
+    t('calendar.months.march'),
+    t('calendar.months.april'),
+    t('calendar.months.may'),
+    t('calendar.months.june'),
+    t('calendar.months.july'),
+    t('calendar.months.august'),
+    t('calendar.months.september'),
+    t('calendar.months.october'),
+    t('calendar.months.november'),
+    t('calendar.months.december'),
+  ], [t]);
+  
+  const weekdayNames = useMemo(() => [
+    t('calendar.fullDays.monday'),
+    t('calendar.fullDays.tuesday'),
+    t('calendar.fullDays.wednesday'),
+    t('calendar.fullDays.thursday'),
+    t('calendar.fullDays.friday'),
+    t('calendar.fullDays.saturday'),
+    t('calendar.fullDays.sunday'),
+  ], [t]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -215,7 +242,7 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
         <DialogHeader className="pb-4 border-b">
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Briefcase className="w-5 h-5" />
-            Arbeitszeiten planen
+            {t('calendar.workSchedule.title', 'Arbeitszeiten planen')}
           </DialogTitle>
         </DialogHeader>
 
@@ -226,7 +253,7 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
         ) : householdMembers.length === 0 ? (
           <div className="text-center py-12">
             <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-            <p className="text-muted-foreground">Keine Haushaltsmitglieder gefunden</p>
+            <p className="text-muted-foreground">{t('calendar.workSchedule.noHouseholdMembers', 'Keine Haushaltsmitglieder gefunden')}</p>
           </div>
         ) : (
           <div className="pt-6">
@@ -234,7 +261,7 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
             <div className="flex items-center gap-8 mb-6 flex-wrap">
               {/* Person */}
               <div className="flex items-center gap-3">
-                <span className="text-sm text-muted-foreground whitespace-nowrap">Person:</span>
+                <span className="text-sm text-muted-foreground whitespace-nowrap">{t('calendar.workSchedule.person', 'Person')}:</span>
                 <div className="flex gap-2">
                   {householdMembers.map(person => (
                     <Button
@@ -254,7 +281,7 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
                 <div className="flex items-center gap-2">
                   <Briefcase className="w-4 h-4 text-muted-foreground" />
                   <span className="font-bold">{stats.workDays}</span>
-                  <span className="text-muted-foreground text-sm">Tage</span>
+                  <span className="text-muted-foreground text-sm">{t('calendar.workSchedule.days', 'Tage')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-muted-foreground" />
@@ -263,7 +290,7 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
                 <div className="flex items-center gap-2">
                   <Coffee className="w-4 h-4 text-muted-foreground" />
                   <span className="font-bold">{stats.freeDays}</span>
-                  <span className="text-muted-foreground text-sm">Frei</span>
+                  <span className="text-muted-foreground text-sm">{t('calendar.workSchedule.free', 'Frei')}</span>
                 </div>
               </div>
 
@@ -285,7 +312,7 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
             <div className="flex items-center gap-8 mb-6 flex-wrap">
               {/* Type Selection */}
               <div className="flex items-center gap-3">
-                <span className="text-sm text-muted-foreground whitespace-nowrap">Typ:</span>
+                <span className="text-sm text-muted-foreground whitespace-nowrap">{t('calendar.workSchedule.type', 'Typ')}:</span>
                 <div className="flex gap-2">
                   {SCHEDULE_TYPES.map(type => {
                     const Icon = type.icon;
@@ -306,10 +333,10 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
 
               {/* Quick Select */}
               <div className="flex items-center gap-3 border-l pl-8">
-                <span className="text-sm text-muted-foreground whitespace-nowrap">Schnell:</span>
+                <span className="text-sm text-muted-foreground whitespace-nowrap">{t('calendar.workSchedule.quick', 'Schnell')}:</span>
                 <div className="flex gap-1">
-                  <Button variant="outline" size="sm" onClick={selectWorkWeek}>Mo-Fr</Button>
-                  {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((day, idx) => (
+                  <Button variant="outline" size="sm" onClick={selectWorkWeek}>{t('calendar.days.monday')}-{t('calendar.days.friday')}</Button>
+                  {[t('calendar.days.monday'), t('calendar.days.tuesday'), t('calendar.days.wednesday'), t('calendar.days.thursday'), t('calendar.days.friday'), t('calendar.days.saturday'), t('calendar.days.sunday')].map((day, idx) => (
                     <Button key={day} variant="ghost" size="sm" className="px-2" onClick={() => selectAllWeekdays(idx === 6 ? 0 : idx + 1)}>
                       {day}
                     </Button>
@@ -320,7 +347,7 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
               {/* Selection Info */}
               {selectedDates.size > 0 && (
                 <div className="flex items-center gap-2 border-l pl-8">
-                  <span className="text-sm font-medium">{selectedDates.size} ausgewählt</span>
+                  <span className="text-sm font-medium">{t('calendar.workSchedule.selected', '{{count}} ausgewählt', { count: selectedDates.size })}</span>
                   <Button variant="ghost" size="sm" onClick={clearSelection}>
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -331,7 +358,7 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
             {/* Calendar - FULL WIDTH */}
             <div className="border rounded-lg overflow-hidden">
               <div className="grid grid-cols-7">
-                {['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'].map(day => (
+                {weekdayNames.map(day => (
                   <div key={day} className="p-3 text-center text-sm font-medium bg-muted/50 border-b">{day}</div>
                 ))}
               </div>
@@ -381,7 +408,7 @@ export default function WorkScheduleDialog({ open, onOpenChange, onDataChanged }
             {selectedDates.size > 0 && (
               <Button onClick={applyToSelected} size="lg" className="w-full mt-6">
                 <Check className="w-5 h-5 mr-2" />
-                {getTypeInfo(selectedType).label} auf {selectedDates.size} Tage anwenden
+                {t('calendar.workSchedule.applyToDays', '{{type}} auf {{count}} Tage anwenden', { type: getTypeInfo(selectedType).label, count: selectedDates.size })}
               </Button>
             )}
           </div>

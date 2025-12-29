@@ -22,6 +22,8 @@ import { toast } from 'sonner';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { parseLocalDateTime, formatDateForDisplay, dateToDateTimeLocal, dateToISOString } from '@/lib/dateTimeUtils';
 import { eventBus, Events } from '@/lib/eventBus';
+import ContextMenu from '@/components/ContextMenu';
+import { CheckCircle2, Eye } from 'lucide-react';
 
 export default function Reminders() {
   const { t } = useTranslation();
@@ -297,11 +299,46 @@ export default function Reminders() {
     const due = new Date(reminder.dueDate);
     const isOverdue = due < now && reminder.status === 'offen';
 
+    // Build context menu actions
+    const contextMenuActions = [];
+    
+    if (reminder.status === 'offen') {
+      contextMenuActions.push({
+        id: 'complete',
+        label: t('reminders.markDone', 'Als erledigt markieren'),
+        icon: <CheckCircle2 className="w-4 h-4" />,
+        onClick: () => handleStatusChange(reminder, 'erledigt'),
+      });
+    } else {
+      contextMenuActions.push({
+        id: 'reopen',
+        label: t('reminders.markOpen', 'Wieder öffnen'),
+        icon: <RefreshCw className="w-4 h-4" />,
+        onClick: () => handleStatusChange(reminder, 'offen'),
+      });
+    }
+    
+    contextMenuActions.push({
+      id: 'edit',
+      label: t('common.edit', 'Bearbeiten'),
+      icon: <Edit2 className="w-4 h-4" />,
+      onClick: () => openEditDialog(reminder),
+    });
+    
+    contextMenuActions.push({
+      id: 'delete',
+      label: t('common.delete', 'Löschen'),
+      icon: <Trash2 className="w-4 h-4" />,
+      onClick: () => setDeleteConfirmId(reminder.id),
+      variant: 'destructive' as const,
+    });
+
     return (
-      <Card 
-        key={reminder.id} 
-        className={`transition-all hover:shadow-md ${isOverdue ? 'border-red-200 bg-red-50/50' : ''}`}
-      >
+      <ContextMenu actions={contextMenuActions}>
+        <Card 
+          key={reminder.id} 
+          className={`transition-all hover:shadow-md ${isOverdue ? 'border-red-200 bg-red-50/50' : ''}`}
+        >
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -370,6 +407,7 @@ export default function Reminders() {
           </div>
         </CardContent>
       </Card>
+      </ContextMenu>
     );
   };
 
@@ -385,14 +423,14 @@ export default function Reminders() {
             <Button variant="outline" onClick={async () => {
               try {
                 await fixReminderTimes();
-                toast.success('Erinnerungen wurden korrigiert');
+                toast.success(t('reminders.fixed', 'Erinnerungen wurden korrigiert'));
                 refetch();
               } catch (error: any) {
-                toast.error('Fehler beim Korrigieren: ' + error.message);
+                toast.error(t('reminders.fixError', 'Fehler beim Korrigieren') + ': ' + error.message);
               }
             }}>
               <RefreshCw className="w-4 h-4 mr-2" />
-              Zeiten korrigieren
+              {t('reminders.fixTimes', 'Zeiten korrigieren')}
             </Button>
             <Button onClick={openNewDialog}>
               <Plus className="w-4 h-4 mr-2" />
@@ -461,10 +499,10 @@ export default function Reminders() {
                     <SelectValue placeholder={t('reminders.filterType', 'Typ')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">{t('common.all', 'Alle')}</SelectItem>
-                    <SelectItem value="termin">{t('reminders.types.termin', 'Termine')}</SelectItem>
-                    <SelectItem value="zahlung">{t('reminders.types.zahlung', 'Zahlungen')}</SelectItem>
-                    <SelectItem value="aufgabe">{t('reminders.types.aufgabe', 'Aufgaben')}</SelectItem>
+                    <SelectItem value="all">{t('reminders.filterAll', 'Alle')}</SelectItem>
+                    <SelectItem value="termin">{t('reminders.types.termin', 'Termin')}</SelectItem>
+                    <SelectItem value="zahlung">{t('reminders.types.zahlung', 'Zahlung')}</SelectItem>
+                    <SelectItem value="aufgabe">{t('reminders.types.aufgabe', 'Aufgabe')}</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={filterStatus} onValueChange={setFilterStatus}>
@@ -472,7 +510,7 @@ export default function Reminders() {
                     <SelectValue placeholder={t('reminders.filterStatus', 'Status')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">{t('common.all', 'Alle')}</SelectItem>
+                    <SelectItem value="all">{t('reminders.filterAll', 'Alle')}</SelectItem>
                     <SelectItem value="offen">{t('reminders.status.open', 'Offen')}</SelectItem>
                     <SelectItem value="erledigt">{t('reminders.status.done', 'Erledigt')}</SelectItem>
                   </SelectContent>
@@ -684,7 +722,7 @@ export default function Reminders() {
               {t('common.cancel', 'Abbrechen')}
             </Button>
             <Button onClick={handleSubmit} disabled={isSubmitting}>
-              {isSubmitting ? t('common.loading', 'Laden...') : t('common.save', 'Speichern')}
+              {isSubmitting ? t('common.saving', 'Speichert...') : editingReminder ? t('common.update', 'Aktualisieren') : t('common.create', 'Erstellen')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -694,9 +732,9 @@ export default function Reminders() {
       <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('reminders.confirmDeleteTitle', 'Erinnerung löschen?')}</AlertDialogTitle>
+            <AlertDialogTitle>{t('reminders.confirmDelete', 'Erinnerung löschen?')}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t('reminders.confirmDeleteDesc', 'Diese Erinnerung wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.')}
+              {t('reminders.confirmDeleteDescription', 'Möchten Sie diese Erinnerung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

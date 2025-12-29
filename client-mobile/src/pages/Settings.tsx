@@ -62,16 +62,16 @@ function NotificationsSettings() {
       setPermission(newPermission);
       
       if (newPermission === 'granted') {
-        toast.success('Benachrichtigungen aktiviert');
+        toast.success(t('settings.notificationsEnabled', 'Benachrichtigungen aktiviert'));
         hapticSuccess();
       } else if (newPermission === 'denied') {
-        toast.error('Benachrichtigungen wurden blockiert. Bitte in den Browser-Einstellungen aktivieren.');
+        toast.error(t('settings.notificationsBlocked', 'Benachrichtigungen wurden blockiert. Bitte in den Browser-Einstellungen aktivieren.'));
         hapticError();
       } else {
-        toast.info('Berechtigung erforderlich');
+        toast.info(t('settings.permissionRequired', 'Berechtigung erforderlich'));
       }
     } catch (error) {
-      toast.error('Fehler beim Aktivieren der Benachrichtigungen');
+      toast.error(t('settings.errors.enableNotificationsError', 'Fehler beim Aktivieren der Benachrichtigungen'));
       hapticError();
     } finally {
       setIsLoading(false);
@@ -87,7 +87,7 @@ function NotificationsSettings() {
           </div>
           <div className="text-left">
             <p className="font-medium">{t('settings.notifications', 'Benachrichtigungen')}</p>
-            <p className="text-xs text-muted-foreground">Nicht unterstützt</p>
+            <p className="text-xs text-muted-foreground">{t('settings.notSupported', 'Nicht unterstützt')}</p>
           </div>
         </div>
       </div>
@@ -107,7 +107,7 @@ function NotificationsSettings() {
           <div className="text-left">
             <p className="font-medium">{t('settings.notifications', 'Benachrichtigungen')}</p>
             <p className="text-xs text-muted-foreground">
-              {isEnabled ? 'Aktiviert' : isBlocked ? 'Blockiert' : 'Nicht aktiviert'}
+              {isEnabled ? t('settings.enabled', 'Aktiviert') : isBlocked ? t('settings.blocked', 'Blockiert') : t('settings.notEnabled', 'Nicht aktiviert')}
             </p>
           </div>
         </div>
@@ -128,13 +128,13 @@ function NotificationsSettings() {
           disabled={isLoading || isBlocked}
           className="w-full py-2 px-4 rounded-lg bg-primary text-primary-foreground font-medium active:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
         >
-          {isLoading ? 'Aktiviere...' : isBlocked ? 'In Browser-Einstellungen aktivieren' : 'Benachrichtigungen aktivieren'}
+          {isLoading ? t('settings.enabling', 'Aktiviere...') : isBlocked ? t('settings.enableInBrowser', 'In Browser-Einstellungen aktivieren') : t('settings.enableNotifications', 'Benachrichtigungen aktivieren')}
         </button>
       )}
       
       {isBlocked && (
         <p className="text-xs text-muted-foreground mt-2">
-          Bitte öffnen Sie die Browser-Einstellungen und erlauben Sie Benachrichtigungen für diese Website.
+          {t('settings.enableInBrowserDescription', 'Bitte öffnen Sie die Browser-Einstellungen und erlauben Sie Benachrichtigungen für diese Website.')}
         </p>
       )}
     </div>
@@ -142,11 +142,11 @@ function NotificationsSettings() {
 }
 
 function BiometricSettings() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { isEnabled, enable, disable } = useBiometricAuth();
   const [isSupported, setIsSupported] = useState(false);
   const [isAvailable, setIsAvailable] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
 
   useEffect(() => {
@@ -166,13 +166,13 @@ function BiometricSettings() {
   const handleToggleBiometric = async () => {
     if (isEnabled) {
       await disable();
-      toast.success('Biometrische Authentifizierung deaktiviert');
+      toast.success(t('settings.biometricDisabled', 'Biometrische Authentifizierung deaktiviert'));
       hapticSuccess();
       return;
     }
 
     if (!isAvailable) {
-      toast.error('Biometrische Authentifizierung ist auf diesem Gerät nicht verfügbar');
+      toast.error(t('settings.biometricNotAvailable', 'Biometrische Authentifizierung ist auf diesem Gerät nicht verfügbar'));
       hapticError();
       return;
     }
@@ -182,26 +182,26 @@ function BiometricSettings() {
       hapticSelection();
       
       if (!user) {
-        toast.error('Bitte melden Sie sich zuerst an');
+        toast.error(t('settings.errors.pleaseLogin', 'Bitte melden Sie sich zuerst an'));
         hapticError();
         return;
       }
 
       const result = await registerBiometric(
         user.uid,
-        user.displayName || user.email || 'User'
+        user.displayName || user.email || t('common.user', 'User')
       );
 
       if (result.success) {
         await enable();
-        toast.success('Biometrische Authentifizierung aktiviert');
+        toast.success(t('settings.biometricEnabled', 'Biometrische Authentifizierung aktiviert'));
         hapticSuccess();
       } else {
-        toast.error(result.error || 'Aktivierung fehlgeschlagen');
+        toast.error(result.error || t('settings.biometricActivationFailed', 'Aktivierung fehlgeschlagen'));
         hapticError();
       }
     } catch (error) {
-      toast.error('Fehler beim Aktivieren der biometrischen Authentifizierung');
+      toast.error(t('settings.errors.enableBiometricError', 'Fehler beim Aktivieren der biometrischen Authentifizierung'));
       hapticError();
     } finally {
       setIsRegistering(false);
@@ -220,9 +220,9 @@ function BiometricSettings() {
             <Fingerprint className="w-5 h-5 text-foreground" />
           </div>
           <div className="text-left">
-            <p className="font-medium">Biometrische Authentifizierung</p>
+            <p className="font-medium">{t('settings.biometric', 'Biometrische Authentifizierung')}</p>
             <p className="text-xs text-muted-foreground">
-              {isEnabled ? 'Aktiviert' : isAvailable ? 'Verfügbar' : 'Nicht verfügbar'}
+              {isEnabled ? t('settings.enabled', 'Aktiviert') : isAvailable ? t('settings.available', 'Verfügbar') : t('settings.notAvailable', 'Nicht verfügbar')}
             </p>
           </div>
         </div>
@@ -244,18 +244,18 @@ function BiometricSettings() {
           className="w-full py-2 px-4 rounded-lg bg-primary text-primary-foreground font-medium active:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
         >
           {isRegistering 
-            ? 'Registriere...' 
+            ? t('settings.registering', 'Registriere...') 
             : isLoading 
-            ? 'Lädt...' 
+            ? t('common.loading', 'Lädt...') 
             : isEnabled 
-            ? 'Biometrische Authentifizierung deaktivieren' 
-            : 'Biometrische Authentifizierung aktivieren'}
+            ? t('settings.disableBiometric', 'Biometrische Authentifizierung deaktivieren') 
+            : t('settings.enableBiometric', 'Biometrische Authentifizierung aktivieren')}
         </button>
       )}
       
       {!isAvailable && isSupported && (
         <p className="text-xs text-muted-foreground">
-          Kein biometrischer Sensor auf diesem Gerät gefunden.
+          {t('settings.noBiometricSensor', 'Kein biometrischer Sensor auf diesem Gerät gefunden.')}
         </p>
       )}
     </div>
@@ -263,6 +263,7 @@ function BiometricSettings() {
 }
 
 function WeatherLocationSettings() {
+  const { t } = useTranslation();
   const { settings, updateSettings, isLoading } = useUserSettings();
   const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [locationInput, setLocationInput] = useState('');
@@ -276,7 +277,7 @@ function WeatherLocationSettings() {
 
   const handleSaveLocation = async () => {
     if (!locationInput.trim()) {
-      toast.error('Bitte geben Sie einen Ort ein');
+      toast.error(t('settings.errors.enterLocation', 'Bitte geben Sie einen Ort ein'));
       hapticError();
       return;
     }
@@ -286,10 +287,10 @@ function WeatherLocationSettings() {
       hapticSelection();
       await updateSettings({ weatherLocation: locationInput.trim() });
       setShowLocationDialog(false);
-      toast.success('Standort gespeichert');
+      toast.success(t('settings.locationSaved', 'Standort gespeichert'));
       hapticSuccess();
     } catch (error) {
-      toast.error('Fehler beim Speichern des Standorts');
+      toast.error(t('settings.errors.saveLocationError', 'Fehler beim Speichern des Standorts'));
       hapticError();
     } finally {
       setIsSaving(false);
@@ -307,7 +308,7 @@ function WeatherLocationSettings() {
             <MapPin className="w-5 h-5 text-foreground" />
           </div>
           <div className="text-left">
-            <p className="font-medium">Wetter-Standort</p>
+            <p className="font-medium">{t('settings.weatherLocation', 'Wetter-Standort')}</p>
             <p className="text-xs text-muted-foreground truncate max-w-[200px]">
               {settings?.weatherLocation || 'Zurich, CH'}
             </p>
@@ -322,11 +323,11 @@ function WeatherLocationSettings() {
             className="bg-background w-full rounded-t-2xl p-6 safe-bottom animate-in slide-in-from-bottom"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-lg font-semibold mb-4">Wetter-Standort</h2>
+            <h2 className="text-lg font-semibold mb-4">{t('settings.weatherLocation', 'Wetter-Standort')}</h2>
             
             <div className="space-y-4">
               <div>
-                <label className="text-sm font-medium mb-2 block">Ort (z.B. "Zurich, CH" oder "Berlin, DE")</label>
+                <label className="text-sm font-medium mb-2 block">{t('settings.locationLabel', 'Ort (z.B. "Zurich, CH" oder "Berlin, DE")')}</label>
                 <input
                   type="text"
                   value={locationInput}
@@ -336,7 +337,7 @@ function WeatherLocationSettings() {
                   disabled={isSaving || isLoading}
                 />
                 <p className="text-xs text-muted-foreground mt-2">
-                  Format: Stadt, Ländercode (z.B. "Zurich, CH", "Berlin, DE", "New York, US")
+                  {t('settings.locationFormat', 'Format: Stadt, Ländercode (z.B. "Zurich, CH", "Berlin, DE", "New York, US")')}
                 </p>
               </div>
 
@@ -346,13 +347,13 @@ function WeatherLocationSettings() {
                   disabled={isSaving || isLoading || !locationInput.trim()}
                   className="flex-1 py-3 rounded-lg bg-primary text-primary-foreground font-medium active:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
                 >
-                  {isSaving ? 'Speichere...' : 'Speichern'}
+                  {isSaving ? t('common.saving', 'Speichere...') : t('common.save', 'Speichern')}
                 </button>
                 <button
                   onClick={() => setShowLocationDialog(false)}
                   className="px-6 py-3 rounded-lg bg-muted text-foreground font-medium active:opacity-80 transition-opacity min-h-[44px]"
                 >
-                  Abbrechen
+                  {t('common.cancel', 'Abbrechen')}
                 </button>
               </div>
             </div>
@@ -375,11 +376,21 @@ export default function MobileSettings() {
 
   const { settings, updateSettings } = useUserSettings();
   
+  const languages = [
+    { code: 'de', label: 'Deutsch', flag: '🇨🇭' },
+    { code: 'en', label: 'English', flag: '🇬🇧' },
+    { code: 'es', label: 'Español', flag: '🇪🇸' },
+    { code: 'nl', label: 'Nederlands', flag: '🇳🇱' },
+    { code: 'it', label: 'Italiano', flag: '🇮🇹' },
+    { code: 'fr', label: 'Français', flag: '🇫🇷' },
+  ];
+
   const handleLanguageChange = async (lang: string) => {
     i18n.changeLanguage(lang);
     await updateSettings({ language: lang });
     setShowLanguageDialog(false);
-    toast.success(lang === 'de' ? 'Sprache geändert' : 'Language changed');
+    toast.success(t('settings.languageChanged', 'Sprache geändert'));
+    hapticSuccess();
   };
   
   // Load language from Firebase UserSettings
@@ -401,7 +412,7 @@ export default function MobileSettings() {
   const handleThemeChange = () => {
     if (toggleTheme) {
       toggleTheme();
-      toast.success(theme === 'dark' ? 'Helles Design aktiviert' : 'Dunkles Design aktiviert');
+      toast.success(theme === 'dark' ? t('settings.lightThemeActivated', 'Helles Design aktiviert') : t('settings.darkThemeActivated', 'Dunkles Design aktiviert'));
     }
     setShowThemeDialog(false);
   };
@@ -411,13 +422,13 @@ export default function MobileSettings() {
       if (logout) {
         await logout();
       }
-      toast.success('Abgemeldet');
+      toast.success(t('auth.loggedOut', 'Abgemeldet'));
       setLocation('/login');
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Logout error:', error);
       }
-      toast.error('Fehler beim Abmelden');
+      toast.error(t('auth.errors.logoutError', 'Fehler beim Abmelden'));
     }
   };
 
@@ -442,8 +453,8 @@ export default function MobileSettings() {
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold truncate">{user?.displayName || 'Benutzer'}</p>
-          <p className="text-sm text-muted-foreground truncate">{user?.email || 'Nicht angemeldet'}</p>
+          <p className="font-semibold truncate">{user?.displayName || t('common.user', 'Benutzer')}</p>
+          <p className="text-sm text-muted-foreground truncate">{user?.email || t('auth.notLoggedIn', 'Nicht angemeldet')}</p>
         </div>
       </div>
 
@@ -460,8 +471,9 @@ export default function MobileSettings() {
             </div>
             <div className="text-left">
               <p className="font-medium">{t('settings.language', 'Sprache')}</p>
-              <p className="text-xs text-muted-foreground">
-                {i18n.language === 'de' ? 'Deutsch' : 'English'}
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <span>{languages.find(l => l.code === i18n.language)?.flag || '🌐'}</span>
+                <span>{languages.find(l => l.code === i18n.language)?.label || i18n.language.toUpperCase()}</span>
               </p>
             </div>
           </div>
@@ -501,8 +513,8 @@ export default function MobileSettings() {
               <Monitor className="w-5 h-5 text-foreground" />
             </div>
             <div className="text-left">
-              <p className="font-medium">Desktop Version</p>
-              <p className="text-xs text-muted-foreground">Zur vollständigen Ansicht</p>
+              <p className="font-medium">{t('settings.desktopVersion', 'Desktop Version')}</p>
+              <p className="text-xs text-muted-foreground">{t('settings.desktopVersionDescription', 'Zur vollständigen Ansicht')}</p>
             </div>
           </div>
           <ChevronRight className="w-5 h-5 text-muted-foreground" />
@@ -525,9 +537,9 @@ export default function MobileSettings() {
                 <Sparkles className="w-5 h-5 text-foreground" />
             </div>
             <div className="text-left">
-                <p className="font-medium">Glass-Effekt</p>
+                <p className="font-medium">{t('settings.glassEffect', 'Glass-Effekt')}</p>
                 <p className="text-xs text-muted-foreground">
-                  {glassEffectEnabled ? 'Aktiviert' : 'Deaktiviert'}
+                  {glassEffectEnabled ? t('settings.enabled', 'Aktiviert') : t('settings.disabled', 'Deaktiviert')}
                 </p>
             </div>
           </div>
@@ -546,17 +558,17 @@ export default function MobileSettings() {
             onClick={() => {
               toggleGlassEffect();
               hapticSelection();
-              toast.success(glassEffectEnabled ? 'Glass-Effekt deaktiviert' : 'Glass-Effekt aktiviert');
+              toast.success(glassEffectEnabled ? t('settings.glassEffectDisabled', 'Glass-Effekt deaktiviert') : t('settings.glassEffectEnabled', 'Glass-Effekt aktiviert'));
             }}
             className="w-full py-2 px-4 rounded-lg bg-primary text-primary-foreground font-medium active:opacity-80 transition-opacity min-h-[44px]"
           >
-            {glassEffectEnabled ? 'Glass-Effekt deaktivieren' : 'Glass-Effekt aktivieren'}
+            {glassEffectEnabled ? t('settings.disableGlassEffect', 'Glass-Effekt deaktivieren') : t('settings.enableGlassEffect', 'Glass-Effekt aktivieren')}
         </button>
         </div>
 
         {/* Privacy */}
         <button
-          onClick={() => toast.info('Kommt in einer zukünftigen Version')}
+          onClick={() => toast.info(t('settings.comingSoon', 'Kommt in einer zukünftigen Version'))}
           className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity py-4"
         >
           <div className="flex items-center gap-4">
@@ -572,7 +584,7 @@ export default function MobileSettings() {
 
         {/* Help */}
         <button
-          onClick={() => toast.info('Kommt in einer zukünftigen Version')}
+          onClick={() => setLocation('/help')}
           className="mobile-card w-full flex items-center justify-between active:opacity-80 transition-opacity py-4"
         >
           <div className="flex items-center gap-4">
@@ -621,25 +633,21 @@ export default function MobileSettings() {
             <h2 className="text-lg font-semibold mb-4">{t('settings.language', 'Sprache')}</h2>
             
             <div className="space-y-2">
-              <button
-                onClick={() => handleLanguageChange('de')}
-                className={`w-full mobile-card flex items-center justify-between ${
-                  i18n.language === 'de' ? 'border-primary' : ''
-                }`}
-              >
-                <span className="font-medium">Deutsch</span>
-                {i18n.language === 'de' && <Check className="w-5 h-5" />}
-              </button>
-              
-              <button
-                onClick={() => handleLanguageChange('en')}
-                className={`w-full mobile-card flex items-center justify-between ${
-                  i18n.language === 'en' ? 'border-primary' : ''
-                }`}
-              >
-                <span className="font-medium">English</span>
-                {i18n.language === 'en' && <Check className="w-5 h-5" />}
-              </button>
+              {languages.map((lang) => (
+                <button
+                  key={lang.code}
+                  onClick={() => handleLanguageChange(lang.code)}
+                  className={`w-full mobile-card flex items-center justify-between p-4 ${
+                    i18n.language === lang.code ? 'border-2 border-primary bg-primary/5' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{lang.flag}</span>
+                    <span className="font-medium">{lang.label}</span>
+                  </div>
+                  {i18n.language === lang.code && <Check className="w-5 h-5 text-primary" />}
+                </button>
+              ))}
             </div>
 
             <button

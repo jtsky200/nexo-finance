@@ -305,7 +305,7 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
   // Copy to clipboard
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
-    toast.success(`${label} kopiert!`);
+    toast.success(t('common.copied', '{{label}} kopiert!', { label }));
   };
 
   // Confirm and use scanned data
@@ -368,7 +368,7 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
                 <div className="space-y-6">
                   <img 
                     src={imagePreview} 
-                    alt="Preview" 
+                    alt={t('invoice.previewAlt', 'Vorschau')} 
                     className="max-h-64 mx-auto rounded-lg shadow-md"
                   />
                   <p className="text-sm text-muted-foreground">
@@ -484,7 +484,7 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
                     <div className="flex items-center gap-3">
                       <Building2 className="w-5 h-5 text-muted-foreground" />
                       <div>
-                        <span className="text-muted-foreground block">IBAN</span>
+                        <span className="text-muted-foreground block">{t('invoice.iban', 'IBAN')}</span>
                         <span className="font-mono">{scannedData.iban}</span>
                       </div>
                     </div>
@@ -492,7 +492,7 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
                       variant="ghost" 
                       size="icon"
                       className="h-10 w-10"
-                      onClick={() => copyToClipboard(scannedData.iban!, 'IBAN')}
+                      onClick={() => copyToClipboard(scannedData.iban!, t('invoice.iban', 'IBAN'))}
                     >
                       <Copy className="w-5 h-5" />
                     </Button>
@@ -519,7 +519,7 @@ export default function InvoiceScanner({ open, onOpenChange, onInvoiceScanned }:
                       variant="ghost" 
                       size="icon"
                       className="h-10 w-10"
-                      onClick={() => copyToClipboard(scannedData.reference!, 'Referenz')}
+                      onClick={() => copyToClipboard(scannedData.reference!, t('invoice.reference', 'Referenz'))}
                     >
                       <Copy className="w-5 h-5" />
                     </Button>

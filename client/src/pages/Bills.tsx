@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import { toast } from 'sonner';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import InvoiceScanner, { ScannedInvoiceData } from '@/components/InvoiceScanner';
 import PersonInvoicesDialog from '@/components/PersonInvoicesDialog';
+import ContextMenu from '@/components/ContextMenu';
 
 export default function Bills() {
   const { t } = useTranslation();
@@ -82,7 +84,8 @@ export default function Bills() {
     try {
       const d = date?.toDate ? date.toDate() : new Date(date);
       if (isNaN(d.getTime())) return 'N/A';
-      return d.toLocaleDateString('de-CH', {
+      const locale = i18n.language === 'de' ? 'de-CH' : i18n.language === 'en' ? 'en-GB' : i18n.language === 'es' ? 'es-ES' : i18n.language === 'nl' ? 'nl-NL' : i18n.language === 'it' ? 'it-IT' : i18n.language === 'fr' ? 'fr-FR' : 'de-CH';
+      return d.toLocaleDateString(locale, {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -293,7 +296,7 @@ export default function Bills() {
   // Copy to clipboard
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
-    toast.success(`${label} kopiert!`);
+    toast.success(t('common.copied', '{{label}} kopiert!', { label }));
   };
 
   // Render bill card (works for both Bill and Reminder types)
@@ -301,8 +304,74 @@ export default function Bills() {
     const statusInfo = getStatusInfo(bill);
     const daysUntil = bill.dueDate ? getDaysUntilDue(bill.dueDate) : 999;
 
+    // Build context menu actions based on bill type
+    const contextMenuActions = [];
+    
+    if (bill.status !== 'paid') {
+      contextMenuActions.push({
+        id: 'mark-paid',
+        label: t('bills.markAsPaid', 'Als bezahlt markieren'),
+        icon: <CheckCircle2 className="w-4 h-4" />,
+        onClick: () => handleMarkBillAsPaid(bill),
+      });
+    }
+    
+    if (bill.source === 'reminder') {
+      contextMenuActions.push({
+        id: 'edit',
+        label: t('common.edit', 'Bearbeiten'),
+        icon: <Edit2 className="w-4 h-4" />,
+        onClick: () => openEditDialogFromBill(bill),
+      });
+    }
+    
+    if (bill.source === 'person' && bill.personId) {
+      contextMenuActions.push({
+        id: 'view-invoice',
+        label: t('bills.viewInvoice'),
+        icon: <Eye className="w-4 h-4" />,
+        onClick: () => handleOpenPersonDialog(bill.personId!, bill.id),
+      });
+      contextMenuActions.push({
+        id: 'duplicate',
+        label: t('bills.duplicateInvoice'),
+        icon: <Copy className="w-4 h-4" />,
+        onClick: () => handleDuplicateInvoice(bill),
+      });
+    }
+    
+    if (bill.iban) {
+      contextMenuActions.push({
+        id: 'copy-iban',
+        label: t('bills.copyIban'),
+        icon: <Copy className="w-4 h-4" />,
+        onClick: () => copyToClipboard(bill.iban!, 'IBAN'),
+      });
+    }
+    
+    if (bill.reference) {
+      contextMenuActions.push({
+        id: 'copy-reference',
+        label: t('bills.copyReference'),
+        icon: <Files className="w-4 h-4" />,
+        onClick: () => copyToClipboard(bill.reference!, 'Referenz'),
+      });
+    }
+    
+    contextMenuActions.push({
+      id: 'delete',
+      label: t('common.delete', 'Löschen'),
+      icon: <Trash2 className="w-4 h-4" />,
+      onClick: () => handleDeleteBill(bill),
+      variant: 'destructive' as const,
+    });
+
     return (
-      <Card key={bill.id} className="transition-all hover:shadow-md">
+      <ContextMenu actions={contextMenuActions}>
+        <Card 
+          key={bill.id} 
+          className="transition-all hover:shadow-md"
+        >
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -323,7 +392,7 @@ export default function Bills() {
                   </Badge>
                   {bill.source === 'person' && (
                     <Badge variant="outline" className="text-xs">
-                      Person
+                      {t('bills.person')}
                     </Badge>
                   )}
                 </div>
@@ -337,16 +406,16 @@ export default function Bills() {
                   {bill.status !== 'paid' && bill.dueDate && (
                     <span className={`${daysUntil < 0 ? 'text-red-600' : daysUntil <= 7 ? 'text-orange-600' : ''}`}>
                       {daysUntil < 0 
-                        ? `${Math.abs(daysUntil)} Tage überfällig`
+                        ? t('bills.daysOverdue', { count: Math.abs(daysUntil) })
                         : daysUntil === 0 
-                          ? 'Heute fällig'
-                          : `${daysUntil} Tage verbleibend`
+                          ? t('bills.dueToday')
+                          : t('bills.daysRemaining', { count: daysUntil })
                       }
                     </span>
                   )}
                   {bill.direction && (
                     <span className={bill.direction === 'incoming' ? 'text-green-600' : 'text-red-600'}>
-                      {bill.direction === 'incoming' ? 'Forderung' : 'Verbindlichkeit'}
+                      {bill.direction === 'incoming' ? t('bills.claim') : t('bills.liability')}
                     </span>
                   )}
                 </div>
@@ -357,7 +426,11 @@ export default function Bills() {
                       variant="ghost" 
                       size="sm" 
                       className="h-6 w-6 p-0"
-                      onClick={() => copyToClipboard(bill.iban!, 'IBAN')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copyToClipboard(bill.iban!, 'IBAN');
+                      }}
+                      onContextMenu={(e) => e.stopPropagation()}
                     >
                       <Copy className="w-3 h-3" />
                     </Button>
@@ -377,7 +450,12 @@ export default function Bills() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-8 w-8 p-0"
+                    onContextMenu={(e) => e.stopPropagation()}
+                  >
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -393,11 +471,11 @@ export default function Bills() {
                     <>
                       <DropdownMenuItem onClick={() => handleOpenPersonDialog(bill.personId!, bill.id)}>
                         <Eye className="w-4 h-4 mr-2" />
-                        Rechnung anzeigen
+                        {t('bills.viewInvoice')}
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleOpenPersonDialog(bill.personId!)}>
                         <FileText className="w-4 h-4 mr-2" />
-                        Zur Person
+                        {t('bills.goToPerson')}
                       </DropdownMenuItem>
                     </>
                   )}
@@ -414,7 +492,7 @@ export default function Bills() {
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => copyToClipboard(bill.iban!, 'IBAN')}>
                         <Copy className="w-4 h-4 mr-2" />
-                        IBAN kopieren
+                        {t('bills.copyIban')}
                       </DropdownMenuItem>
                     </>
                   )}
@@ -422,7 +500,7 @@ export default function Bills() {
                   {bill.reference && (
                     <DropdownMenuItem onClick={() => copyToClipboard(bill.reference!, 'Referenz')}>
                       <Files className="w-4 h-4 mr-2" />
-                      Referenz kopieren
+                      {t('bills.copyReference')}
                     </DropdownMenuItem>
                   )}
                   
@@ -431,7 +509,7 @@ export default function Bills() {
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => handleDuplicateInvoice(bill)}>
                       <Files className="w-4 h-4 mr-2" />
-                      Rechnung duplizieren
+                      {t('bills.duplicateInvoice')}
                       </DropdownMenuItem>
                     </>
                   )}
@@ -450,6 +528,7 @@ export default function Bills() {
           </div>
         </CardContent>
       </Card>
+      </ContextMenu>
     );
   };
 
@@ -468,11 +547,11 @@ export default function Bills() {
           await createFinanceEntry({
             date: new Date().toISOString(),
             type: 'ausgabe',
-            category: 'Rechnung',
+            category: t('bills.billCategory'),
             amount: bill.amount,
             currency: bill.currency || 'CHF',
-            notes: `Bezahlt: ${bill.title}`,
-            paymentMethod: 'Überweisung',
+            notes: `${t('bills.paidPrefix')}${bill.title}`,
+            paymentMethod: t('bills.transferPaymentMethod'),
             isRecurring: false,
           });
         }
@@ -488,7 +567,7 @@ export default function Bills() {
   // Handle delete bill
   const handleDeleteBill = async (bill: Bill) => {
     if (bill.source === 'person') {
-      toast.error('Rechnungen von Personen können nur auf der Personen-Seite gelöscht werden.');
+      toast.error(t('bills.cannotDeletePersonInvoice'));
       return;
     }
     setDeleteConfirmId(bill.id);
@@ -504,30 +583,30 @@ export default function Bills() {
       }
       setShowPersonDialog(true);
     } else {
-      toast.error('Person nicht gefunden');
+      toast.error(t('bills.personNotFound'));
     }
   };
 
   // Handle duplicate invoice
   const handleDuplicateInvoice = async (bill: Bill) => {
     if (bill.source !== 'person' || !bill.personId) {
-      toast.error('Nur Rechnungen von Personen können dupliziert werden');
+      toast.error(t('bills.onlyPersonInvoicesCanDuplicate'));
       return;
     }
     
     try {
       const person = people.find(p => p.id === bill.personId);
       if (!person) {
-        toast.error('Person nicht gefunden');
+        toast.error(t('bills.personNotFound'));
         return;
       }
       
       // Open person dialog
       setSelectedPerson(person);
       setShowPersonDialog(true);
-      toast.info('Bitte die Rechnung im Dialog duplizieren');
+      toast.info(t('bills.pleaseDuplicateInDialog'));
     } catch (error: any) {
-      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+      toast.error(t('bills.error') + (error.message || t('common.error')));
     }
   };
 
@@ -812,7 +891,7 @@ export default function Bills() {
                   id="creditorName"
                   value={formData.creditorName}
                   onChange={(e) => setFormData({ ...formData, creditorName: e.target.value })}
-                  placeholder="z.B. Stadtwerke AG"
+                  placeholder={t('bills.creditorNamePlaceholder', 'z.B. Stadtwerke AG')}
                 />
               </div>
 
@@ -822,7 +901,7 @@ export default function Bills() {
                   id="iban"
                   value={formData.iban}
                   onChange={(e) => setFormData({ ...formData, iban: e.target.value })}
-                  placeholder="CH00 0000 0000 0000 0000 0"
+                  placeholder={t('documents.ibanPlaceholderFull', 'CH00 0000 0000 0000 0000 0')}
                   className="font-mono"
                 />
               </div>
@@ -833,7 +912,7 @@ export default function Bills() {
                   id="reference"
                   value={formData.reference}
                   onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
-                  placeholder="Referenznummer"
+                  placeholder={t('bills.referencePlaceholder', 'Referenznummer')}
                 />
               </div>
             </div>

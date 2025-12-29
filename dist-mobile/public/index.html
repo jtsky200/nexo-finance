@@ -9,6 +9,16 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Nexo Mobile</title>
+    <!-- Domain redirect script - Redirect Firebase URLs to custom domain -->
+    <script>
+      (function() {
+        var hostname = window.location.hostname;
+        if (hostname === 'm-nexo-jtsky100.web.app' || hostname === 'm-nexo-jtsky100.firebaseapp.com') {
+          window.location.href = 'https://m.nexo.report' + window.location.pathname + window.location.search;
+          return;
+        }
+      })();
+    </script>
     <!-- Import maps for React from CDN -->
 
     <script type="importmap">
@@ -20,21 +30,21 @@
       }
     }
     </script>
-    <script type="module" crossorigin src="/index-DwRZjLYJ.js"></script>
+    <script type="module" crossorigin src="/index-NR-GL6aI.js"></script>
     <link rel="modulepreload" crossorigin href="/vendor-i18n-CxwOOByA.js">
     <link rel="modulepreload" crossorigin href="/vendor-utils-BNe0Xlio.js">
-    <link rel="modulepreload" crossorigin href="/vendor-misc-CNnXDEWF.js">
-    <link rel="modulepreload" crossorigin href="/vendor-router-CqlaLFHO.js">
-    <link rel="modulepreload" crossorigin href="/vendor-ui-DFoAMWof.js">
-    <link rel="modulepreload" crossorigin href="/vendor-firebase-BWqYINcm.js">
+    <link rel="modulepreload" crossorigin href="/vendor-misc-Dgoprpj-.js">
+    <link rel="modulepreload" crossorigin href="/vendor-router-D6hxBhhV.js">
+    <link rel="modulepreload" crossorigin href="/vendor-ui-lt1so0uj.js">
+    <link rel="modulepreload" crossorigin href="/vendor-firebase-Dpcgiyci.js">
     <link rel="modulepreload" crossorigin href="/vendor-toast-CdQ6zwVl.js">
-    <link rel="modulepreload" crossorigin href="/vendor-api-DUnF1PDn.js">
-    <link rel="modulepreload" crossorigin href="/page-aichat-Cjc3JURy.js">
-    <link rel="modulepreload" crossorigin href="/page-calendar-B_vrBQ9w.js">
-    <link rel="modulepreload" crossorigin href="/vendor-charts-DCDgDKH3.js">
-    <link rel="modulepreload" crossorigin href="/page-shopping-CaV_373E.js">
+    <link rel="modulepreload" crossorigin href="/vendor-api-CWSsqTq_.js">
+    <link rel="modulepreload" crossorigin href="/page-aichat-D9kAxZiV.js">
+    <link rel="modulepreload" crossorigin href="/page-calendar-BeNX6wtJ.js">
+    <link rel="modulepreload" crossorigin href="/page-shopping-C32ttjsD.js">
+    <link rel="modulepreload" crossorigin href="/vendor-charts-_TfMDWHD.js">
     <link rel="modulepreload" crossorigin href="/vendor-dates-gcsEV1c3.js">
-    <link rel="stylesheet" crossorigin href="/index-5vN5C1ad.css">
+    <link rel="stylesheet" crossorigin href="/index-uh_oWNbn.css">
   </head>
   <body>
     <div id="root"></div>

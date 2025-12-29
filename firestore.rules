@@ -101,5 +101,37 @@ service cloud.firestore {
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
+    
+    // Login history collection
+    match /loginHistory/{loginId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      // No update or delete - login history is append-only
+    }
+    
+    // Two-factor authentication secrets collection
+    match /twoFactorSecrets/{userId} {
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Phone numbers collection - for phone authentication
+    match /phoneNumbers/{phoneNumber} {
+      // Only allow users to read their own phone number
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Allow create/update only if the userId matches the authenticated user
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+    
+    // Security events collection - for security monitoring
+    match /securityEvents/{eventId} {
+      // Only authenticated users can create security events (for their own events)
+      // System can also create events (no userId check for critical events)
+      allow create: if isAuthenticated();
+      // Only allow read for the user's own events or system admins (future: add admin check)
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || resource.data.userId == null);
+      // No update or delete - security events are immutable
+    }
   }
 }

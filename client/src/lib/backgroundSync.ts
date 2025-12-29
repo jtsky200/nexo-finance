@@ -18,9 +18,14 @@ class BackgroundSyncManager {
    * Check if Background Sync is supported
    */
   private checkSupport(): void {
-    this.isSupported = 
-      'serviceWorker' in navigator &&
-      'sync' in (self as any).ServiceWorkerRegistration?.prototype;
+    try {
+      this.isSupported = 
+        'serviceWorker' in navigator &&
+        'sync' in (self as any).ServiceWorkerRegistration?.prototype &&
+        typeof (self as any).ServiceWorkerRegistration?.prototype?.sync?.register === 'function';
+    } catch (error) {
+      this.isSupported = false;
+    }
   }
 
   /**
@@ -93,7 +98,7 @@ class BackgroundSyncManager {
    */
   async syncReminders(): Promise<void> {
     if (!this.isSupported || !this.registration) {
-      console.warn('[BackgroundSync] Background Sync not supported or not registered');
+      // Silently return - not supported
       return;
     }
 
@@ -101,8 +106,15 @@ class BackgroundSyncManager {
       await (this.registration as any).sync.register('sync-reminders');
       console.log('[BackgroundSync] Reminder sync registered');
       eventBus.emit('background-sync:registered', { type: 'reminders' });
-    } catch (error) {
-      console.error('[BackgroundSync] Failed to register reminder sync:', error);
+    } catch (error: any) {
+      // Background Sync might be disabled by browser/user settings
+      if (error?.message?.includes('Background Sync is disabled') || 
+          error?.name === 'UnknownError') {
+        // Silently ignore - Background Sync is disabled by browser/user
+        return;
+      }
+      // Only log actual errors
+      console.warn('[BackgroundSync] Failed to register reminder sync:', error?.message || error);
     }
   }
 
@@ -111,7 +123,7 @@ class BackgroundSyncManager {
    */
   async syncChatReminders(): Promise<void> {
     if (!this.isSupported || !this.registration) {
-      console.warn('[BackgroundSync] Background Sync not supported or not registered');
+      // Silently return - not supported
       return;
     }
 
@@ -119,8 +131,15 @@ class BackgroundSyncManager {
       await (this.registration as any).sync.register('sync-chat-reminders');
       console.log('[BackgroundSync] Chat reminder sync registered');
       eventBus.emit('background-sync:registered', { type: 'chatReminders' });
-    } catch (error) {
-      console.error('[BackgroundSync] Failed to register chat reminder sync:', error);
+    } catch (error: any) {
+      // Background Sync might be disabled by browser/user settings
+      if (error?.message?.includes('Background Sync is disabled') || 
+          error?.name === 'UnknownError') {
+        // Silently ignore - Background Sync is disabled by browser/user
+        return;
+      }
+      // Only log actual errors
+      console.warn('[BackgroundSync] Failed to register chat reminder sync:', error?.message || error);
     }
   }
 
@@ -129,7 +148,7 @@ class BackgroundSyncManager {
    */
   async syncAllData(): Promise<void> {
     if (!this.isSupported || !this.registration) {
-      console.warn('[BackgroundSync] Background Sync not supported or not registered');
+      // Silently return - not supported
       return;
     }
 
@@ -137,8 +156,16 @@ class BackgroundSyncManager {
       await (this.registration as any).sync.register('sync-data');
       console.log('[BackgroundSync] All data sync registered');
       eventBus.emit('background-sync:registered', { type: 'all' });
-    } catch (error) {
-      console.error('[BackgroundSync] Failed to register all data sync:', error);
+    } catch (error: any) {
+      // Background Sync might be disabled by browser/user settings
+      // This is not a critical error, just log as debug
+      if (error?.message?.includes('Background Sync is disabled') || 
+          error?.name === 'UnknownError') {
+        // Silently ignore - Background Sync is disabled by browser/user
+        return;
+      }
+      // Only log actual errors
+      console.warn('[BackgroundSync] Failed to register all data sync:', error?.message || error);
     }
   }
 

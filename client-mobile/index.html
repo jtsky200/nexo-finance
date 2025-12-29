@@ -9,6 +9,16 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Nexo Mobile</title>
+    <!-- Domain redirect script - Redirect Firebase URLs to custom domain -->
+    <script>
+      (function() {
+        var hostname = window.location.hostname;
+        if (hostname === 'm-nexo-jtsky100.web.app' || hostname === 'm-nexo-jtsky100.firebaseapp.com') {
+          window.location.href = 'https://m.nexo.report' + window.location.pathname + window.location.search;
+          return;
+        }
+      })();
+    </script>
     <!-- Import maps for React from CDN -->
     <script type="importmap">
     {

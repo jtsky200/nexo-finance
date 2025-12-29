@@ -3,10 +3,12 @@ import { useLocation } from 'wouter';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { validateEmail, validatePassword } from '@/lib/validation';
+import { useTranslation } from 'react-i18next';
 
 export default function MobileLogin() {
   const [, setLocation] = useLocation();
   const { loginWithGoogle, loginWithEmail } = useAuth();
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -25,7 +27,8 @@ export default function MobileLogin() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Google login error:', error);
       }
-      toast.error(error.message || 'Login fehlgeschlagen');
+      const errorMessage = error.message || t('aiChat.unknownError', 'Ein unbekannter Fehler ist aufgetreten');
+      toast.error(t('auth.login.googleError', { message: errorMessage }));
     } finally {
       setIsLoading(false);
     }
@@ -40,14 +43,14 @@ export default function MobileLogin() {
     // Validate email
     const emailValidation = validateEmail(email);
     if (!emailValidation.valid) {
-      toast.error(emailValidation.error || 'Ungültige E-Mail-Adresse');
+      toast.error(emailValidation.error || t('auth.register.validation.emailInvalid'));
       return;
     }
     
     // Validate password
     const passwordValidation = validatePassword(password);
     if (!passwordValidation.valid) {
-      toast.error(passwordValidation.error || 'Ungültiges Passwort');
+      toast.error(passwordValidation.error || t('auth.register.validation.passwordInvalid'));
       return;
     }
     
@@ -61,7 +64,7 @@ export default function MobileLogin() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Email login error:', error);
       }
-      toast.error(error.message || 'Login fehlgeschlagen');
+      toast.error(error.message || t('auth.login.error', { message: 'Login fehlgeschlagen' }));
     } finally {
       setIsLoading(false);
     }
@@ -69,6 +72,11 @@ export default function MobileLogin() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+      {/* Language Switcher - Top */}
+      <div className="w-full max-w-md flex justify-end mb-4">
+        <LanguageSwitcher />
+      </div>
+      
       {/* Logo */}
       <div className="w-20 h-20 rounded-2xl bg-primary flex items-center justify-center mb-6">
         <span className="text-3xl font-bold text-primary-foreground">N</span>
@@ -76,7 +84,7 @@ export default function MobileLogin() {
       
       <h1 className="text-2xl font-bold mb-2">Nexo</h1>
       <p className="text-muted-foreground mb-8 text-center">
-        Melden Sie sich an, um fortzufahren
+        {t('auth.login.continueText')}
       </p>
 
       {/* Google Login - Native button */}
@@ -104,12 +112,12 @@ export default function MobileLogin() {
             d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
           />
         </svg>
-        {isLoading ? 'Laden...' : 'Mit Google anmelden'}
+        {isLoading ? t('common.loading') : t('auth.login.googleButton')}
       </button>
 
       <div className="flex items-center gap-4 w-full mb-4">
         <div className="flex-1 h-px bg-border" />
-        <span className="text-xs text-muted-foreground">oder</span>
+        <span className="text-xs text-muted-foreground">{t('auth.login.or')}</span>
         <div className="flex-1 h-px bg-border" />
       </div>
 
@@ -117,14 +125,14 @@ export default function MobileLogin() {
       <form onSubmit={handleEmailLogin} className="w-full space-y-3">
         <input
           type="email"
-          placeholder="E-Mail"
+          placeholder={t('auth.login.email')}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="w-full h-12 px-4 rounded-lg text-base bg-background border border-border outline-none focus:border-primary"
         />
         <input
           type="password"
-          placeholder="Passwort"
+          placeholder={t('auth.login.password')}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="w-full h-12 px-4 rounded-lg text-base bg-background border border-border outline-none focus:border-primary"
@@ -134,26 +142,26 @@ export default function MobileLogin() {
           disabled={isLoading}
           className="w-full h-12 px-6 rounded-lg font-medium text-base bg-primary text-primary-foreground active:opacity-80 disabled:opacity-50"
         >
-          {isLoading ? 'Laden...' : 'Anmelden'}
+          {isLoading ? t('common.loading') : t('auth.login.submit')}
         </button>
       </form>
 
       {/* Link to Register */}
       <p className="text-sm text-muted-foreground mt-6 text-center">
-        Noch kein Konto?{' '}
+        {t('auth.login.noAccount')}{' '}
         <button
           type="button"
           onClick={() => setLocation('/register')}
           className="text-primary underline font-medium"
         >
-          Jetzt registrieren
+          {t('auth.login.registerLink')}
         </button>
       </p>
 
       {/* Switch to Desktop */}
       <p className="text-xs text-muted-foreground mt-4 text-center">
         <a href="https://nexo-jtsky100.web.app" className="text-primary underline">
-          Desktop-Version öffnen
+          {t('auth.login.desktopLink')}
         </a>
       </p>
     </div>

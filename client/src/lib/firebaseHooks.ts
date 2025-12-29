@@ -17,8 +17,9 @@ import {
   DocumentSnapshot
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuthSafe } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import i18next from 'i18next';
 
 import { db, functions } from './firebase';
 
@@ -44,43 +45,43 @@ async function callFunctionWithTimeout<T = any>(
     if (error?.code && typeof error.code === 'string') {
       switch (error.code) {
         case 'unauthenticated':
-          throw new Error('Bitte melden Sie sich an');
+          throw new Error(i18next.t('common.errors.unauthenticated', 'Bitte melden Sie sich an'));
         case 'permission-denied':
-          throw new Error('Sie haben keine Berechtigung für diese Aktion');
+          throw new Error(i18next.t('common.errors.permissionDenied', 'Sie haben keine Berechtigung für diese Aktion'));
         case 'not-found':
-          throw new Error('Ressource nicht gefunden');
+          throw new Error(i18next.t('common.errors.notFound', 'Ressource nicht gefunden'));
         case 'invalid-argument':
-          throw new Error(error.message || 'Ungültige Eingabe');
+          throw new Error(error.message || i18next.t('common.errors.invalidInput', 'Ungültige Eingabe'));
         case 'deadline-exceeded':
-          throw new Error('Anfrage dauerte zu lange. Bitte versuchen Sie es erneut');
+          throw new Error(i18next.t('common.errors.deadlineExceeded', 'Anfrage dauerte zu lange. Bitte versuchen Sie es erneut'));
         case 'resource-exhausted':
-          throw new Error('Service vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut');
+          throw new Error(i18next.t('common.errors.resourceExhausted', 'Service vorübergehend nicht verfügbar. Bitte versuchen Sie es später erneut'));
         case 'failed-precondition':
-          throw new Error('Vorbedingung nicht erfüllt');
+          throw new Error(i18next.t('common.errors.failedPrecondition', 'Vorbedingung nicht erfüllt'));
         case 'aborted':
-          throw new Error('Anfrage wurde abgebrochen');
+          throw new Error(i18next.t('common.errors.aborted', 'Anfrage wurde abgebrochen'));
         case 'out-of-range':
-          throw new Error('Wert ausserhalb des gültigen Bereichs');
+          throw new Error(i18next.t('common.errors.outOfRange', 'Wert ausserhalb des gültigen Bereichs'));
         case 'unimplemented':
-          throw new Error('Funktion nicht implementiert');
+          throw new Error(i18next.t('common.errors.unimplemented', 'Funktion nicht implementiert'));
         case 'internal':
-          throw new Error('Interner Serverfehler. Bitte versuchen Sie es später erneut');
+          throw new Error(i18next.t('common.errors.internal', 'Interner Serverfehler. Bitte versuchen Sie es später erneut'));
         case 'unavailable':
-          throw new Error('Service nicht verfügbar. Bitte überprüfen Sie Ihre Internetverbindung');
+          throw new Error(i18next.t('common.errors.unavailable', 'Service nicht verfügbar. Bitte überprüfen Sie Ihre Internetverbindung'));
         case 'data-loss':
-          throw new Error('Datenverlust aufgetreten');
+          throw new Error(i18next.t('common.errors.dataLoss', 'Datenverlust aufgetreten'));
         default:
-          throw new Error(error.message || 'Ein Fehler ist aufgetreten');
+          throw new Error(error.message || i18next.t('common.errors.generic', 'Ein Fehler ist aufgetreten'));
       }
     }
     
     // Handle network errors
     if (error.message?.includes('timeout') || error.message?.includes('Timeout')) {
-      throw new Error('Anfrage dauerte zu lange. Bitte überprüfen Sie Ihre Internetverbindung');
+      throw new Error(i18next.t('common.errors.timeout', 'Anfrage dauerte zu lange. Bitte überprüfen Sie Ihre Internetverbindung'));
     }
     
     if (error.message?.includes('network') || error.message?.includes('Network') || error.message?.includes('fetch')) {
-      throw new Error('Netzwerkfehler. Bitte überprüfen Sie Ihre Internetverbindung');
+      throw new Error(i18next.t('common.errors.networkError', 'Netzwerkfehler. Bitte überprüfen Sie Ihre Internetverbindung'));
     }
     
     // Re-throw with original message if it's already a user-friendly error
@@ -111,7 +112,7 @@ export function useReminders(filters?: { startDate?: Date; endDate?: Date; statu
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const { user } = useAuth();
+  const { user } = useAuthSafe();
 
   // Use Firestore real-time listener for immediate synchronization
   useEffect(() => {
@@ -226,13 +227,21 @@ export function useReminders(filters?: { startDate?: Date; endDate?: Date; statu
         }
       },
       (err: any) => {
-        // Handle specific Firestore errors gracefully
-        if (err?.code === 'failed-precondition') {
+        // Handle permission errors gracefully - they can occur during authentication
+        if (err?.code === 'permission-denied' || err?.message?.includes('permission')) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[useReminders] Firestore permission error (expected during auth):', err);
+          }
+          setReminders([]);
+          setError(null);
+        } else if (err?.code === 'failed-precondition') {
           console.error('[useReminders] Firestore index missing:', err.message);
+          setError(err);
+        } else {
+          setError(err);
+          console.error('[useReminders] Snapshot error:', err);
         }
-        setError(err);
         setIsLoading(false);
-        console.error('[useReminders] Snapshot error:', err);
       }
     );
 
@@ -253,9 +262,11 @@ export function usePersonReminders(personId: string | undefined) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const { user } = useAuthSafe();
 
   const fetchReminders = useCallback(async () => {
-    if (!personId) {
+    // Only fetch when user is authenticated and personId is provided
+    if (!user || !personId) {
       setReminders([]);
       setIsLoading(false);
       return;
@@ -279,11 +290,16 @@ export function usePersonReminders(personId: string | undefined) {
     } finally {
       setIsLoading(false);
     }
-  }, [personId]);
+  }, [personId, user]);
 
   useEffect(() => {
+    if (!user) {
+      setReminders([]);
+      setIsLoading(false);
+      return;
+    }
     fetchReminders();
-  }, [fetchReminders, refreshKey]);
+  }, [fetchReminders, refreshKey, user]);
 
   const refetch = async () => {
     await fetchReminders();
@@ -335,8 +351,17 @@ export function useAllBills() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const { user } = useAuthSafe();
 
   useEffect(() => {
+    // Only fetch bills when user is authenticated
+    if (!user) {
+      setBills([]);
+      setStats({ total: 0, open: 0, openAmount: 0, overdue: 0, overdueAmount: 0, paid: 0, paidAmount: 0 });
+      setIsLoading(false);
+      return;
+    }
+
     const fetchBills = async () => {
       try {
         setIsLoading(true);
@@ -361,7 +386,7 @@ export function useAllBills() {
     };
 
     fetchBills();
-  }, [refreshKey]);
+  }, [user, refreshKey]);
 
   const refetch = () => setRefreshKey(prev => prev + 1);
 
@@ -418,7 +443,7 @@ export function useFinanceEntries(filters?: { startDate?: Date; endDate?: Date; 
   const [entries, setEntries] = useState<FinanceEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const { user } = useAuth();
+  const { user } = useAuthSafe();
 
   // Use Firestore real-time listener for immediate synchronization
   useEffect(() => {
@@ -531,13 +556,21 @@ export function useFinanceEntries(filters?: { startDate?: Date; endDate?: Date; 
         }
       },
       (err: any) => {
-        // Handle specific Firestore errors gracefully
-        if (err?.code === 'failed-precondition') {
+        // Handle permission errors gracefully - they can occur during authentication
+        if (err?.code === 'permission-denied' || err?.message?.includes('permission')) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[useFinanceEntries] Firestore permission error (expected during auth):', err);
+          }
+          setEntries([]);
+          setError(null);
+        } else if (err?.code === 'failed-precondition') {
           console.error('[useFinanceEntries] Firestore index missing:', err.message);
+          setError(err);
+        } else {
+          setError(err);
+          console.error('[useFinanceEntries] Snapshot error:', err);
         }
-        setError(err);
         setIsLoading(false);
-        console.error('[useFinanceEntries] Snapshot error:', err);
       }
     );
 
@@ -587,8 +620,16 @@ export function useTaxProfiles(refreshKey?: number) {
   const [profiles, setProfiles] = useState<TaxProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const { user } = useAuthSafe();
 
   const fetchProfiles = useCallback(async () => {
+    // Only fetch when user is authenticated
+    if (!user) {
+      setProfiles([]);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
       const getProfilesFunc = httpsCallable(functions, 'getTaxProfiles');
@@ -608,11 +649,16 @@ export function useTaxProfiles(refreshKey?: number) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
+    if (!user) {
+      setProfiles([]);
+      setIsLoading(false);
+      return;
+    }
     fetchProfiles();
-  }, [fetchProfiles, refreshKey]);
+  }, [fetchProfiles, refreshKey, user]);
 
   return { data: profiles, isLoading, error, refetch: fetchProfiles };
 }
@@ -669,7 +715,7 @@ export function usePeople() {
   const [people, setPeople] = useState<Person[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const { user } = useAuth();
+  const { user } = useAuthSafe();
 
   // Use Firestore real-time listener for immediate synchronization
   useEffect(() => {
@@ -802,6 +848,14 @@ export function usePeople() {
             }
           );
           return () => fallbackUnsubscribe();
+        } else if (err?.code === 'permission-denied' || err?.message?.includes('permission')) {
+          // Handle permission errors gracefully - they can occur during authentication
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[usePeople] Firestore permission error (expected during auth):', err);
+          }
+          setPeople([]);
+          setError(null);
+          setIsLoading(false);
         } else {
           setError(err);
           setIsLoading(false);
@@ -865,9 +919,12 @@ export function useChatReminders(unreadOnly: boolean = true) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const { user } = useAuthSafe();
 
   // Listen to data sync events and workflow events with debouncing
   useEffect(() => {
+    // Skip event listeners if not authenticated
+    if (!user) return;
     let debounceTimeout: number | null = null;
     let lastRefreshTime = 0;
     let isMounted = true;
@@ -935,6 +992,13 @@ export function useChatReminders(unreadOnly: boolean = true) {
   }, []);
 
   const fetchReminders = useCallback(async () => {
+    // Only fetch when user is authenticated
+    if (!user) {
+      setReminders([]);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
       const getChatRemindersFunc = httpsCallable(functions, 'getChatReminders');
@@ -955,15 +1019,22 @@ export function useChatReminders(unreadOnly: boolean = true) {
     } finally {
       setIsLoading(false);
     }
-  }, [unreadOnly]);
+  }, [unreadOnly, user]);
 
   useEffect(() => {
+    // Only start polling when user is authenticated
+    if (!user) {
+      setReminders([]);
+      setIsLoading(false);
+      return;
+    }
+
     fetchReminders();
     // Poll every 30 seconds for new reminders
     // Using polling instead of real-time listeners to avoid Firestore internal errors
     const interval = setInterval(fetchReminders, 30000);
     return () => clearInterval(interval);
-  }, [fetchReminders, refreshKey]);
+  }, [fetchReminders, refreshKey, user]);
 
   const refetch = () => {
     setRefreshKey(prev => prev + 1);
@@ -1016,9 +1087,15 @@ export function usePersonDebts(personId: string) {
   const [debts, setDebts] = useState<FinanceEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const { user } = useAuthSafe();
 
   useEffect(() => {
-    if (!personId) return;
+    // Only fetch when user is authenticated and personId is provided
+    if (!user || !personId) {
+      setDebts([]);
+      setIsLoading(false);
+      return;
+    }
 
     const fetchDebts = async () => {
       try {
@@ -1044,7 +1121,7 @@ export function usePersonDebts(personId: string) {
     };
 
     fetchDebts();
-  }, [personId]);
+  }, [personId, user]);
 
   return { data: debts, isLoading, error };
 }
@@ -1092,8 +1169,16 @@ export function useShoppingList(status?: string) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const { user } = useAuthSafe();
 
   useEffect(() => {
+    // Only fetch when user is authenticated
+    if (!user) {
+      setItems([]);
+      setIsLoading(false);
+      return;
+    }
+
     const fetchItems = async () => {
       try {
         setIsLoading(true);
@@ -1118,7 +1203,7 @@ export function useShoppingList(status?: string) {
     };
 
     fetchItems();
-  }, [status, refreshKey]);
+  }, [status, refreshKey, user]);
 
   const refetch = () => setRefreshKey(prev => prev + 1);
 
@@ -1186,9 +1271,11 @@ export function usePersonInvoices(personId: string | undefined) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const { user } = useAuthSafe();
 
   const fetchInvoices = useCallback(async () => {
-    if (!personId) {
+    // Only fetch when user is authenticated and personId is provided
+    if (!user || !personId) {
       setInvoices([]);
       setIsLoading(false);
       return;
@@ -1241,11 +1328,16 @@ export function usePersonInvoices(personId: string | undefined) {
     } finally {
       setIsLoading(false);
     }
-  }, [personId]);
+  }, [personId, user]);
 
   useEffect(() => {
+    if (!user) {
+      setInvoices([]);
+      setIsLoading(false);
+      return;
+    }
     fetchInvoices();
-  }, [fetchInvoices]);
+  }, [fetchInvoices, user]);
 
   const refetch = async () => {
     await fetchInvoices();
@@ -1369,8 +1461,16 @@ export function useStores() {
   const [data, setData] = useState<Store[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const { user } = useAuthSafe();
 
   const fetchStores = useCallback(async () => {
+    // Only fetch when user is authenticated
+    if (!user) {
+      setData([]);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
       const getStoresFunc = httpsCallable(functions, 'getStores');
@@ -1382,11 +1482,16 @@ export function useStores() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
+    if (!user) {
+      setData([]);
+      setIsLoading(false);
+      return;
+    }
     fetchStores();
-  }, [fetchStores]);
+  }, [fetchStores, user]);
 
   return { data, isLoading, error, refetch: fetchStores };
 }
@@ -1395,8 +1500,16 @@ export function useStoreItems(storeId?: string, storeName?: string) {
   const [data, setData] = useState<StoreItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const { user } = useAuthSafe();
 
   const fetchItems = useCallback(async () => {
+    // Only fetch when user is authenticated
+    if (!user) {
+      setData([]);
+      setIsLoading(false);
+      return;
+    }
+
     if (!storeId && !storeName) {
       setData([]);
       setIsLoading(false);
@@ -1414,11 +1527,16 @@ export function useStoreItems(storeId?: string, storeName?: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [storeId, storeName]);
+  }, [storeId, storeName, user]);
 
   useEffect(() => {
+    if (!user) {
+      setData([]);
+      setIsLoading(false);
+      return;
+    }
     fetchItems();
-  }, [fetchItems]);
+  }, [fetchItems, user]);
 
   return { data, isLoading, error, refetch: fetchItems };
 }
@@ -1427,8 +1545,16 @@ export function useReceipts(limit?: number, storeId?: string) {
   const [data, setData] = useState<Receipt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const { user } = useAuthSafe();
 
   const fetchReceipts = useCallback(async () => {
+    // Only fetch when user is authenticated
+    if (!user) {
+      setData([]);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
       const getReceiptsFunc = httpsCallable(functions, 'getReceipts');
@@ -1440,11 +1566,16 @@ export function useReceipts(limit?: number, storeId?: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [limit, storeId]);
+  }, [limit, storeId, user]);
 
   useEffect(() => {
+    if (!user) {
+      setData([]);
+      setIsLoading(false);
+      return;
+    }
     fetchReceipts();
-  }, [fetchReceipts]);
+  }, [fetchReceipts, user]);
 
   return { data, isLoading, error, refetch: fetchReceipts };
 }
@@ -1464,7 +1595,7 @@ export function useChatConversations() {
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const { user } = useAuth();
+  const { user } = useAuthSafe();
 
   useEffect(() => {
     if (!user) {
@@ -1475,52 +1606,50 @@ export function useChatConversations() {
 
     setIsLoading(true);
     
-    // Use Firestore real-time listener for immediate synchronization
-    const unsubscribe = onSnapshot(
+    // Use Firestore real-time listener with query to only fetch user's conversations
+    // This prevents permission errors by only requesting documents the user has access to
+    const conversationsQuery = query(
       collection(db, 'chatConversations'),
+      where('userId', '==', user.uid),
+      orderBy('updatedAt', 'desc')
+    );
+    
+    const unsubscribe = onSnapshot(
+      conversationsQuery,
       (snapshot) => {
         try {
-          const mappedConversations = snapshot.docs
-            .filter(doc => doc.data().userId === user.uid)
-            .map((doc) => {
-              const data = doc.data();
-              let createdAt: Date | string = new Date();
-              if (data.createdAt) {
-                if (data.createdAt.toDate) {
-                  createdAt = data.createdAt.toDate().toISOString();
-                } else if (typeof data.createdAt === 'string') {
-                  createdAt = data.createdAt;
-                } else {
-                  createdAt = new Date(data.createdAt).toISOString();
-                }
+          const mappedConversations = snapshot.docs.map((doc) => {
+            const data = doc.data();
+            let createdAt: Date | string = new Date();
+            if (data.createdAt) {
+              if (data.createdAt.toDate) {
+                createdAt = data.createdAt.toDate().toISOString();
+              } else if (typeof data.createdAt === 'string') {
+                createdAt = data.createdAt;
+              } else {
+                createdAt = new Date(data.createdAt).toISOString();
               }
-              
-              let updatedAt: Date | string = new Date();
-              if (data.updatedAt) {
-                if (data.updatedAt.toDate) {
-                  updatedAt = data.updatedAt.toDate().toISOString();
-                } else if (typeof data.updatedAt === 'string') {
-                  updatedAt = data.updatedAt;
-                } else {
-                  updatedAt = new Date(data.updatedAt).toISOString();
-                }
+            }
+            
+            let updatedAt: Date | string = new Date();
+            if (data.updatedAt) {
+              if (data.updatedAt.toDate) {
+                updatedAt = data.updatedAt.toDate().toISOString();
+              } else if (typeof data.updatedAt === 'string') {
+                updatedAt = data.updatedAt;
+              } else {
+                updatedAt = new Date(data.updatedAt).toISOString();
               }
-              
-              return {
-                id: doc.id,
-                userId: data.userId || user.uid,
-                title: data.title || 'Neue Konversation',
-                messages: data.messages || [],
-                createdAt,
-                updatedAt,
-              };
-            });
-          
-          // Sort by updatedAt descending (most recent first)
-          mappedConversations.sort((a, b) => {
-            const aTime = typeof a.updatedAt === 'string' ? new Date(a.updatedAt).getTime() : a.updatedAt.getTime();
-            const bTime = typeof b.updatedAt === 'string' ? new Date(b.updatedAt).getTime() : b.updatedAt.getTime();
-            return bTime - aTime;
+            }
+            
+            return {
+              id: doc.id,
+              userId: data.userId || user.uid,
+              title: data.title || 'Neue Konversation',
+              messages: data.messages || [],
+              createdAt,
+              updatedAt,
+            };
           });
           
           setConversations(mappedConversations);
@@ -1532,10 +1661,89 @@ export function useChatConversations() {
           setIsLoading(false);
         }
       },
-      (err) => {
-        console.error('Firestore listener error:', err);
-        setError(err);
-        setIsLoading(false);
+      (err: any) => {
+        // Handle permission errors gracefully - they can occur during authentication
+        if (err?.code === 'permission-denied' || err?.message?.includes('permission')) {
+          // Silently handle permission errors - user might not be fully authenticated yet
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[useChatConversations] Firestore permission error (expected during auth):', err);
+          }
+          setConversations([]);
+          setError(null);
+          setIsLoading(false);
+        } else if (err?.code === 'failed-precondition') {
+          // Index missing - try without orderBy as fallback
+          console.warn('[useChatConversations] Firestore index missing, using fallback query:', err.message);
+          const fallbackQuery = query(
+            collection(db, 'chatConversations'),
+            where('userId', '==', user.uid)
+          );
+          const fallbackUnsubscribe = onSnapshot(
+            fallbackQuery,
+            (snapshot) => {
+              try {
+                const mappedConversations = snapshot.docs.map((doc) => {
+                  const data = doc.data();
+                  let createdAt: Date | string = new Date();
+                  if (data.createdAt) {
+                    if (data.createdAt.toDate) {
+                      createdAt = data.createdAt.toDate().toISOString();
+                    } else if (typeof data.createdAt === 'string') {
+                      createdAt = data.createdAt;
+                    } else {
+                      createdAt = new Date(data.createdAt).toISOString();
+                    }
+                  }
+                  
+                  let updatedAt: Date | string = new Date();
+                  if (data.updatedAt) {
+                    if (data.updatedAt.toDate) {
+                      updatedAt = data.updatedAt.toDate().toISOString();
+                    } else if (typeof data.updatedAt === 'string') {
+                      updatedAt = data.updatedAt;
+                    } else {
+                      updatedAt = new Date(data.updatedAt).toISOString();
+                    }
+                  }
+                  
+                  return {
+                    id: doc.id,
+                    userId: data.userId || user.uid,
+                    title: data.title || 'Neue Konversation',
+                    messages: data.messages || [],
+                    createdAt,
+                    updatedAt,
+                  };
+                });
+                
+                // Sort by updatedAt descending (most recent first)
+                mappedConversations.sort((a, b) => {
+                  const aTime = typeof a.updatedAt === 'string' ? new Date(a.updatedAt).getTime() : a.updatedAt.getTime();
+                  const bTime = typeof b.updatedAt === 'string' ? new Date(b.updatedAt).getTime() : b.updatedAt.getTime();
+                  return bTime - aTime;
+                });
+                
+                setConversations(mappedConversations);
+                setError(null);
+              } catch (fallbackErr) {
+                console.error('[useChatConversations] Error processing fallback snapshot:', fallbackErr);
+                setError(fallbackErr as Error);
+              } finally {
+                setIsLoading(false);
+              }
+            },
+            (fallbackErr: any) => {
+              console.error('[useChatConversations] Fallback snapshot error:', fallbackErr);
+              setError(fallbackErr);
+              setIsLoading(false);
+            }
+          );
+          return () => fallbackUnsubscribe();
+        } else {
+          console.error('[useChatConversations] Firestore listener error:', err);
+          setError(err);
+          setIsLoading(false);
+        }
       }
     );
 
@@ -1595,6 +1803,8 @@ export interface ShoppingBudget {
 }
 
 export interface UserSettings {
+  firstName?: string;
+  lastName?: string;
   ocrProvider?: string;
   openaiApiKey?: string | null;
   autoConfirmDocuments?: boolean;
@@ -1607,6 +1817,15 @@ export interface UserSettings {
   currency?: string;
   canton?: string;
   notificationsEnabled?: boolean;
+  emailNotifications?: boolean;
+  pushNotifications?: boolean;
+  reminderNotifications?: boolean;
+  financeNotifications?: boolean;
+  chatNotifications?: boolean;
+  autoBackupEnabled?: boolean;
+  backupFrequency?: string;
+  analyticsEnabled?: boolean;
+  dataRetentionDays?: number;
   glassEffectEnabled?: boolean;
   biometricEnabled?: boolean;
   preferDesktop?: boolean;
@@ -1618,8 +1837,17 @@ export function useUserSettings() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const { user } = useAuthSafe();
 
   useEffect(() => {
+    // Only fetch settings when user is authenticated
+    if (!user) {
+      setSettings(null);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
     const fetchSettings = async () => {
       try {
         setIsLoading(true);
@@ -1636,7 +1864,7 @@ export function useUserSettings() {
     };
 
     fetchSettings();
-  }, []);
+  }, [user]);
 
   const updateSettings = useCallback(async (newSettings: Partial<UserSettings>) => {
     try {

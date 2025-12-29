@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,15 +18,20 @@ import ShoppingListModal from '@/components/ShoppingListModal';
 import PersonInvoicesDialog from '@/components/PersonInvoicesDialog';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import ContextMenu from '@/components/ContextMenu';
+import { Edit2, Copy } from 'lucide-react';
 
 export default function Finance() {
   const { t } = useTranslation();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<any>(null);
   const [showShoppingList, setShowShoppingList] = useState(false);
   const [showAddPersonDialog, setShowAddPersonDialog] = useState(false);
   const [showPersonInvoicesDialog, setShowPersonInvoicesDialog] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<any>(null);
   const [defaultType, setDefaultType] = useState<'einnahme' | 'ausgabe'>('ausgabe');
+  const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
+  const [entryToDelete, setEntryToDelete] = useState<string | null>(null);
   const [newPerson, setNewPerson] = useState({ name: '', email: '', phone: '', currency: 'CHF', type: 'household' as const });
   const [activeTab, setActiveTab] = useState('overview');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -58,7 +64,8 @@ export default function Finance() {
     try {
       const d = date?.toDate ? date.toDate() : new Date(date);
       if (isNaN(d.getTime())) return 'N/A';
-      return d.toLocaleDateString('de-CH', {
+      const locale = i18n.language === 'de' ? 'de-CH' : i18n.language === 'en' ? 'en-GB' : i18n.language === 'es' ? 'es-ES' : i18n.language === 'nl' ? 'nl-NL' : i18n.language === 'it' ? 'it-IT' : i18n.language === 'fr' ? 'fr-FR' : 'de-CH';
+      return d.toLocaleDateString(locale, {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -70,6 +77,38 @@ export default function Finance() {
 
   const formatAmount = (amount: number, currency: string = 'CHF') => {
     return `${currency} ${(amount / 100).toFixed(2)}`;
+  };
+
+  // Translate category names
+  const translateCategory = (category: string) => {
+    const categoryMap: { [key: string]: string } = {
+      'Lebensmittel': t('finance.categories.groceries'),
+      'Miete': t('finance.categories.rent'),
+      'Transport': t('finance.categories.transport'),
+      'Versicherungen': t('finance.categories.insurance'),
+      'Unterhaltung': t('finance.categories.entertainment'),
+      'Gesundheit': t('finance.categories.health'),
+      'Gehalt': t('finance.categories.salary'),
+      'Bonus': t('finance.categories.bonus'),
+      'Investitionen': t('finance.categories.investments'),
+      'Sonstiges': t('finance.categories.other'),
+      'Rechnung': t('bills.billCategory'),
+    };
+    return categoryMap[category] || category;
+  };
+
+  // Translate payment methods
+  const translatePaymentMethod = (method: string) => {
+    const methodMap: { [key: string]: string } = {
+      'Karte': t('finance.paymentMethods.card'),
+      'Bar': t('finance.paymentMethods.cash'),
+      'Überweisung': t('finance.paymentMethods.transfer'),
+      'Kreditkarte': t('finance.paymentMethods.creditCard'),
+      'Debitkarte': t('finance.paymentMethods.debitCard'),
+      'PayPal': 'PayPal',
+      'Twint': 'Twint',
+    };
+    return methodMap[method] || method;
   };
 
   const incomeEntries = useMemo(
@@ -187,7 +226,7 @@ export default function Finance() {
       // Refresh data
       await refetch();
       
-      toast.success(t('finance.allEntriesDeleted', `${allEntries.length} Einträge gelöscht`));
+      toast.success(t('finance.allEntriesDeleted', { count: allEntries.length }));
     } catch (error: any) {
       toast.error(t('finance.clearError', 'Fehler beim Löschen: ') + error.message);
     } finally {
@@ -198,16 +237,26 @@ export default function Finance() {
 
   // Export functions
   const exportToCSV = () => {
-    const headers = ['Datum', 'Typ', 'Kategorie', 'Betrag', 'Währung', 'Zahlungsmethode', 'Status', 'Notizen'];
+    const headers = [
+      t('finance.exportHeaders.date'),
+      t('finance.exportHeaders.type'),
+      t('finance.exportHeaders.category'),
+      t('finance.exportHeaders.amount'),
+      t('finance.exportHeaders.currency'),
+      t('finance.exportHeaders.paymentMethod'),
+      t('finance.exportHeaders.status'),
+      t('finance.exportHeaders.notes'),
+    ];
     const rows = allEntries.map(entry => {
       const date = (entry.date as any)?.toDate ? (entry.date as any).toDate() : new Date(entry.date);
-      const dateStr = isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString('de-CH');
+      const locale = i18n.language === 'de' ? 'de-CH' : i18n.language === 'en' ? 'en-GB' : i18n.language === 'es' ? 'es-ES' : i18n.language === 'nl' ? 'nl-NL' : i18n.language === 'it' ? 'it-IT' : i18n.language === 'fr' ? 'fr-FR' : 'de-CH';
+      const dateStr = isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString(locale);
       const isIncome = entry.type === 'einnahme';
       // Status nur für Ausgaben, bei Einnahmen leer
-      const statusText = isIncome ? '' : ((entry as any).status === 'paid' ? 'Bezahlt' : 'Offen');
+      const statusText = isIncome ? '' : ((entry as any).status === 'paid' ? t('finance.exportStatus.paid') : t('finance.exportStatus.open'));
       return [
         dateStr,
-        isIncome ? 'Einnahme' : 'Ausgabe',
+        isIncome ? t('finance.exportType.income') : t('finance.exportType.expense'),
         entry.category || '',
         (entry.amount / 100).toFixed(2),
         entry.currency || 'CHF',
@@ -259,48 +308,54 @@ export default function Finance() {
         </style>
       </head>
       <body>
-        <h1>Finanzübersicht</h1>
-        <p style="color: #64748b;">Exportiert am ${new Date().toLocaleDateString('de-CH', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+        <h1>${t('finance.exportPDF.title')}</h1>
+        <p style="color: #64748b;">${(() => {
+          const date = new Date();
+          const monthKey = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'][date.getMonth()];
+          const monthName = t(`calendar.months.${monthKey}`);
+          return `${t('finance.exportPDF.exportedOn')} ${String(date.getDate()).padStart(2, '0')} ${monthName} ${date.getFullYear()}`;
+        })()}</p>
         
         <div class="summary">
           <div class="summary-card">
-            <h3>Einnahmen</h3>
+            <h3>${t('finance.income')}</h3>
             <p class="income">${totalIncomeFormatted}</p>
           </div>
           <div class="summary-card">
-            <h3>Ausgaben</h3>
+            <h3>${t('finance.expenses')}</h3>
             <p class="expense">${totalExpensesFormatted}</p>
           </div>
           <div class="summary-card">
-            <h3>Saldo</h3>
+            <h3>${t('finance.balance')}</h3>
             <p class="balance">${balanceFormatted}</p>
           </div>
         </div>
 
-        <h2>Alle Transaktionen (${allEntries.length})</h2>
+        <h2>${t('finance.exportPDF.allTransactions')} (${allEntries.length})</h2>
         <table>
           <thead>
             <tr>
-              <th>Datum</th>
-              <th>Typ</th>
-              <th>Kategorie</th>
-              <th>Betrag</th>
-              <th>Status</th>
+              <th>${t('finance.exportHeaders.date')}</th>
+              <th>${t('finance.exportHeaders.type')}</th>
+              <th>${t('finance.exportHeaders.category')}</th>
+              <th>${t('finance.exportHeaders.amount')}</th>
+              <th>${t('finance.exportHeaders.status')}</th>
             </tr>
           </thead>
           <tbody>
             ${allEntries.map(entry => {
               const date = (entry.date as any)?.toDate ? (entry.date as any).toDate() : new Date(entry.date);
-              const dateStr = isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString('de-CH');
+              const locale = i18n.language === 'de' ? 'de-CH' : i18n.language === 'en' ? 'en-GB' : i18n.language === 'es' ? 'es-ES' : i18n.language === 'nl' ? 'nl-NL' : i18n.language === 'it' ? 'it-IT' : i18n.language === 'fr' ? 'fr-FR' : 'de-CH';
+      const dateStr = isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString(locale);
               const isIncome = entry.type === 'einnahme';
               // Status nur für Ausgaben anzeigen, nicht für Einnahmen
-              const statusText = isIncome ? '-' : ((entry as any).status === 'paid' ? '✓ Bezahlt' : '○ Offen');
+              const statusText = isIncome ? '-' : ((entry as any).status === 'paid' ? t('finance.exportPDF.paidSymbol') : t('finance.exportPDF.openSymbol'));
               // Konsistente Klasse basierend auf isIncome
               const typeClass = isIncome ? 'type-einnahme' : 'type-ausgabe';
               return `
                 <tr>
                   <td>${dateStr}</td>
-                  <td class="${typeClass}">${isIncome ? '↑ Einnahme' : '↓ Ausgabe'}</td>
+                  <td class="${typeClass}">${isIncome ? t('finance.exportPDF.incomeSymbol') : t('finance.exportPDF.expenseSymbol')}</td>
                   <td>${entry.category || '-'}</td>
                   <td class="${typeClass}">${formatAmount(entry.amount, entry.currency)}</td>
                   <td>${statusText}</td>
@@ -339,8 +394,13 @@ export default function Finance() {
     toast.success(t('finance.exportSuccess', 'Export erfolgreich'));
   };
 
-  const openDialog = (type: 'einnahme' | 'ausgabe') => {
+  const openDialog = (type: 'einnahme' | 'ausgabe', entry?: any) => {
     setDefaultType(type);
+    if (entry) {
+      setEditingEntry(entry);
+    } else {
+      setEditingEntry(null);
+    }
     setDialogOpen(true);
   };
 
@@ -387,7 +447,7 @@ export default function Finance() {
   const confirmStatusChange = async (entryId: string, newStatus: string) => {
     try {
       await updateFinanceEntry(entryId, { status: newStatus } as any);
-      toast.success(newStatus === 'paid' ? 'Als bezahlt markiert ✓' : 'Status aktualisiert');
+      toast.success(newStatus === 'paid' ? t('finance.markedAsPaid') : t('finance.statusUpdated'));
       setStatusChangeConfirm(null);
       // Force immediate refetch
       await refetch();
@@ -421,11 +481,44 @@ export default function Finance() {
           const isIncome = entry.type === 'einnahme' || type === 'einnahme';
           const entryType = entry.type || type || 'ausgabe'; // Default to ausgabe if unknown
           
+          // Build context menu actions
+          const contextMenuActions = [
+            {
+              id: 'edit',
+              label: t('common.edit', 'Bearbeiten'),
+              icon: <Edit2 className="w-4 h-4" />,
+              onClick: () => openDialog(entryType, entry),
+            },
+            {
+              id: 'duplicate',
+              label: t('common.duplicate', 'Duplizieren'),
+              icon: <Copy className="w-4 h-4" />,
+              onClick: () => {
+                const newEntry = {
+                  ...entry,
+                  id: undefined,
+                  date: new Date().toISOString(),
+                };
+                openDialog(entryType, newEntry);
+              },
+            },
+            {
+              id: 'delete',
+              label: t('common.delete', 'Löschen'),
+              icon: <Trash2 className="w-4 h-4" />,
+              onClick: () => {
+                setEntryToDelete(entry.id);
+                setShowDeleteConfirmDialog(true);
+              },
+              variant: 'destructive' as const,
+            },
+          ];
+
           return (
-            <div
-              key={entry.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors gap-2"
-            >
+            <ContextMenu key={entry.id} actions={contextMenuActions}>
+              <div
+                className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors gap-2"
+              >
               <div className="flex items-start gap-3 flex-1">
                 <div className={`mt-1 ${isIncome ? 'text-green-500' : 'text-red-500'}`}>
                   {isIncome ? (
@@ -436,9 +529,9 @@ export default function Finance() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <p className="font-medium text-foreground">{entry.category}</p>
+                    <p className="font-medium text-foreground">{translateCategory(entry.category)}</p>
                     {entry.paymentMethod && (
-                      <Badge variant="outline" className="text-xs">{entry.paymentMethod}</Badge>
+                      <Badge variant="outline" className="text-xs">{translatePaymentMethod(entry.paymentMethod)}</Badge>
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground">
@@ -498,6 +591,7 @@ export default function Finance() {
                 )}
               </div>
             </div>
+            </ContextMenu>
           );
         })}
       </div>
@@ -715,7 +809,7 @@ export default function Finance() {
                   })}
                   {categoryData.length > 6 && (
                     <p className="text-xs text-muted-foreground text-center pt-2">
-                      +{categoryData.length - 6} weitere Kategorien
+                      {t('finance.moreCategories', { count: categoryData.length - 6 })}
                     </p>
                   )}
                 </div>
@@ -809,14 +903,43 @@ export default function Finance() {
           {activeTab === 'income' && (
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <CardTitle className="text-base sm:text-lg">{t('finance.income')}</CardTitle>
-                  <Button size="sm" onClick={() => openDialog('einnahme')}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    <span className="hidden sm:inline">{t('finance.addIncome')}</span>
-                    <span className="sm:hidden">+</span>
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                      <SelectTrigger className="w-[180px] h-8 text-sm">
+                        <SelectValue placeholder={t('finance.filterByCategory', 'Nach Kategorie filtern')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">{t('finance.allCategories', 'Alle Kategorien')}</SelectItem>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {categoryFilter !== 'all' && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setCategoryFilter('all')}
+                        className="h-8 px-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+                    <Button size="sm" onClick={() => openDialog('einnahme')}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      <span className="hidden sm:inline">{t('finance.addIncome')}</span>
+                      <span className="sm:hidden">+</span>
+                    </Button>
+                  </div>
                 </div>
+                {categoryFilter !== 'all' && (
+                  <CardDescription className="mt-2">
+                    {t('finance.showingCategory', 'Zeigt')}: <Badge variant="secondary">{categoryFilter}</Badge>
+                  </CardDescription>
+                )}
               </CardHeader>
               <CardContent>
                 {renderEntryList(incomeEntries, 'einnahme')}
@@ -828,14 +951,43 @@ export default function Finance() {
           {activeTab === 'expenses' && (
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <CardTitle className="text-base sm:text-lg">{t('finance.expenses')}</CardTitle>
-                  <Button size="sm" onClick={() => openDialog('ausgabe')}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    <span className="hidden sm:inline">{t('finance.addExpense')}</span>
-                    <span className="sm:hidden">+</span>
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-muted-foreground" />
+                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                      <SelectTrigger className="w-[180px] h-8 text-sm">
+                        <SelectValue placeholder={t('finance.filterByCategory', 'Nach Kategorie filtern')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">{t('finance.allCategories', 'Alle Kategorien')}</SelectItem>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {categoryFilter !== 'all' && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setCategoryFilter('all')}
+                        className="h-8 px-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+                    <Button size="sm" onClick={() => openDialog('ausgabe')}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      <span className="hidden sm:inline">{t('finance.addExpense')}</span>
+                      <span className="sm:hidden">+</span>
+                    </Button>
+                  </div>
                 </div>
+                {categoryFilter !== 'all' && (
+                  <CardDescription className="mt-2">
+                    {t('finance.showingCategory', 'Zeigt')}: <Badge variant="secondary">{categoryFilter}</Badge>
+                  </CardDescription>
+                )}
               </CardHeader>
               <CardContent>
                 {renderEntryList(expenseEntries, 'ausgabe')}
@@ -942,8 +1094,18 @@ export default function Finance() {
       {/* Dialogs */}
       <AddFinanceEntryDialog 
         open={dialogOpen} 
-        onOpenChange={setDialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) {
+            setEditingEntry(null);
+          }
+        }}
         defaultType={defaultType}
+        onSuccess={() => {
+          refetch();
+          setDialogOpen(false);
+          setEditingEntry(null);
+        }}
       />
       <ShoppingListModal open={showShoppingList} onClose={() => setShowShoppingList(false)} />
       {selectedPerson && (
@@ -971,12 +1133,12 @@ export default function Finance() {
               />
             </div>
             <div>
-              <Label>Email</Label>
+              <Label>{t('common.email', 'Email')}</Label>
               <Input
                 type="email"
                 value={newPerson.email}
                 onChange={(e) => setNewPerson({ ...newPerson, email: e.target.value })}
-                placeholder="email@example.com"
+                placeholder={t('common.emailPlaceholder', 'email@example.com')}
               />
             </div>
             <div>
@@ -1020,13 +1182,13 @@ export default function Finance() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-green-500" />
-              Ausgabe als bezahlt markieren?
+              {t('finance.markExpenseAsPaid', 'Ausgabe als bezahlt markieren?')}
             </AlertDialogTitle>
             <AlertDialogDescription className="space-y-3">
               <div className="bg-muted/50 rounded-lg p-3 mt-2">
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium text-foreground">
-                    {statusChangeConfirm?.entry?.category || 'Ausgabe'}
+                    {statusChangeConfirm?.entry?.category || t('finance.expenses', 'Ausgabe')}
                   </span>
                   <span className="text-sm font-bold text-red-600">
                     -{formatAmount(statusChangeConfirm?.entry?.amount || 0, statusChangeConfirm?.entry?.currency || 'CHF')}
@@ -1039,17 +1201,17 @@ export default function Finance() {
                 )}
               </div>
               <p className="text-sm">
-                Diese Ausgabe wird als <span className="font-medium text-green-600">bezahlt</span> markiert.
+                {t('finance.expenseWillBeMarkedPaid', 'Diese Ausgabe wird als')} <span className="font-medium text-green-600">{t('finance.paid', 'bezahlt')}</span> {t('finance.marked', 'markiert')}.
               </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel', 'Abbrechen')}</AlertDialogCancel>
             <AlertDialogAction 
               onClick={() => statusChangeConfirm && confirmStatusChange(statusChangeConfirm.entryId, statusChangeConfirm.newStatus)}
               className="bg-green-600 hover:bg-green-700"
             >
-              Als bezahlt markieren
+              {t('finance.markAsPaid', 'Als bezahlt markieren')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1068,7 +1230,7 @@ export default function Finance() {
                 {t('finance.clearAllWarning', 'Diese Aktion kann nicht rückgängig gemacht werden.')}
               </p>
               <p className="font-medium text-foreground">
-                {t('finance.clearAllCount', `Es werden ${allEntries.length} Einträge gelöscht.`)}
+                {t('finance.clearAllCount', { count: allEntries.length })}
               </p>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1089,6 +1251,41 @@ export default function Finance() {
               ) : (
                 t('finance.clearAllConfirm', 'Ja, alle löschen')
               )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Single Entry Confirmation Dialog */}
+      <AlertDialog open={showDeleteConfirmDialog} onOpenChange={setShowDeleteConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('finance.deleteEntryTitle', 'Eintrag löschen')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('common.confirmDelete', 'Möchten Sie wirklich löschen?')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setEntryToDelete(null)}>
+              {t('common.cancel', 'Abbrechen')}
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={async () => {
+                if (entryToDelete) {
+                  try {
+                    await deleteFinanceEntry(entryToDelete);
+                    toast.success(t('common.deleted', 'Gelöscht'));
+                    refetch();
+                  } catch (error: any) {
+                    toast.error(t('common.error') + ': ' + error.message);
+                  }
+                }
+                setShowDeleteConfirmDialog(false);
+                setEntryToDelete(null);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t('common.delete', 'Löschen')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

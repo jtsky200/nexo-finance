@@ -1,12 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { 
   Loader2, Send, Paperclip, Image, Globe, Mic, Tag, FileText, Zap, ArrowUp, 
   ClipboardList, Bell, Wallet, ShoppingCart, Calendar, ScanLine,
   LayoutDashboard, Users, Settings, Check, Plus, Search, Edit, Trash,
-  Clock, Euro, TrendingUp, TrendingDown, Info, AlertCircle, X, type LucideIcon
+  Clock, Euro, TrendingUp, TrendingDown, Info, AlertCircle, X, Play, Pause, type LucideIcon
 } from "lucide-react";
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Streamdown } from "streamdown";
@@ -241,6 +243,16 @@ export function AIChatBox({
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const plusButtonRef = useRef<HTMLButtonElement>(null);
   const plusMenuDropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Preview states
+  const [filePreview, setFilePreview] = useState<{ file: File; url: string; type: 'file' | 'image' } | null>(null);
+  const [audioPreview, setAudioPreview] = useState<{ blob: Blob; url: string } | null>(null);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Progress states
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleNavigate = useCallback(async (route: string) => {
     setLocation(route);
@@ -331,12 +343,12 @@ export function AIChatBox({
     if (!trimmedInput || isLoading) return;
     
     if (trimmedInput.length > 10000) {
-      toast.error('Nachricht ist zu lang. Bitte kürze sie auf maximal 10.000 Zeichen.');
+      toast.error(t('aiChat.messageTooLong'));
       return;
     }
     
     if (isLoading) {
-      toast.info('Bitte warte auf die Antwort...');
+      toast.info(t('aiChat.waitForResponse'));
       return;
     }
 
@@ -350,9 +362,9 @@ export function AIChatBox({
       if (process.env.NODE_ENV === 'development') {
         console.error('Error sending message:', error);
       }
-      toast.error('Fehler beim Senden der Nachricht. Bitte versuche es erneut.');
+      toast.error(t('aiChat.unknownError'));
     }
-  }, [input, isLoading, onSendMessage, scrollToBottom]);
+  }, [input, isLoading, onSendMessage, scrollToBottom, t]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -367,175 +379,243 @@ export function AIChatBox({
     scrollToBottom();
   }, [isLoading, onSendMessage, scrollToBottom]);
 
-  const handleFileUpload = useCallback(async (file: File) => {
+  const handleFileSelect = useCallback((file: File) => {
     const MAX_FILE_SIZE = 10 * 1024 * 1024;
     if (file.size > MAX_FILE_SIZE) {
-      toast.error(`Datei ist zu gross. Maximal ${(MAX_FILE_SIZE / 1024 / 1024).toFixed(0)}MB erlaubt.`);
+      toast.error(t('aiChat.fileTooLarge', { maxSize: (MAX_FILE_SIZE / 1024 / 1024).toFixed(0) }));
       return;
     }
     
     if (!file.name || file.name.length > 255) {
-      toast.error('Ungültiger Dateiname.');
+      toast.error(t('aiChat.invalidFilename'));
       return;
     }
 
-    const loadingToast = toast.loading('Datei wird hochgeladen...');
+    // Show preview instead of uploading immediately
+    const url = URL.createObjectURL(file);
+    setFilePreview({ file, url, type: file.type.startsWith('image/') ? 'image' : 'file' });
+  }, [t]);
+
+  const handleFileUpload = useCallback(async () => {
+    if (!filePreview) return;
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    const loadingToast = toast.loading(t('aiChat.uploadingFile'));
     
     try {
+      // Simulate progress for file reading
       const base64 = await Promise.race<string>([
         new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
+          reader.onprogress = (e) => {
+            if (e.lengthComputable) {
+              setUploadProgress(Math.round((e.loaded / e.total) * 30)); // 30% for reading
+            }
+          };
           reader.onload = () => {
             const result = reader.result as string;
             if (!result || !result.includes(',')) {
-              reject(new Error('Ungültiges Dateiformat'));
+              reject(new Error(t('aiChat.invalidFileFormat')));
               return;
             }
+            setUploadProgress(30);
             resolve(result.split(',')[1]);
           };
-          reader.onerror = () => reject(new Error('Fehler beim Lesen der Datei'));
-          reader.readAsDataURL(file);
+          reader.onerror = () => reject(new Error(t('aiChat.fileReadError')));
+          reader.readAsDataURL(filePreview.file);
         }),
         new Promise<string>((_, reject) => 
-          setTimeout(() => reject(new Error('Upload-Timeout')), 30000)
+          setTimeout(() => reject(new Error(t('aiChat.uploadTimeout'))), 30000)
         ),
       ]);
 
+      setUploadProgress(40);
       const uploadAIChatFile = httpsCallable(functions, 'uploadAIChatFile');
       
+      // Simulate progress for upload
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev < 90) return prev + 5;
+          return prev;
+        });
+      }, 200);
+
       const result = await Promise.race([
         uploadAIChatFile({
-          fileName: file.name,
+          fileName: filePreview.file.name,
           fileData: base64,
-          fileType: file.type,
+          fileType: filePreview.file.type,
         }),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Upload-Timeout')), 60000)
+          setTimeout(() => reject(new Error(t('aiChat.uploadConnectionTimeout'))), 60000)
         ),
       ]) as any;
 
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+
       if (!result?.data) {
-        throw new Error('Keine Antwort vom Server erhalten');
+        throw new Error(t('aiChat.noServerResponse'));
       }
 
       const data = result.data as { fileUrl: string; fileName: string };
       if (!data.fileUrl || !data.fileName) {
-        throw new Error('Ungültige Server-Antwort');
+        throw new Error(t('aiChat.invalidServerResponse'));
       }
 
       toast.dismiss(loadingToast);
       onSendMessage(`[Datei: ${data.fileName}](${data.fileUrl})`);
-      toast.success('Datei erfolgreich hochgeladen');
+      toast.success(t('aiChat.fileUploadSuccess'));
+      setFilePreview(null);
+      URL.revokeObjectURL(filePreview.url);
     } catch (error: any) {
       toast.dismiss(loadingToast);
-      const errorMsg = error.message || 'Unbekannter Fehler';
+      const errorMsg = error.message || t('aiChat.unknownError');
       if (process.env.NODE_ENV === 'development') {
         console.error('File upload error:', error);
       }
-      toast.error(`Fehler beim Hochladen: ${errorMsg}`);
+      toast.error(t('aiChat.uploadError', { error: errorMsg }));
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
     }
-  }, [onSendMessage]);
+  }, [filePreview, onSendMessage, t]);
 
-  const handleImageUpload = useCallback(async (file: File) => {
+  const handleImageSelect = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) {
-      toast.error('Bitte wähle ein Bild aus (JPG, PNG, GIF, etc.)');
+      toast.error(t('aiChat.selectImage'));
       return;
     }
     
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
     if (file.size > MAX_IMAGE_SIZE) {
-      toast.error(`Bild ist zu gross. Maximal ${(MAX_IMAGE_SIZE / 1024 / 1024).toFixed(0)}MB erlaubt.`);
+      toast.error(t('aiChat.imageTooLarge', { maxSize: (MAX_IMAGE_SIZE / 1024 / 1024).toFixed(0) }));
       return;
     }
     
     if (!file.name || file.name.length > 255) {
-      toast.error('Ungültiger Dateiname.');
+      toast.error(t('aiChat.invalidFilename'));
       return;
     }
 
-    const loadingToast = toast.loading('Bild wird hochgeladen...');
+    // Show preview instead of uploading immediately
+    const url = URL.createObjectURL(file);
+    setFilePreview({ file, url, type: 'image' });
+  }, [t]);
+
+  const handleImageUpload = useCallback(async () => {
+    if (!filePreview || filePreview.type !== 'image') return;
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    const loadingToast = toast.loading(t('aiChat.uploadingImage'));
 
     try {
+      // Simulate progress for image reading
       const base64 = await Promise.race<string>([
         new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
+          reader.onprogress = (e) => {
+            if (e.lengthComputable) {
+              setUploadProgress(Math.round((e.loaded / e.total) * 30)); // 30% for reading
+            }
+          };
           reader.onload = () => {
             const result = reader.result as string;
             if (!result || !result.includes(',')) {
-              reject(new Error('Ungültiges Bildformat'));
+              reject(new Error(t('aiChat.invalidImageFormat')));
               return;
             }
+            setUploadProgress(30);
             resolve(result.split(',')[1]);
           };
-          reader.onerror = () => reject(new Error('Fehler beim Lesen des Bildes'));
-          reader.readAsDataURL(file);
+          reader.onerror = () => reject(new Error(t('aiChat.imageReadError')));
+          reader.readAsDataURL(filePreview.file);
         }),
         new Promise<string>((_, reject) => 
-          setTimeout(() => reject(new Error('Upload-Timeout')), 30000)
+          setTimeout(() => reject(new Error(t('aiChat.imageUploadTimeout'))), 30000)
         ),
       ]);
 
+      setUploadProgress(40);
       const uploadAIChatImage = httpsCallable(functions, 'uploadAIChatImage');
+      
+      // Simulate progress for upload
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev < 90) return prev + 5;
+          return prev;
+        });
+      }, 200);
       
       const result = await Promise.race([
         uploadAIChatImage({
-          fileName: file.name,
+          fileName: filePreview.file.name,
           fileData: base64,
-          fileType: file.type,
+          fileType: filePreview.file.type,
         }),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Upload-Timeout')), 60000)
+          setTimeout(() => reject(new Error(t('aiChat.uploadConnectionTimeout'))), 60000)
         ),
       ]) as any;
 
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+
       if (!result?.data) {
-        throw new Error('Keine Antwort vom Server erhalten');
+        throw new Error(t('aiChat.noServerResponse'));
       }
 
       const data = result.data as { imageUrl: string; fileName: string };
       if (!data.imageUrl || !data.fileName) {
-        throw new Error('Ungültige Server-Antwort');
+        throw new Error(t('aiChat.invalidServerResponse'));
       }
 
       toast.dismiss(loadingToast);
       onSendMessage(`![${data.fileName}](${data.imageUrl})`);
-      toast.success('Bild erfolgreich hochgeladen');
+      toast.success(t('aiChat.imageUploadSuccess'));
+      setFilePreview(null);
+      URL.revokeObjectURL(filePreview.url);
     } catch (error: any) {
       toast.dismiss(loadingToast);
-      const errorMsg = error.message || 'Unbekannter Fehler';
+      const errorMsg = error.message || t('aiChat.unknownError');
       if (process.env.NODE_ENV === 'development') {
         console.error('Image upload error:', error);
       }
-      toast.error(`Fehler beim Hochladen: ${errorMsg}`);
+      toast.error(t('aiChat.uploadError', { error: errorMsg }));
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
     }
-  }, [onSendMessage]);
+  }, [filePreview, onSendMessage, t]);
 
   const handleVoiceRecording = useCallback(async () => {
     if (isRecording && mediaRecorder) {
       try {
         mediaRecorder.stop();
         setIsRecording(false);
-        toast.info('Aufnahme wird verarbeitet...');
+        toast.info(t('aiChat.processingRecording'));
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
           console.error('Error stopping recording:', error);
         }
         setIsRecording(false);
-        toast.error('Fehler beim Stoppen der Aufnahme');
+        toast.error(t('aiChat.stopRecordingError'));
       }
       return;
     }
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        toast.error('Mikrofon-Zugriff wird von diesem Browser nicht unterstützt.');
+        toast.error(t('aiChat.microphoneNotSupported'));
         return;
       }
 
       const stream = await Promise.race([
         navigator.mediaDevices.getUserMedia({ audio: true }),
         new Promise<MediaStream>((_, reject) => 
-          setTimeout(() => reject(new Error('Mikrofon-Zugriff-Timeout')), 10000)
+          setTimeout(() => reject(new Error(t('aiChat.microphoneTimeout'))), 10000)
         ),
       ]);
 
@@ -558,75 +638,22 @@ export function AIChatBox({
         
         const MAX_AUDIO_SIZE = 10 * 1024 * 1024;
         if (blob.size > MAX_AUDIO_SIZE) {
-          toast.error('Audio-Aufnahme ist zu gross. Bitte kürze die Aufnahme.');
+          toast.error(t('aiChat.audioTooLarge'));
           stream.getTracks().forEach(track => track.stop());
           return;
         }
 
-        const loadingToast = toast.loading('Audio wird transkribiert...');
-
-        try {
-          const base64 = await Promise.race<string>([
-            new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => {
-                const result = reader.result as string;
-                if (!result || !result.includes(',')) {
-                  reject(new Error('Ungültiges Audioformat'));
-                  return;
-                }
-                resolve(result.split(',')[1]);
-              };
-              reader.onerror = () => reject(new Error('Fehler beim Lesen der Audio-Datei'));
-              reader.readAsDataURL(blob);
-            }),
-            new Promise<string>((_, reject) => 
-              setTimeout(() => reject(new Error('Audio-Verarbeitung-Timeout')), 30000)
-            ),
-          ]);
-
-          const transcribeAudio = httpsCallable(functions, 'transcribeAIChatAudio');
-          
-          const result = await Promise.race([
-            transcribeAudio({
-              audioData: base64,
-              mimeType: 'audio/webm',
-            }),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Transkription-Timeout')), 60000)
-            ),
-          ]) as any;
-
-          if (!result?.data) {
-            throw new Error('Keine Antwort vom Server erhalten');
-          }
-
-          const data = result.data as { transcription: string };
-          if (data.transcription && data.transcription.trim()) {
-            setInput(data.transcription.trim());
-            textareaRef.current?.focus();
-            toast.dismiss(loadingToast);
-            toast.success('Spracheingabe erfolgreich');
-          } else {
-            throw new Error('Keine Transkription erhalten');
-          }
-        } catch (error: any) {
-          toast.dismiss(loadingToast);
-          const errorMsg = error.message || 'Unbekannter Fehler';
-          if (process.env.NODE_ENV === 'development') {
-            console.error('Transcription error:', error);
-          }
-          toast.error(`Fehler bei der Transkription: ${errorMsg}`);
-        } finally {
-          stream.getTracks().forEach(track => track.stop());
-        }
+        // Show audio preview instead of immediately transcribing
+        const url = URL.createObjectURL(blob);
+        setAudioPreview({ blob, url });
+        stream.getTracks().forEach(track => track.stop());
       };
 
       recorder.onerror = (event: any) => {
         if (process.env.NODE_ENV === 'development') {
           console.error('MediaRecorder error:', event);
         }
-        toast.error('Fehler bei der Aufnahme');
+        toast.error(t('aiChat.recordingError'));
         setIsRecording(false);
         stream.getTracks().forEach(track => track.stop());
       };
@@ -634,52 +661,311 @@ export function AIChatBox({
       recordingTimeout = setTimeout(() => {
         if (recorder.state === 'recording') {
           recorder.stop();
-          toast.warning('Maximale Aufnahmezeit erreicht (5 Minuten)');
+          toast.warning(t('aiChat.maxRecordingTime'));
         }
       }, 5 * 60 * 1000);
 
       recorder.start();
       setMediaRecorder(recorder);
       setIsRecording(true);
-      toast.info('Aufnahme gestartet... (Klicke erneut zum Stoppen)');
+      toast.info(t('aiChat.recordingStarted'));
     } catch (error: any) {
       setIsRecording(false);
-      const errorMsg = error.message || 'Unbekannter Fehler';
+      const errorMsg = error.message || t('aiChat.unknownError');
       if (process.env.NODE_ENV === 'development') {
         console.error('Microphone access error:', error);
       }
       
       if (errorMsg.includes('permission') || errorMsg.includes('denied')) {
-        toast.error('Mikrofon-Zugriff wurde verweigert. Bitte erlaube den Zugriff in den Browser-Einstellungen.');
+        toast.error(t('aiChat.microphonePermissionDenied'));
       } else if (errorMsg.includes('not found') || errorMsg.includes('not available')) {
-        toast.error('Kein Mikrofon gefunden. Bitte verbinde ein Mikrofon.');
+        toast.error(t('aiChat.microphoneNotFound'));
       } else {
-        toast.error(`Mikrofon-Fehler: ${errorMsg}`);
+        toast.error(t('aiChat.microphoneError', { error: errorMsg }));
       }
     }
-  }, [isRecording, mediaRecorder]);
+  }, [isRecording, mediaRecorder, t]);
+
+  // Transcribe audio when user confirms
+  const handleTranscribeAudio = useCallback(async () => {
+    if (!audioPreview) return;
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    const loadingToast = toast.loading(t('aiChat.transcribingAudio'));
+
+    try {
+      // Simulate progress for audio reading
+      const base64 = await Promise.race<string>([
+        new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onprogress = (e) => {
+            if (e.lengthComputable) {
+              setUploadProgress(Math.round((e.loaded / e.total) * 20)); // 20% for reading
+            }
+          };
+          reader.onload = () => {
+            const result = reader.result as string;
+            if (!result || !result.includes(',')) {
+              reject(new Error(t('aiChat.invalidAudioFormat')));
+              return;
+            }
+            setUploadProgress(20);
+            resolve(result.split(',')[1]);
+          };
+          reader.onerror = () => reject(new Error(t('aiChat.audioReadError')));
+          reader.readAsDataURL(audioPreview.blob);
+        }),
+        new Promise<string>((_, reject) => 
+          setTimeout(() => reject(new Error(t('aiChat.audioProcessingTimeout'))), 30000)
+        ),
+      ]);
+
+      setUploadProgress(30);
+      const transcribeAudio = httpsCallable(functions, 'transcribeAIChatAudio');
+      
+      // Simulate progress for transcription
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev < 90) return prev + 5;
+          return prev;
+        });
+      }, 300);
+      
+      const result = await Promise.race([
+        transcribeAudio({
+          audioData: base64,
+          mimeType: 'audio/webm',
+        }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error(t('aiChat.transcriptionTimeout'))), 60000)
+        ),
+      ]) as any;
+
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+
+      if (!result?.data) {
+        throw new Error(t('aiChat.noServerResponse'));
+      }
+
+      const data = result.data as { transcription: string };
+      if (data.transcription && data.transcription.trim()) {
+        setInput(data.transcription.trim());
+        textareaRef.current?.focus();
+        toast.dismiss(loadingToast);
+        toast.success(t('aiChat.voiceInputSuccess'));
+        setAudioPreview(null);
+        URL.revokeObjectURL(audioPreview.url);
+      } else {
+        throw new Error(t('aiChat.noTranscription'));
+      }
+    } catch (error: any) {
+      toast.dismiss(loadingToast);
+      const errorMsg = error.message || t('aiChat.unknownError');
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Transcription error:', error);
+      }
+      toast.error(t('aiChat.transcriptionError', { error: errorMsg }));
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+    }
+  }, [audioPreview, t]);
+
+  // Audio playback handlers
+  const handlePlayAudio = useCallback(() => {
+    if (!audioPreview) return;
+    
+    if (!audioPlayerRef.current) {
+      audioPlayerRef.current = new Audio(audioPreview.url);
+      audioPlayerRef.current.onended = () => setIsPlayingAudio(false);
+      audioPlayerRef.current.onpause = () => setIsPlayingAudio(false);
+    }
+    
+    if (isPlayingAudio) {
+      audioPlayerRef.current.pause();
+      setIsPlayingAudio(false);
+    } else {
+      audioPlayerRef.current.play();
+      setIsPlayingAudio(true);
+    }
+  }, [audioPreview, isPlayingAudio]);
+
+  // Cleanup audio preview
+  useEffect(() => {
+    return () => {
+      if (audioPreview) {
+        URL.revokeObjectURL(audioPreview.url);
+      }
+      if (filePreview) {
+        URL.revokeObjectURL(filePreview.url);
+      }
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+        audioPlayerRef.current = null;
+      }
+    };
+  }, [audioPreview, filePreview]);
 
   const handleLanguageToggle = useCallback(() => {
     const currentLang = i18n.language;
     const newLang = currentLang === 'de' ? 'en' : 'de';
     i18n.changeLanguage(newLang);
     localStorage.setItem('language', newLang);
-    toast.success(newLang === 'de' ? 'Sprache auf Deutsch geändert' : 'Language changed to English');
-  }, [i18n]);
+    toast.success(t('aiChat.languageChanged', { lang: newLang === 'de' ? t('common.german') : t('common.english') }));
+  }, [i18n, t]);
 
   const renderInputForm = () => (
     <form
       ref={inputAreaRef}
       onSubmit={handleSubmit}
-      className="w-full"
+      className="w-full space-y-2"
     >
+      {/* File/Image Preview */}
+      {filePreview && (
+        <Card className="p-3">
+          <CardContent className="p-0 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">
+                {filePreview.type === 'image' ? t('aiChat.previewImage') : t('aiChat.previewFile')}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setFilePreview(null);
+                  URL.revokeObjectURL(filePreview.url);
+                }}
+                className="h-6 w-6 p-0"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            {filePreview.type === 'image' ? (
+              <img src={filePreview.url} alt="Preview" className="w-full rounded-lg max-h-48 object-contain" />
+            ) : (
+              <div className="flex items-center gap-2">
+                <FileText className="w-8 h-8 text-muted-foreground" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{filePreview.file.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {(filePreview.file.size / 1024).toFixed(1)} KB
+                  </p>
+                </div>
+              </div>
+            )}
+            {isUploading ? (
+              <div className="space-y-1">
+                <Progress value={uploadProgress} className="h-2" />
+                <p className="text-xs text-muted-foreground text-center">
+                  {filePreview.type === 'image' 
+                    ? t('aiChat.imageUploadProgress', { percent: uploadProgress })
+                    : t('aiChat.uploadProgress', { percent: uploadProgress })}
+                </p>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                onClick={filePreview.type === 'image' ? handleImageUpload : handleFileUpload}
+                className="w-full"
+                size="sm"
+              >
+                {filePreview.type === 'image' ? t('aiChat.sendImage') : t('aiChat.sendFile')}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Audio Preview */}
+      {audioPreview && (
+        <Card className="p-3">
+          <CardContent className="p-0 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">{t('aiChat.previewAudio')}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setAudioPreview(null);
+                  URL.revokeObjectURL(audioPreview.url);
+                  if (audioPlayerRef.current) {
+                    audioPlayerRef.current.pause();
+                    audioPlayerRef.current = null;
+                  }
+                }}
+                className="h-6 w-6 p-0"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handlePlayAudio}
+                className="flex-shrink-0"
+              >
+                {isPlayingAudio ? (
+                  <>
+                    <Pause className="w-4 h-4 mr-2" />
+                    {t('aiChat.pauseAudio')}
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4 mr-2" />
+                    {t('aiChat.playAudio')}
+                  </>
+                )}
+              </Button>
+              <div className="flex-1">
+                <p className="text-sm text-muted-foreground">{t('aiChat.previewAudio')}</p>
+              </div>
+            </div>
+            {isUploading ? (
+              <div className="space-y-1">
+                <Progress value={uploadProgress} className="h-2" />
+                <p className="text-xs text-muted-foreground text-center">
+                  {t('aiChat.transcriptionProgress', { percent: uploadProgress })}
+                </p>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                onClick={handleTranscribeAudio}
+                className="w-full"
+                size="sm"
+              >
+                {t('aiChat.sendTranscription')}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Upload Progress Bar */}
+      {isUploading && !filePreview && !audioPreview && (
+        <Card className="p-2">
+          <CardContent className="p-0 space-y-1">
+            <Progress value={uploadProgress} className="h-2" />
+            <p className="text-xs text-muted-foreground text-center">
+              {t('aiChat.uploadProgress', { percent: uploadProgress })}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <input
         ref={fileInputRef}
         type="file"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) handleFileUpload(file);
+          if (file) handleFileSelect(file);
           e.target.value = '';
         }}
         accept="*/*"
@@ -691,7 +977,7 @@ export function AIChatBox({
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) {
-            handleImageUpload(file);
+            handleImageSelect(file);
             setPlusMenuOpen(false);
           }
           e.target.value = '';

@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -59,12 +59,13 @@ interface AnalysisResult {
   message?: string;
 }
 
-const FOLDERS = [
-  { id: 'Rechnungen', label: 'Rechnungen', icon: Receipt },
-  { id: 'Termine', label: 'Termine', icon: Calendar },
-  { id: 'Verträge', label: 'Verträge', icon: FileText },
-  { id: 'Sonstiges', label: 'Sonstiges', icon: FolderOpen },
-];
+const FOLDER_IDS = ['Rechnungen', 'Termine', 'Verträge', 'Sonstiges'] as const;
+const FOLDER_ICONS = {
+  'Rechnungen': Receipt,
+  'Termine': Calendar,
+  'Verträge': FileText,
+  'Sonstiges': FolderOpen,
+};
 
 export default function DocumentUploader({
   personId,
@@ -74,6 +75,13 @@ export default function DocumentUploader({
   onReminderCreated,
 }: DocumentUploaderProps) {
   const { t } = useTranslation();
+  
+  const FOLDERS = useMemo(() => [
+    { id: 'Rechnungen', label: t('people.invoices', 'Rechnungen'), icon: Receipt },
+    { id: 'Termine', label: t('people.appointments', 'Termine'), icon: Calendar },
+    { id: 'Verträge', label: t('documents.contracts', 'Verträge'), icon: FileText },
+    { id: 'Sonstiges', label: t('documents.other', 'Sonstiges'), icon: FolderOpen },
+  ], [t]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isDragging, setIsDragging] = useState(false);
@@ -129,13 +137,13 @@ export default function DocumentUploader({
     // Validate file type
     const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
     if (!allowedTypes.includes(file.type)) {
-      toast.error('Nur Bilder (JPG, PNG, GIF, WebP) und PDFs erlaubt');
+      toast.error(t('documents.onlyImagesAndPdfsAllowed'));
       return;
     }
     
     // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
-      toast.error('Datei zu gross (max. 10MB)');
+      toast.error(t('documents.fileTooLarge'));
       return;
     }
     
@@ -234,7 +242,7 @@ export default function DocumentUploader({
       }
       
     } catch (error: any) {
-      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+      toast.error(t('common.error') + ': ' + (error.message || t('common.unknownError')));
     } finally {
       setIsUploading(false);
       setIsAnalyzing(false);
@@ -271,10 +279,10 @@ export default function DocumentUploader({
         });
         
         if (targetData.type === 'rechnung') {
-          toast.success('Rechnung erstellt');
+          toast.success(t('documents.invoiceCreated'));
           onInvoiceCreated?.(result.data.invoiceId);
         } else {
-          toast.success('Termin erstellt');
+          toast.success(t('documents.appointmentCreated'));
           onReminderCreated?.(result.data.reminderId);
         }
       } else {
@@ -286,7 +294,7 @@ export default function DocumentUploader({
           folder: targetData.folder,
           status: 'processed',
         });
-        toast.success('Dokument gespeichert');
+        toast.success(t('documents.documentSaved'));
       }
       
       // Reset state
@@ -300,7 +308,7 @@ export default function DocumentUploader({
       onUploadComplete?.();
       
     } catch (error: any) {
-      toast.error('Fehler beim Verarbeiten: ' + error.message);
+      toast.error(t('documents.processingError') + ': ' + error.message);
     }
   };
 
@@ -324,11 +332,11 @@ export default function DocumentUploader({
 
   const getTypeLabel = (type: string) => {
     switch (type) {
-      case 'rechnung': return 'Rechnung';
-      case 'termin': return 'Termin';
-      case 'vertrag': return 'Vertrag';
-      case 'sonstiges': return 'Sonstiges';
-      default: return 'Unbekannt';
+      case 'rechnung': return t('documents.invoice');
+      case 'termin': return t('documents.appointment');
+      case 'vertrag': return t('documents.contract');
+      case 'sonstiges': return t('documents.other');
+      default: return t('documents.unknown');
     }
   };
 
@@ -357,16 +365,16 @@ export default function DocumentUploader({
               <Upload className="w-6 h-6 text-muted-foreground" />
             </div>
             <div>
-              <p className="font-medium">Dokument hochladen</p>
+              <p className="font-medium">{t('documents.uploadDocument')}</p>
               <p className="text-sm text-muted-foreground">
-                Ziehe eine Datei hierher oder klicke zum Auswählen
+                {t('documents.dragOrClickToSelect')}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                JPG, PNG, GIF, WebP oder PDF (max. 10MB)
+                {t('documents.allowedFormats')}
               </p>
             </div>
             <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-              Datei auswählen
+              {t('documents.selectFile')}
             </Button>
           </div>
         ) : (
@@ -374,7 +382,7 @@ export default function DocumentUploader({
             {/* File Preview */}
             <div className="flex items-center justify-center gap-4">
               {filePreview ? (
-                <img src={filePreview} alt="Preview" className="max-h-32 rounded-lg shadow-md" />
+                <img src={filePreview} alt={t('documents.previewAlt', 'Vorschau')} className="max-h-32 rounded-lg shadow-md" />
               ) : (
                 <div className="w-24 h-32 bg-muted rounded-lg flex items-center justify-center">
                   <FileText className="w-8 h-8 text-muted-foreground" />
@@ -394,7 +402,7 @@ export default function DocumentUploader({
               <div className="space-y-2">
                 <Progress value={uploadProgress} />
                 <p className="text-sm text-muted-foreground">
-                  {isUploading ? 'Wird hochgeladen...' : 'Wird analysiert...'}
+                  {isUploading ? t('documents.uploading') : t('documents.analyzing')}
                 </p>
               </div>
             )}
@@ -404,11 +412,11 @@ export default function DocumentUploader({
               <div className="flex justify-center gap-2">
                 <Button variant="outline" onClick={handleCancel}>
                   <X className="w-4 h-4 mr-2" />
-                  Abbrechen
+                  {t('common.cancel')}
                 </Button>
                 <Button onClick={handleUploadAndAnalyze}>
                   <Upload className="w-4 h-4 mr-2" />
-                  Hochladen & Analysieren
+                  {t('documents.uploadAndAnalyze')}
                 </Button>
               </div>
             )}
@@ -422,10 +430,10 @@ export default function DocumentUploader({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {analysisResult && getTypeIcon(analysisResult.type)}
-              Dokument erkannt
+              {t('documents.documentRecognized')}
             </DialogTitle>
             <DialogDescription>
-              Überprüfe und bestätige die erkannten Daten
+              {t('documents.reviewAndConfirm')}
             </DialogDescription>
           </DialogHeader>
 
@@ -434,16 +442,16 @@ export default function DocumentUploader({
               {/* Analysis Result */}
               <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
                 <Badge variant={analysisResult.confidence > 70 ? 'default' : 'secondary'}>
-                  {analysisResult.confidence}% Sicherheit
+                  {analysisResult.confidence}% {t('documents.confidence')}
                 </Badge>
                 <span className="text-sm">
-                  Erkannt als: <strong>{getTypeLabel(analysisResult.type)}</strong>
+                  {t('documents.recognizedAs')}: <strong>{getTypeLabel(analysisResult.type)}</strong>
                 </span>
               </div>
 
               {/* Type Selection */}
               <div className="space-y-2">
-                <Label>Dokumenttyp</Label>
+                <Label>{t('documents.documentType')}</Label>
                 <Select 
                   value={confirmData.type} 
                   onValueChange={(v) => setConfirmData({ 
@@ -458,10 +466,10 @@ export default function DocumentUploader({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="rechnung">Rechnung</SelectItem>
-                    <SelectItem value="termin">Termin</SelectItem>
-                    <SelectItem value="vertrag">Vertrag</SelectItem>
-                    <SelectItem value="sonstiges">Sonstiges</SelectItem>
+                    <SelectItem value="rechnung">{t('documents.invoice')}</SelectItem>
+                    <SelectItem value="termin">{t('documents.appointment')}</SelectItem>
+                    <SelectItem value="vertrag">{t('documents.contract')}</SelectItem>
+                    <SelectItem value="sonstiges">{t('documents.other')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -469,11 +477,11 @@ export default function DocumentUploader({
               {/* Invoice Fields */}
               {confirmData.type === 'rechnung' && (
                 <div className="space-y-4 p-4 border rounded-lg">
-                  <h4 className="font-medium">Rechnungsdaten</h4>
+                  <h4 className="font-medium">{t('documents.invoiceData')}</h4>
                   
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Betrag</Label>
+                      <Label>{t('finance.amount')}</Label>
                       <Input
                         type="number"
                         step="0.01"
@@ -482,7 +490,7 @@ export default function DocumentUploader({
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Währung</Label>
+                      <Label>{t('documents.currency')}</Label>
                       <Select value={confirmData.currency} onValueChange={(v) => setConfirmData({ ...confirmData, currency: v })}>
                         <SelectTrigger>
                           <SelectValue />
@@ -497,7 +505,7 @@ export default function DocumentUploader({
                   </div>
                   
                   <div className="space-y-2">
-                    <Label>Fälligkeitsdatum</Label>
+                    <Label>{t('people.dueDate')}</Label>
                     <Input
                       type="date"
                       value={confirmData.dueDate}
@@ -506,16 +514,16 @@ export default function DocumentUploader({
                   </div>
                   
                   <div className="space-y-2">
-                    <Label>IBAN</Label>
+                    <Label>{t('documents.iban')}</Label>
                     <Input
                       value={confirmData.iban}
                       onChange={(e) => setConfirmData({ ...confirmData, iban: e.target.value })}
-                      placeholder="CH..."
+                      placeholder={t('documents.ibanPlaceholder', 'CH...')}
                     />
                   </div>
                   
                   <div className="space-y-2">
-                    <Label>Beschreibung</Label>
+                    <Label>{t('people.description')}</Label>
                     <Input
                       value={confirmData.description}
                       onChange={(e) => setConfirmData({ ...confirmData, description: e.target.value })}
@@ -523,14 +531,14 @@ export default function DocumentUploader({
                   </div>
                   
                   <div className="space-y-2">
-                    <Label>Richtung</Label>
+                    <Label>{t('people.direction')}</Label>
                     <Select value={confirmData.direction} onValueChange={(v) => setConfirmData({ ...confirmData, direction: v })}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="outgoing">Ich schulde (ausgehend)</SelectItem>
-                        <SelectItem value="incoming">Mir geschuldet (eingehend)</SelectItem>
+                        <SelectItem value="outgoing">{t('documents.iOwe')}</SelectItem>
+                        <SelectItem value="incoming">{t('documents.owedToMe')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -540,10 +548,10 @@ export default function DocumentUploader({
               {/* Appointment Fields */}
               {confirmData.type === 'termin' && (
                 <div className="space-y-4 p-4 border rounded-lg">
-                  <h4 className="font-medium">Termindaten</h4>
+                  <h4 className="font-medium">{t('documents.appointmentData')}</h4>
                   
                   <div className="space-y-2">
-                    <Label>Titel</Label>
+                    <Label>{t('calendar.title')}</Label>
                     <Input
                       value={confirmData.title}
                       onChange={(e) => setConfirmData({ ...confirmData, title: e.target.value })}
@@ -552,7 +560,7 @@ export default function DocumentUploader({
                   
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Datum</Label>
+                      <Label>{t('common.date')}</Label>
                       <Input
                         type="date"
                         value={confirmData.date}
@@ -560,7 +568,7 @@ export default function DocumentUploader({
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Uhrzeit</Label>
+                      <Label>{t('calendar.time')}</Label>
                       <Input
                         type="time"
                         value={confirmData.time}
@@ -570,11 +578,11 @@ export default function DocumentUploader({
                   </div>
                   
                   <div className="space-y-2">
-                    <Label>Ort</Label>
+                    <Label>{t('calendar.location')}</Label>
                     <Input
                       value={confirmData.location}
                       onChange={(e) => setConfirmData({ ...confirmData, location: e.target.value })}
-                      placeholder="Optional"
+                      placeholder={t('common.optional')}
                     />
                   </div>
                 </div>
@@ -583,7 +591,7 @@ export default function DocumentUploader({
               {/* Folder Selection for other types */}
               {(confirmData.type === 'vertrag' || confirmData.type === 'sonstiges') && (
                 <div className="space-y-2">
-                  <Label>Ordner</Label>
+                  <Label>{t('documents.folder')}</Label>
                   <Select value={confirmData.folder} onValueChange={(v) => setConfirmData({ ...confirmData, folder: v })}>
                     <SelectTrigger>
                       <SelectValue />
@@ -603,11 +611,11 @@ export default function DocumentUploader({
 
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={handleCancel}>
-              Abbrechen
+              {t('common.cancel')}
             </Button>
             <Button onClick={() => handleConfirmProcess()}>
               <CheckCircle className="w-4 h-4 mr-2" />
-              Bestätigen & Speichern
+              {t('documents.confirmAndSave')}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/lib/firebase';
@@ -48,14 +48,6 @@ interface PersonDocumentsTabProps {
   onReminderCreated?: () => void;
 }
 
-const FOLDERS = [
-  { id: 'all', label: 'Alle', icon: FolderOpen },
-  { id: 'Rechnungen', label: 'Rechnungen', icon: Receipt },
-  { id: 'Termine', label: 'Termine', icon: Calendar },
-  { id: 'Verträge', label: 'Verträge', icon: FileText },
-  { id: 'Sonstiges', label: 'Sonstiges', icon: File },
-];
-
 export default function PersonDocumentsTab({
   personId,
   personName,
@@ -63,6 +55,14 @@ export default function PersonDocumentsTab({
   onReminderCreated,
 }: PersonDocumentsTabProps) {
   const { t } = useTranslation();
+  
+  const FOLDERS = useMemo(() => [
+    { id: 'all', label: t('common.all', 'Alle'), icon: FolderOpen },
+    { id: 'Rechnungen', label: t('people.invoices', 'Rechnungen'), icon: Receipt },
+    { id: 'Termine', label: t('people.appointments', 'Termine'), icon: Calendar },
+    { id: 'Verträge', label: t('documents.contracts', 'Verträge'), icon: FileText },
+    { id: 'Sonstiges', label: t('documents.other', 'Sonstiges'), icon: File },
+  ], [t]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeFolder, setActiveFolder] = useState('all');
@@ -75,7 +75,7 @@ export default function PersonDocumentsTab({
       const result: any = await getPersonDocuments({ personId });
       setDocuments(result.data.documents || []);
     } catch (error) {
-      toast.error('Fehler beim Laden der Dokumente');
+      toast.error(t('documents.loadError'));
     } finally {
       setIsLoading(false);
     }
@@ -89,10 +89,10 @@ export default function PersonDocumentsTab({
     try {
       const deleteDocument = httpsCallable(functions, 'deleteDocument');
       await deleteDocument({ documentId, personId });
-      toast.success('Dokument gelöscht');
+      toast.success(t('documents.documentDeleted'));
       fetchDocuments();
     } catch (error) {
-      toast.error('Fehler beim Löschen');
+      toast.error(t('documents.deleteError'));
     } finally {
       setDeleteConfirmId(null);
     }
@@ -176,8 +176,8 @@ export default function PersonDocumentsTab({
             <FolderOpen className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
             <p className="text-muted-foreground">
               {activeFolder === 'all' 
-                ? 'Noch keine Dokumente hochgeladen'
-                : `Keine Dokumente in "${FOLDERS.find(f => f.id === activeFolder)?.label}"`
+                ? t('documents.noDocumentsUploaded')
+                : t('documents.noDocumentsInFolder', { folder: FOLDERS.find(f => f.id === activeFolder)?.label })
               }
             </p>
           </CardContent>
@@ -210,8 +210,8 @@ export default function PersonDocumentsTab({
                       </Badge>
                       {doc.processedType && (
                         <Badge variant="secondary" className="text-xs">
-                          {doc.processedType === 'rechnung' ? 'Rechnung erstellt' : 
-                           doc.processedType === 'termin' ? 'Termin erstellt' : 
+                          {doc.processedType === 'rechnung' ? t('documents.invoiceCreated') : 
+                           doc.processedType === 'termin' ? t('documents.appointmentCreated') : 
                            doc.status}
                         </Badge>
                       )}
@@ -230,13 +230,13 @@ export default function PersonDocumentsTab({
                       <DropdownMenuItem asChild>
                         <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
                           <ExternalLink className="w-4 h-4 mr-2" />
-                          Öffnen
+                          {t('common.open')}
                         </a>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <a href={doc.fileUrl} download={doc.fileName}>
                           <Download className="w-4 h-4 mr-2" />
-                          Herunterladen
+                          {t('common.download')}
                         </a>
                       </DropdownMenuItem>
                       <DropdownMenuItem 
@@ -244,7 +244,7 @@ export default function PersonDocumentsTab({
                         className="text-red-600"
                       >
                         <Trash2 className="w-4 h-4 mr-2" />
-                        Löschen
+                        {t('common.delete')}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -259,18 +259,18 @@ export default function PersonDocumentsTab({
       <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Dokument löschen?</AlertDialogTitle>
+            <AlertDialogTitle>{t('documents.confirmDelete')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Das Dokument wird unwiderruflich gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.
+              {t('documents.deleteDocumentDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction 
               onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}
               className="bg-red-600 hover:bg-red-700"
             >
-              Löschen
+              {t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

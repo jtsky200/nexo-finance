@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,22 +32,25 @@ interface SchoolPlannerDialogProps {
   onDataChanged?: () => void;
 }
 
-const SCHOOL_TYPES = [
-  { value: 'full', label: 'Ganzer Tag', icon: GraduationCap, color: 'bg-purple-600 text-white' },
-  { value: 'half', label: 'Halbtag', icon: Clock, color: 'bg-purple-400 text-white' },
-  { value: 'off', label: 'Schulfrei', icon: Coffee, color: 'bg-gray-400 text-white' },
-  { value: 'holiday', label: 'Ferien', icon: Home, color: 'bg-cyan-500 text-white' },
-];
-
-const HORT_TYPES = [
-  { value: 'full', label: 'Ganztag' },
-  { value: 'lunch', label: 'Mittag' },
-  { value: 'afternoon', label: 'Nachmittag' },
-  { value: 'none', label: 'Kein Hort' },
-];
+// SCHOOL_TYPES and HORT_TYPES will be defined inside the component to use t()
 
 export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged }: SchoolPlannerDialogProps) {
+  const { t } = useTranslation();
   const { data: people = [], isLoading: peopleLoading, refetch: refetchPeople } = usePeople();
+  
+  const SCHOOL_TYPES = useMemo(() => [
+    { value: 'full', label: t('calendar.schoolPlanner.schoolTypes.full', 'Ganzer Tag'), icon: GraduationCap, color: 'bg-purple-600 text-white' },
+    { value: 'half', label: t('calendar.schoolPlanner.schoolTypes.half', 'Halbtag'), icon: Clock, color: 'bg-purple-400 text-white' },
+    { value: 'off', label: t('calendar.schoolPlanner.schoolTypes.off', 'Schulfrei'), icon: Coffee, color: 'bg-gray-400 text-white' },
+    { value: 'holiday', label: t('calendar.schoolPlanner.schoolTypes.holiday', 'Ferien'), icon: Home, color: 'bg-cyan-500 text-white' },
+  ], [t]);
+
+  const HORT_TYPES = useMemo(() => [
+    { value: 'full', label: t('calendar.schoolPlanner.hortTypes.full', 'Ganztag') },
+    { value: 'lunch', label: t('calendar.schoolPlanner.hortTypes.lunch', 'Mittag') },
+    { value: 'afternoon', label: t('calendar.schoolPlanner.hortTypes.afternoon', 'Nachmittag') },
+    { value: 'none', label: t('calendar.schoolPlanner.hortTypes.none', 'Kein Hort') },
+  ], [t]);
   const [schedules, setSchedules] = useState<SchoolSchedule[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedChild, setSelectedChild] = useState<string>('');
@@ -139,7 +143,7 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
 
   const applyToSelected = async () => {
     if (selectedDates.size === 0 || !selectedChild) {
-      toast.error('Bitte wähle zuerst Tage aus');
+      toast.error(t('calendar.schoolPlanner.selectDaysFirst', 'Bitte wähle zuerst Tage aus'));
       return;
     }
 
@@ -160,12 +164,12 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
         })
       );
       await Promise.all(promises);
-      toast.success(`${selectedDates.size} Tage aktualisiert`);
+      toast.success(t('calendar.schoolPlanner.daysUpdated', '{{count}} Tage aktualisiert', { count: selectedDates.size }));
       setSelectedDates(new Set());
       fetchSchedules();
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      toast.error('Fehler beim Speichern');
+      toast.error(t('calendar.schoolPlanner.saveError', 'Fehler beim Speichern'));
     }
   };
 
@@ -176,7 +180,7 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
       fetchSchedules();
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      toast.error('Fehler beim Löschen');
+      toast.error(t('calendar.schoolPlanner.deleteError', 'Fehler beim Löschen'));
     }
   };
 
@@ -205,7 +209,7 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
 
   const handleAddChild = async () => {
     if (!newChildName.trim()) {
-      toast.error('Name ist erforderlich');
+      toast.error(t('people.errors.nameRequired', 'Name ist erforderlich'));
       return;
     }
 
@@ -222,11 +226,11 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
       
       // Close and reopen dialog to refresh
       onOpenChange(false);
-      toast.success('Kind hinzugefügt - bitte Schulplaner erneut öffnen');
+      toast.success(t('calendar.schoolPlanner.childAdded', 'Kind hinzugefügt - bitte Schulplaner erneut öffnen'));
       
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      toast.error('Fehler beim Hinzufügen');
+      toast.error(t('calendar.schoolPlanner.addError', 'Fehler beim Hinzufügen'));
     }
   };
 
@@ -250,7 +254,30 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
   const isToday = (date: Date) => date.toDateString() === new Date().toDateString();
   const isWeekend = (date: Date) => date.getDay() === 0 || date.getDay() === 6;
 
-  const monthNames = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  const monthNames = useMemo(() => [
+    t('calendar.months.january'),
+    t('calendar.months.february'),
+    t('calendar.months.march'),
+    t('calendar.months.april'),
+    t('calendar.months.may'),
+    t('calendar.months.june'),
+    t('calendar.months.july'),
+    t('calendar.months.august'),
+    t('calendar.months.september'),
+    t('calendar.months.october'),
+    t('calendar.months.november'),
+    t('calendar.months.december'),
+  ], [t]);
+  
+  const weekdayNames = useMemo(() => [
+    t('calendar.fullDays.monday'),
+    t('calendar.fullDays.tuesday'),
+    t('calendar.fullDays.wednesday'),
+    t('calendar.fullDays.thursday'),
+    t('calendar.fullDays.friday'),
+    t('calendar.fullDays.saturday'),
+    t('calendar.fullDays.sunday'),
+  ], [t]);
 
   return (
     <>
@@ -259,7 +286,7 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
           <DialogHeader className="pb-4 border-b">
             <DialogTitle className="flex items-center gap-2 text-xl">
               <GraduationCap className="w-5 h-5" />
-              Schulplaner
+              {t('calendar.schoolPlanner.title', 'Schulplaner')}
             </DialogTitle>
           </DialogHeader>
 
@@ -270,10 +297,10 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
           ) : children.length === 0 ? (
             <div className="text-center py-12">
               <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-              <p className="text-muted-foreground mb-4">Keine Kinder gefunden</p>
+              <p className="text-muted-foreground mb-4">{t('calendar.schoolPlanner.noChildren', 'Keine Kinder gefunden')}</p>
               <Button onClick={() => setShowAddChildDialog(true)}>
                 <Plus className="w-4 h-4 mr-2" />
-                Kind hinzufügen
+                {t('calendar.schoolPlanner.addChild', 'Kind hinzufügen')}
               </Button>
             </div>
           ) : (
@@ -282,7 +309,7 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
               <div className="flex items-center gap-8 mb-6 flex-wrap">
                 {/* Child Selection */}
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">Kind:</span>
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">{t('calendar.schoolPlanner.child', 'Kind')}:</span>
                   <div className="flex gap-2">
                     {children.map(child => (
                       <Button
@@ -305,17 +332,17 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
                   <div className="flex items-center gap-2">
                     <GraduationCap className="w-4 h-4 text-purple-600" />
                     <span className="font-bold">{stats.schoolDays}</span>
-                    <span className="text-muted-foreground text-sm">Schule</span>
+                    <span className="text-muted-foreground text-sm">{t('calendar.schoolPlanner.school', 'Schule')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Home className="w-4 h-4 text-pink-600" />
                     <span className="font-bold">{stats.hortDays}</span>
-                    <span className="text-muted-foreground text-sm">Hort</span>
+                    <span className="text-muted-foreground text-sm">{t('calendar.schoolPlanner.hort', 'Hort')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Coffee className="w-4 h-4 text-muted-foreground" />
                     <span className="font-bold">{stats.freeDays}</span>
-                    <span className="text-muted-foreground text-sm">Frei</span>
+                    <span className="text-muted-foreground text-sm">{t('calendar.schoolPlanner.free', 'Frei')}</span>
                   </div>
                 </div>
 
@@ -336,7 +363,7 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
               {/* Type Selection */}
               <div className="flex items-center gap-8 mb-6 flex-wrap">
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">Schule:</span>
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">{t('calendar.schoolPlanner.school', 'Schule')}:</span>
                   <div className="flex gap-2">
                     {SCHOOL_TYPES.map(type => {
                       const Icon = type.icon;
@@ -357,7 +384,7 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
                 </div>
 
                 <div className="flex items-center gap-3 border-l pl-8">
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">Hort:</span>
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">{t('calendar.schoolPlanner.hort', 'Hort')}:</span>
                   <Select value={selectedHortType} onValueChange={setSelectedHortType}>
                     <SelectTrigger className="w-[140px]">
                       <SelectValue />
@@ -372,10 +399,10 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
 
                 {/* Quick Select */}
                 <div className="flex items-center gap-3 border-l pl-8">
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">Schnell:</span>
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">{t('calendar.schoolPlanner.quick', 'Schnell')}:</span>
                   <div className="flex gap-1">
-                    <Button variant="outline" size="sm" onClick={selectSchoolWeek}>Mo-Fr</Button>
-                    {['Mo', 'Di', 'Mi', 'Do', 'Fr'].map((day, idx) => (
+                    <Button variant="outline" size="sm" onClick={selectSchoolWeek}>{t('calendar.days.monday')}-{t('calendar.days.friday')}</Button>
+                    {[t('calendar.days.monday'), t('calendar.days.tuesday'), t('calendar.days.wednesday'), t('calendar.days.thursday'), t('calendar.days.friday')].map((day, idx) => (
                       <Button key={day} variant="ghost" size="sm" className="px-2" onClick={() => selectAllWeekdays(idx + 1)}>
                         {day}
                       </Button>
@@ -385,7 +412,7 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
 
                 {selectedDates.size > 0 && (
                   <div className="flex items-center gap-2 border-l pl-8">
-                    <span className="text-sm font-medium">{selectedDates.size} ausgewählt</span>
+                    <span className="text-sm font-medium">{t('calendar.schoolPlanner.selected', '{{count}} ausgewählt', { count: selectedDates.size })}</span>
                     <Button variant="ghost" size="sm" onClick={clearSelection}>
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -396,7 +423,7 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
               {/* Calendar */}
               <div className="border rounded-lg overflow-hidden">
                 <div className="grid grid-cols-7">
-                  {['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'].map(day => (
+                  {weekdayNames.map(day => (
                     <div key={day} className="p-3 text-center text-sm font-medium bg-muted/50 border-b">{day}</div>
                   ))}
                 </div>
@@ -456,28 +483,28 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
               {selectedDates.size > 0 && (
                 <Button onClick={applyToSelected} size="lg" className="w-full mt-6">
                   <Check className="w-5 h-5 mr-2" />
-                  {getSchoolTypeInfo(selectedSchoolType).label} auf {selectedDates.size} Tage anwenden
+                  {t('calendar.schoolPlanner.applyToDays', '{{type}} auf {{count}} Tage anwenden', { type: getSchoolTypeInfo(selectedSchoolType).label, count: selectedDates.size })}
                 </Button>
               )}
 
               {/* Legend */}
               <div className="flex flex-wrap items-center gap-4 mt-4 text-sm">
-                <span className="text-muted-foreground">Legende:</span>
+                <span className="text-muted-foreground">{t('calendar.schoolPlanner.legend', 'Legende')}:</span>
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-3 rounded bg-purple-600" />
-                  <span>Ganzer Schultag</span>
+                  <span>{t('calendar.schoolPlanner.schoolTypes.full', 'Ganzer Schultag')}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-3 rounded bg-purple-400" />
-                  <span>Halbtag</span>
+                  <span>{t('calendar.schoolPlanner.schoolTypes.half', 'Halbtag')}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-3 rounded bg-gray-400" />
-                  <span>Schulfrei</span>
+                  <span>{t('calendar.schoolPlanner.schoolTypes.off', 'Schulfrei')}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-3 rounded bg-pink-500" />
-                  <span>Hort</span>
+                  <span>{t('calendar.schoolPlanner.hort', 'Hort')}</span>
                 </div>
               </div>
             </div>
@@ -489,22 +516,22 @@ export default function SchoolPlannerDialog({ open, onOpenChange, onDataChanged 
       <Dialog open={showAddChildDialog} onOpenChange={setShowAddChildDialog}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>Kind hinzufügen</DialogTitle>
+            <DialogTitle>{t('calendar.schoolPlanner.addChild', 'Kind hinzufügen')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <Label>Name des Kindes</Label>
+              <Label>{t('calendar.schoolPlanner.childName', 'Name des Kindes')}</Label>
               <Input
                 value={newChildName}
                 onChange={(e) => setNewChildName(e.target.value)}
-                placeholder="z.B. Caven"
+                placeholder={t('calendar.schoolPlanner.childNamePlaceholder', 'z.B. Caven')}
                 className="mt-2"
               />
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowAddChildDialog(false)}>Abbrechen</Button>
-            <Button onClick={handleAddChild}>Hinzufügen</Button>
+            <Button variant="outline" onClick={() => setShowAddChildDialog(false)}>{t('common.cancel', 'Abbrechen')}</Button>
+            <Button onClick={handleAddChild}>{t('common.add', 'Hinzufügen')}</Button>
           </div>
         </DialogContent>
       </Dialog>

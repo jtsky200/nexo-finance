@@ -28,10 +28,10 @@ import {
 } from '@/components/ui/select';
 
 const financeSchema = z.object({
-  date: z.string().min(1, 'Datum ist erforderlich'),
+  date: z.string().min(1),
   type: z.enum(['einnahme', 'ausgabe']),
-  category: z.string().min(1, 'Kategorie ist erforderlich'),
-  amount: z.string().min(1, 'Betrag ist erforderlich'),
+  category: z.string().min(1),
+  amount: z.string().min(1),
   currency: z.string(),
   paymentMethod: z.string().optional(),
   notes: z.string().optional(),
@@ -100,7 +100,7 @@ export default function AddFinanceEntryDialog({
         recurrenceRule: isRecurring ? recurrenceRule : undefined,
       });
 
-      toast.success('Eintrag erfolgreich erstellt');
+      toast.success(t('finance.entryCreated', 'Eintrag erfolgreich erstellt'));
       reset();
       onOpenChange(false);
       // Call onSuccess callback to refresh data
@@ -108,15 +108,15 @@ export default function AddFinanceEntryDialog({
         onSuccess();
       }
     } catch (error: any) {
-      toast.error('Fehler beim Erstellen des Eintrags: ' + error.message);
+      toast.error(t('finance.entryCreateError', 'Fehler beim Erstellen des Eintrags') + ': ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const categories = entryType === 'einnahme' 
-    ? ['Gehalt', 'Bonus', 'Investitionen', 'Geschenke', 'Sonstiges']
-    : ['Miete', 'Lebensmittel', 'Transport', 'Versicherungen', 'Unterhaltung', 'Gesundheit', 'Sonstiges'];
+    ? [t('finance.categories.salary', 'Gehalt'), t('finance.categories.bonus', 'Bonus'), t('finance.categories.investments', 'Investitionen'), t('finance.categories.gifts', 'Geschenke'), t('finance.categories.other', 'Sonstiges')]
+    : [t('finance.categories.rent', 'Miete'), t('finance.categories.groceries', 'Lebensmittel'), t('finance.categories.transport', 'Transport'), t('finance.categories.insurance', 'Versicherungen'), t('finance.categories.entertainment', 'Unterhaltung'), t('finance.categories.health', 'Gesundheit'), t('finance.categories.other', 'Sonstiges')];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -124,13 +124,13 @@ export default function AddFinanceEntryDialog({
         <DialogHeader>
           <DialogTitle>{t('finance.add')}</DialogTitle>
           <DialogDescription>
-            Erfassen Sie eine neue Einnahme oder Ausgabe
+            {t('finance.addDescription', 'Erfassen Sie eine neue Einnahme oder Ausgabe')}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="type">Typ *</Label>
+            <Label htmlFor="type">{t('finance.type', 'Typ')} *</Label>
             <Select
               value={entryType}
               onValueChange={(value) => setValue('type', value as 'einnahme' | 'ausgabe')}
@@ -151,7 +151,7 @@ export default function AddFinanceEntryDialog({
               onValueChange={(value) => setValue('category', value)}
             >
               <SelectTrigger id="category">
-                <SelectValue placeholder="Kategorie wählen" />
+                <SelectValue placeholder={t('finance.selectCategory', 'Kategorie wählen')} />
               </SelectTrigger>
               <SelectContent>
                 {categories.map((cat) => (
@@ -179,7 +179,7 @@ export default function AddFinanceEntryDialog({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="currency">Währung</Label>
+              <Label htmlFor="currency">{t('finance.currency', 'Währung')}</Label>
               <Select
                 defaultValue="CHF"
                 onValueChange={(value) => setValue('currency', value)}
@@ -213,7 +213,7 @@ export default function AddFinanceEntryDialog({
             <Input
               id="paymentMethod"
               {...register('paymentMethod')}
-              placeholder="z.B. Kreditkarte, Banküberweisung"
+              placeholder={t('finance.paymentMethodPlaceholder', 'z.B. Kreditkarte, Banküberweisung')}
             />
           </div>
 
@@ -222,7 +222,7 @@ export default function AddFinanceEntryDialog({
             <Textarea
               id="notes"
               {...register('notes')}
-              placeholder="Optionale Notizen..."
+              placeholder={t('common.optionalNotes', 'Optionale Notizen...')}
               rows={3}
             />
           </div>

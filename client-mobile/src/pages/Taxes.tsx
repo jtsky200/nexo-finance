@@ -54,15 +54,15 @@ export default function MobileTaxes() {
     switch (status) {
       case 'unvollständig':
         return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-          Unvollständig
+          {t('taxes.status.unvollständig', 'Unvollständig')}
         </Badge>;
       case 'vollständig':
         return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-          Vollständig
+          {t('taxes.status.vollständig', 'Vollständig')}
         </Badge>;
       case 'eingereicht':
         return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-          Eingereicht
+          {t('taxes.status.eingereicht', 'Eingereicht')}
         </Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
@@ -95,14 +95,14 @@ export default function MobileTaxes() {
 
     try {
       await deleteTaxProfile(deleteProfileId);
-      toast.success('Steuerprofil gelöscht');
+      toast.success(t('taxes.profileDeleted', 'Steuerprofil gelöscht'));
       setDeleteProfileId(null);
       setRefreshKey(prev => prev + 1);
     } catch (error: any) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Error deleting tax profile:', error);
       }
-      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+      toast.error(t('common.error', 'Fehler') + ': ' + (error.message || t('common.unknownError', 'Unbekannter Fehler')));
     }
   };
 
@@ -124,33 +124,33 @@ export default function MobileTaxes() {
 
   if (error) {
     return (
-      <MobileLayout title="Steuern" showSidebar={true}>
+      <MobileLayout title={t('taxes.title', 'Steuern')} showSidebar={true}>
         <div className="mobile-card text-center py-8">
-          <p className="text-red-500">Fehler beim Laden der Steuerprofile</p>
+          <p className="text-red-500">{t('taxes.errorLoading', 'Fehler beim Laden der Steuerprofile')}</p>
         </div>
       </MobileLayout>
     );
   }
 
   return (
-    <MobileLayout title="Steuern" showSidebar={true}>
+    <MobileLayout title={t('taxes.title', 'Steuern')} showSidebar={true}>
       {/* Add Button */}
       <Button
         onClick={handleAdd}
         className="w-full mb-4 h-12 min-h-[44px]"
       >
         <Plus className="w-5 h-5 mr-2" />
-        Steuerprofil hinzufügen
+        {t('taxes.addProfile', 'Steuerprofil hinzufügen')}
       </Button>
 
       {/* Profiles List */}
       {isLoading ? (
-        <div className="text-center py-8 text-muted-foreground">Lädt...</div>
+        <div className="text-center py-8 text-muted-foreground">{t('common.loading', 'Lädt...')}</div>
       ) : !profiles || profiles.length === 0 ? (
         <div className="mobile-card text-center py-8">
-          <p className="text-muted-foreground">Keine Steuerprofile gefunden</p>
+          <p className="text-muted-foreground">{t('taxes.noProfiles', 'Keine Steuerprofile gefunden')}</p>
           <p className="text-sm text-muted-foreground mt-2">
-            Erstellen Sie ein neues Steuerprofil, um Ihre Steuern zu verwalten
+            {t('taxes.createFirst', 'Erstellen Sie ein neues Steuerprofil, um Ihre Steuern zu verwalten')}
           </p>
         </div>
       ) : (
@@ -167,7 +167,7 @@ export default function MobileTaxes() {
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-sm truncate">
-                          {profile.year} - {profile.canton ? swissCantons[profile.canton] || profile.canton : 'Schweiz'}
+                          {profile.year} - {profile.canton ? swissCantons[profile.canton] || profile.canton : t('taxes.switzerland', 'Schweiz')}
                         </h3>
                         {profile.status && getStatusBadge(profile.status)}
                       </div>
@@ -177,20 +177,20 @@ export default function MobileTaxes() {
                       {profile.taxableIncome !== null && profile.taxableIncome !== undefined && (
                         <div className="flex items-center gap-2">
                           <Wallet className="w-3 h-3" />
-                          <span>Einkommen: {formatCurrency(profile.taxableIncome)}</span>
+                          <span>{t('taxes.taxableIncome', 'Einkommen')}: {formatCurrency(profile.taxableIncome)}</span>
                         </div>
                       )}
                       
                       {profile.taxAmount !== null && profile.taxAmount !== undefined && (
                         <div className="flex items-center gap-2">
                           <Calculator className="w-3 h-3" />
-                          <span>Steuerbetrag: {formatCurrency(profile.taxAmount)}</span>
+                          <span>{t('taxes.taxAmount', 'Steuerbetrag')}: {formatCurrency(profile.taxAmount)}</span>
                         </div>
                       )}
                       
                       {profile.submissionDate && (
                         <div className="flex items-center gap-2">
-                          <span>Eingereicht: {formatDate(profile.submissionDate)}</span>
+                          <span>{t('taxes.submitted', 'Eingereicht')}: {formatDate(profile.submissionDate)}</span>
                         </div>
                       )}
                     </div>
@@ -203,7 +203,7 @@ export default function MobileTaxes() {
                         className="h-8 min-h-[44px] flex-1"
                       >
                         <Edit className="w-4 h-4 mr-1" />
-                        Bearbeiten
+                        {t('common.edit', 'Bearbeiten')}
                       </Button>
                       
                       <Button
@@ -230,21 +230,20 @@ export default function MobileTaxes() {
           <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
             <DialogHeader className="px-5 pt-5 pb-3">
               <DialogTitle>
-                {editProfile ? 'Steuerprofil bearbeiten' : 'Neues Steuerprofil'}
+                {editProfile ? t('taxes.editProfile', 'Steuerprofil bearbeiten') : t('taxes.newProfile', 'Neues Steuerprofil')}
               </DialogTitle>
               <DialogDescription className="sr-only">
-                {editProfile ? 'Bearbeiten Sie die Details des Steuerprofils' : 'Erstellen Sie ein neues Steuerprofil für ein Steuerjahr'}
+                {editProfile ? t('taxes.editProfileDescription', 'Bearbeiten Sie die Details des Steuerprofils') : t('taxes.newProfileDescription', 'Erstellen Sie ein neues Steuerprofil für ein Steuerjahr')}
               </DialogDescription>
             </DialogHeader>
             <div className="px-5 pb-2">
               <p className="text-sm text-muted-foreground">
-                Die Steuerprofil-Verwaltung wird in einer zukünftigen Version verfügbar sein. 
-                Bitte verwenden Sie die Web-Version für die Verwaltung von Steuerprofilen.
+                {t('taxes.mobileComingSoon', 'Die Steuerprofil-Verwaltung wird in einer zukünftigen Version verfügbar sein. Bitte verwenden Sie die Web-Version für die Verwaltung von Steuerprofilen.')}
               </p>
             </div>
             <DialogFooter className="px-5 pb-3 pt-2">
               <Button variant="outline" onClick={handleDialogClose} className="h-11 min-h-[44px] w-full rounded-xl text-sm font-medium">
-                Schliessen
+                {t('common.close', 'Schliessen')}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -256,14 +255,14 @@ export default function MobileTaxes() {
         <Dialog open={!!deleteProfileId} onOpenChange={() => setDeleteProfileId(null)}>
           <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
             <DialogHeader className="px-5 pt-5 pb-3">
-              <DialogTitle className="text-lg font-semibold">Steuerprofil löschen?</DialogTitle>
+              <DialogTitle className="text-lg font-semibold">{t('taxes.confirmDelete', 'Steuerprofil löschen?')}</DialogTitle>
               <DialogDescription className="sr-only">
-                Bestätigen Sie das Löschen dieses Steuerprofils. Diese Aktion kann nicht rückgängig gemacht werden.
+                {t('taxes.confirmDeleteDescription', 'Möchten Sie dieses Steuerprofil wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')}
               </DialogDescription>
             </DialogHeader>
             <div className="px-5 pb-2">
               <p className="text-sm text-muted-foreground">
-                Möchten Sie dieses Steuerprofil wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+                {t('taxes.confirmDeleteDescription', 'Möchten Sie dieses Steuerprofil wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')}
               </p>
             </div>
             <DialogFooter className="px-5 pb-3 pt-2 gap-2.5">
@@ -272,14 +271,14 @@ export default function MobileTaxes() {
                 onClick={() => setDeleteProfileId(null)}
                 className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium"
               >
-                Abbrechen
+                {t('common.cancel', 'Abbrechen')}
               </Button>
               <Button 
                 variant="destructive" 
                 onClick={handleDelete}
                 className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium"
               >
-                Löschen
+                {t('common.delete', 'Löschen')}
               </Button>
             </DialogFooter>
           </DialogContent>

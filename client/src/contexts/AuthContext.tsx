@@ -10,6 +10,7 @@ import {
   updateProfile
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import i18next from 'i18next';
 
 interface AuthContextType {
   user: User | null;
@@ -59,29 +60,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       const result = await signInWithPopup(auth, provider);
     } catch (err: any) {
-      let errorMessage = 'Ein Fehler ist aufgetreten';
+      let errorMessage = i18next.t('common.genericError');
       
       switch (err.code) {
+        case 'auth/internal-error':
+          errorMessage = i18next.t('auth.errors.internalError', 'Ein interner Fehler ist aufgetreten. Bitte versuchen Sie es erneut oder verwenden Sie die E-Mail-Anmeldung.');
+          break;
         case 'auth/popup-blocked':
-          errorMessage = 'Popup wurde blockiert. Bitte erlauben Sie Popups für diese Seite.';
+          errorMessage = i18next.t('auth.errors.popupBlocked');
           break;
         case 'auth/popup-closed-by-user':
-          errorMessage = 'Anmeldung abgebrochen.';
+          errorMessage = i18next.t('auth.errors.loginCancelled');
           break;
         case 'auth/unauthorized-domain':
-          errorMessage = 'Diese Domain ist nicht für Google Sign-In autorisiert. Bitte fügen Sie die Domain in der Firebase Console hinzu.';
+          errorMessage = i18next.t('auth.errors.unauthorizedDomain');
           break;
         case 'auth/cancelled-popup-request':
-          errorMessage = 'Nur ein Popup kann gleichzeitig geöffnet sein.';
+          errorMessage = i18next.t('auth.errors.onlyOnePopup');
           break;
         case 'auth/operation-not-allowed':
-          errorMessage = 'Google Sign-In ist nicht aktiviert. Bitte aktivieren Sie es in der Firebase Console.';
+          errorMessage = i18next.t('auth.errors.googleNotEnabled');
           break;
         case 'auth/network-request-failed':
-          errorMessage = 'Netzwerkfehler. Bitte überprüfen Sie Ihre Internetverbindung.';
+          errorMessage = i18next.t('auth.errors.networkError');
           break;
         default:
-          errorMessage = err.message || 'Ein unbekannter Fehler ist aufgetreten';
+          errorMessage = err.message || i18next.t('common.unknownError');
       }
       
       setError(errorMessage);
@@ -104,6 +108,16 @@ export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}
+
+// Safe version that doesn't throw - returns null user if outside provider
+export function useAuthSafe() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    // Return a safe default when used outside AuthProvider
+    return { user: null, loading: true, error: null, signIn: async () => {}, signUp: async () => {}, signInWithGoogle: async () => {}, signOut: async () => {} };
   }
   return context;
 }

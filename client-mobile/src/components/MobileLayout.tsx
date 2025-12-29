@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { useLocation } from 'wouter';
 import PageHeader from './PageHeader';
 import QuickActions from './QuickActions';
+import GlobalContextMenu from './GlobalContextMenu';
 
 interface MobileLayoutProps {
   children: ReactNode;
@@ -58,6 +59,9 @@ export default function MobileLayout({
       </main>
 
       {/* Bottom Navigation entfernt - alle Funktionen sind im Hamburger-Menü verfügbar */}
+
+      {/* Global Context Menu */}
+      <GlobalContextMenu />
     </div>
   );
 }

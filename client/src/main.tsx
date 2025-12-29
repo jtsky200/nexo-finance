@@ -20,7 +20,17 @@ import './lib/backgroundTaskManager';
 import './lib/backgroundSync'; // Background Sync Manager
 import './lib/websocketClient'; // WebSocket Client
 import './lib/workflowOrchestrator';
-import './lib/debugWorkflow'; // Debug utilities 
+import './lib/debugWorkflow'; // Debug utilities
+
+// Initialize security monitoring
+import { initializeAppCheckService } from './lib/appCheck';
+
+// Initialize App Check on app startup
+if (typeof window !== 'undefined') {
+  initializeAppCheckService().catch((error) => {
+    console.error('[Main] Failed to initialize App Check:', error);
+  });
+} 
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -124,6 +134,61 @@ const trpcClient = trpc.createClient({
         const headers = new Headers(init?.headers);
         if (authToken) {
           headers.set('Authorization', `Bearer ${authToken}`);
+        }
+
+        // Add App Check token for security verification with action name
+        try {
+          const { getAppCheckTokenForAction } = await import('./lib/appCheck');
+          
+          // Detect action from request URL/path
+          // tRPC requests have format: /api/trpc/{procedure}.{method}?input=...
+          let action: string | undefined;
+          const url = typeof input === 'string' ? input : (input instanceof Request ? input.url : String(input));
+          const urlPath = new URL(url, window.location.origin).pathname;
+          
+          // Extract procedure name from tRPC path (e.g., /api/trpc/auth.login -> 'login')
+          const trpcMatch = urlPath.match(/\/api\/trpc\/([^.]+)/);
+          if (trpcMatch) {
+            const procedure = trpcMatch[1];
+            // Map procedure names to actions
+            if (procedure.includes('login') || procedure.includes('signIn')) {
+              action = 'login';
+            } else if (procedure.includes('register') || procedure.includes('signUp')) {
+              action = 'register';
+            } else if (procedure.includes('reset') || procedure.includes('password')) {
+              action = 'reset_password';
+            } else if (procedure.includes('chat') || procedure.includes('ai')) {
+              action = 'chat';
+            } else if (procedure.includes('create') || procedure.includes('add')) {
+              action = 'submit';
+            } else if (procedure.includes('update') || procedure.includes('edit')) {
+              action = 'submit';
+            } else if (procedure.includes('delete') || procedure.includes('remove')) {
+              action = 'delete';
+            } else {
+              // Default action for other requests
+              action = 'api_call';
+            }
+          }
+          
+          // Get token with action name (or without if action not detected)
+          const appCheckToken = action 
+            ? await getAppCheckTokenForAction(action)
+            : await (await import('./lib/appCheck')).getAppCheckToken();
+            
+          if (appCheckToken) {
+            headers.set('X-Firebase-AppCheck', appCheckToken);
+            // Also send action name in header for backend analytics
+            if (action) {
+              headers.set('X-AppCheck-Action', action);
+            }
+          }
+        } catch (error) {
+          // App Check token fetch failed, continue without it
+          // This is non-critical - App Check is optional but recommended
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[tRPC] Failed to get App Check token:', error);
+          }
         }
 
         try {

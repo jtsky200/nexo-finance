@@ -16,6 +16,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { useGlassEffect } from '@/hooks/useGlassEffect';
+import { useTranslation } from 'react-i18next';
 import SidebarCalendar from './SidebarCalendar';
 
 interface ChatSidebarProps {
@@ -25,20 +26,6 @@ interface ChatSidebarProps {
   onSelectChat?: (chatId: string) => void;
   onNewChat?: () => void;
 }
-
-const navItems = [
-  { path: '/', icon: MessageSquare, label: 'Assistent' },
-  { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/calendar', icon: Calendar, label: 'Kalender' },
-  { path: '/reminders', icon: Bell, label: 'Erinnerungen' },
-  { path: '/finance', icon: Wallet, label: 'Finanzen' },
-  { path: '/people', icon: Users, label: 'Personen' },
-  { path: '/bills', icon: ClipboardList, label: 'Rechnungen' },
-  { path: '/documents', icon: ScanLine, label: 'Dokumente' },
-  { path: '/shopping', icon: ShoppingCart, label: 'Einkaufen' },
-  { path: '/taxes', icon: FileText, label: 'Steuern' },
-  { path: '/settings', icon: Settings, label: 'Einstellungen' },
-];
 
 export default function ChatSidebar({ 
   open, 
@@ -50,6 +37,21 @@ export default function ChatSidebar({
   const [location] = useLocation();
   const { user } = useAuth();
   const { isEnabled: glassEffectEnabled } = useGlassEffect();
+  const { t } = useTranslation();
+
+  const navItems = [
+    { path: '/', icon: MessageSquare, label: t('nav.assistant') },
+    { path: '/dashboard', icon: LayoutDashboard, label: t('nav.dashboard') },
+    { path: '/calendar', icon: Calendar, label: t('nav.calendar') },
+    { path: '/reminders', icon: Bell, label: t('nav.reminders') },
+    { path: '/finance', icon: Wallet, label: t('nav.finance') },
+    { path: '/people', icon: Users, label: t('nav.people') },
+    { path: '/bills', icon: ClipboardList, label: t('nav.bills') },
+    { path: '/documents', icon: ScanLine, label: t('nav.documents') },
+    { path: '/shopping', icon: ShoppingCart, label: t('nav.shopping') },
+    { path: '/taxes', icon: FileText, label: t('nav.taxes') },
+    { path: '/settings', icon: Settings, label: t('nav.settings') },
+  ];
 
   // Get user initials
   const getUserInitials = () => {

@@ -110,7 +110,7 @@ export default function MobileDashboard() {
   const isLoading = financeLoading || remindersLoading || shoppingLoading;
 
   return (
-    <MobileLayout title="Übersicht" showSidebar={true}>
+    <MobileLayout title={t('dashboard.title')} showSidebar={true}>
       {isLoading ? (
         <>
           {/* Loading Skeleton for Balance Card */}
@@ -167,7 +167,7 @@ export default function MobileDashboard() {
                 ) : (
                   <TrendingDown className="w-3 h-3" />
                 )}
-                {Math.abs(monthlyTrend.income).toFixed(1)}% vs. Vormonat
+                {t('dashboard.vsLastMonth', { percent: Math.abs(monthlyTrend.income).toFixed(1) })}
               </p>
             )}
           </div>
@@ -186,7 +186,7 @@ export default function MobileDashboard() {
                 ) : (
                   <TrendingUp className="w-3 h-3" />
                 )}
-                {Math.abs(monthlyTrend.expenses).toFixed(1)}% vs. Vormonat
+                {t('dashboard.vsLastMonth', { percent: Math.abs(monthlyTrend.expenses).toFixed(1) })}
               </p>
             )}
           </div>

@@ -221,7 +221,7 @@ export default function AIChat() {
           if (chat) {
             // Generate title from first user message if not set
             const firstUserMessage = messages.find(m => m.role === 'user');
-            if (firstUserMessage && chat.title === 'Neue Konversation') {
+            if (firstUserMessage && chat.title === t('aiChat.newConversation')) {
               chat.title = generateChatTitle(firstUserMessage.content);
             }
             
@@ -235,7 +235,7 @@ export default function AIChat() {
             const newChat: ChatConversation = {
               id: currentChatId,
               userId: '',
-              title: firstUserMessage ? generateChatTitle(firstUserMessage.content) : 'Neue Konversation',
+              title: firstUserMessage ? generateChatTitle(firstUserMessage.content) : t('aiChat.newConversation'),
               messages: messages,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
@@ -272,7 +272,7 @@ export default function AIChat() {
       setCurrentChatId(newChat.id);
       setMessages([SYSTEM_MESSAGE]);
       await refetchHistory();
-      toast.success('Neue Konversation gestartet');
+      toast.success(t('aiChat.conversationStarted'));
     } catch (error: any) {
       console.error('Error creating new chat:', error);
       // Better error handling
@@ -426,9 +426,9 @@ export default function AIChat() {
   const getCurrentChatTitle = () => {
     if (currentChatId && chatHistory.length > 0) {
       const chat = chatHistory.find(c => c.id === currentChatId);
-      return chat?.title || 'Assistent';
+      return chat?.title || t('aiChat.title');
     }
-    return 'Assistent';
+    return t('aiChat.title');
   };
 
   // Quick Actions für den Header

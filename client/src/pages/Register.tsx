@@ -7,10 +7,14 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 export default function Register() {
   const [, setLocation] = useLocation();
   const { signUp, signInWithGoogle } = useAuth();
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,27 +25,38 @@ export default function Register() {
     e.preventDefault();
     
     if (!name.trim()) {
-      toast.error('Bitte geben Sie Ihren Namen ein');
+      toast.error(t('auth.register.validation.nameRequired'));
       return;
     }
 
     if (password !== confirmPassword) {
-      toast.error('Passwörter stimmen nicht überein');
+      toast.error(t('auth.register.validation.passwordsNotMatch'));
       return;
     }
 
     if (password.length < 6) {
-      toast.error('Passwort muss mindestens 6 Zeichen lang sein');
+      toast.error(t('auth.register.validation.passwordTooShort'));
       return;
     }
 
     try {
       setIsLoading(true);
       await signUp(email, password, name.trim());
-      toast.success('Konto erfolgreich erstellt');
+      toast.success(t('auth.register.success'));
       setLocation('/onboarding');
     } catch (error: any) {
-      toast.error('Registrierung fehlgeschlagen: ' + error.message);
+      console.error('Registration error:', error);
+      let errorMessage = t('auth.register.genericError', 'Registrierung fehlgeschlagen. Bitte versuchen Sie es erneut.');
+      
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = t('auth.register.emailInUse', 'Diese E-Mail-Adresse wird bereits verwendet.');
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = t('auth.register.invalidEmail', 'Ungültige E-Mail-Adresse.');
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = t('auth.register.weakPassword', 'Das Passwort ist zu schwach. Bitte wählen Sie ein stärkeres Passwort.');
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -51,63 +66,70 @@ export default function Register() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl">Registrieren</CardTitle>
-          <CardDescription>
-            Erstellen Sie ein neues Nexo-Konto
-          </CardDescription>
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <CardTitle className="text-2xl">{t('auth.register.title')}</CardTitle>
+              <CardDescription>
+                {t('auth.register.description')}
+              </CardDescription>
+            </div>
+            <div className="ml-4">
+              <LanguageSwitcher />
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
+              <Label htmlFor="name">{t('auth.register.name')}</Label>
               <Input
                 id="name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Max Mustermann"
+                placeholder={t('auth.register.namePlaceholder')}
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">E-Mail</Label>
+              <Label htmlFor="email">{t('auth.register.email')}</Label>
               <Input
                 id="email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="ihre@email.com"
+                placeholder={t('auth.register.emailPlaceholder')}
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Passwort</Label>
+              <Label htmlFor="password">{t('auth.register.password')}</Label>
               <Input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder={t('auth.register.passwordPlaceholder')}
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Passwort bestätigen</Label>
+              <Label htmlFor="confirmPassword">{t('auth.register.confirmPassword')}</Label>
               <Input
                 id="confirmPassword"
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder={t('auth.register.confirmPasswordPlaceholder')}
                 required
               />
             </div>
 
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Wird erstellt...' : 'Konto erstellen'}
+              {isLoading ? t('auth.register.submitting') : t('auth.register.submit')}
             </Button>
 
             <div className="relative">
@@ -115,7 +137,7 @@ export default function Register() {
                 <Separator />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">Oder</span>
+                <span className="bg-background px-2 text-muted-foreground">{t('auth.register.or')}</span>
               </div>
             </div>
 
@@ -127,10 +149,12 @@ export default function Register() {
                 try {
                   setIsLoading(true);
                   await signInWithGoogle();
-                  toast.success('Erfolgreich mit Google registriert');
+                  toast.success(t('auth.register.googleSuccess'));
                   setLocation('/onboarding');
                 } catch (error: any) {
-                  toast.error('Google-Registrierung fehlgeschlagen: ' + error.message);
+                  console.error('Google registration error:', error);
+                  const errorMessage = error.message || t('aiChat.unknownError', 'Ein unbekannter Fehler ist aufgetreten');
+                  toast.error(t('auth.register.googleError', { message: errorMessage }));
                 } finally {
                   setIsLoading(false);
                 }
@@ -155,18 +179,18 @@ export default function Register() {
                   fill="#EA4335"
                 />
               </svg>
-              Mit Google registrieren
+              {t('auth.register.googleButton')}
             </Button>
 
             <div className="text-center text-sm text-muted-foreground">
-              Bereits ein Konto?{' '}
+              {t('auth.register.hasAccount')}{' '}
               <Button
                 type="button"
                 variant="link"
                 className="p-0 h-auto"
                 onClick={() => setLocation('/login')}
               >
-                Jetzt anmelden
+                {t('auth.register.loginLink')}
               </Button>
             </div>
           </form>

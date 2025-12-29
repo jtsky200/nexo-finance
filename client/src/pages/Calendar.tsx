@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -124,8 +125,11 @@ export default function Calendar() {
       // Only show once per session
       const notificationKey = `notified-${formatDateLocal(today)}`;
       if (!sessionStorage.getItem(notificationKey)) {
-        new Notification('Nexo Kalender', {
-          body: `Du hast ${todayEvents.length} Event(s) heute: ${todayEvents.slice(0, 3).map(e => e.title).join(', ')}`,
+        new Notification(t('calendar.title', 'Kalender'), {
+          body: t('calendar.notificationBody', 'Du hast {{count}} Event(s) heute: {{events}}', { 
+            count: todayEvents.length, 
+            events: todayEvents.slice(0, 3).map(e => e.title).join(', ') 
+          }),
           icon: '/favicon.ico'
         });
         sessionStorage.setItem(notificationKey, 'true');
@@ -191,7 +195,7 @@ export default function Calendar() {
       setSchoolHolidays(holidaysData.holidays || []);
     } catch (error) {
       // Error fetching calendar data - silently fail
-      toast.error('Fehler beim Laden der Events');
+      toast.error(t('calendar.errors.loadEventsError'));
     } finally {
       setIsLoading(false);
     }
@@ -204,7 +208,7 @@ export default function Calendar() {
   // Refresh all data
   const refreshAll = async () => {
     await Promise.all([fetchEvents(), refetchReminders()]);
-    toast.success('Kalender aktualisiert');
+    toast.success(t('calendar.updated', 'Kalender aktualisiert'));
   };
 
   // Calendar navigation
@@ -221,10 +225,38 @@ export default function Calendar() {
   };
 
   // Calendar helpers
-  const monthNames = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 
-                      'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-  const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-  const fullDayNames = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'];
+  const monthNames = [
+    t('calendar.months.january'),
+    t('calendar.months.february'),
+    t('calendar.months.march'),
+    t('calendar.months.april'),
+    t('calendar.months.may'),
+    t('calendar.months.june'),
+    t('calendar.months.july'),
+    t('calendar.months.august'),
+    t('calendar.months.september'),
+    t('calendar.months.october'),
+    t('calendar.months.november'),
+    t('calendar.months.december')
+  ];
+  const dayNames = [
+    t('calendar.days.monday'),
+    t('calendar.days.tuesday'),
+    t('calendar.days.wednesday'),
+    t('calendar.days.thursday'),
+    t('calendar.days.friday'),
+    t('calendar.days.saturday'),
+    t('calendar.days.sunday')
+  ];
+  const fullDayNames = [
+    t('calendar.fullDays.monday'),
+    t('calendar.fullDays.tuesday'),
+    t('calendar.fullDays.wednesday'),
+    t('calendar.fullDays.thursday'),
+    t('calendar.fullDays.friday'),
+    t('calendar.fullDays.saturday'),
+    t('calendar.fullDays.sunday')
+  ];
 
   const getDaysInMonth = (date: Date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -407,7 +439,8 @@ export default function Calendar() {
   const formatAmount = (amount: number) => `CHF ${(amount / 100).toFixed(2)}`;
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const locale = i18n.language === 'de' ? 'de-CH' : i18n.language === 'en' ? 'en-GB' : i18n.language === 'es' ? 'es-ES' : i18n.language === 'nl' ? 'nl-NL' : i18n.language === 'it' ? 'it-IT' : i18n.language === 'fr' ? 'fr-FR' : 'de-CH';
+    return date.toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
   const formatFullDate = (date: Date) => {
     const dayIndex = date.getDay() === 0 ? 6 : date.getDay() - 1;
@@ -484,33 +517,56 @@ export default function Calendar() {
 
   const getEventTypeLabel = (event: CalendarEvent) => {
     if (event.type === 'school') {
-      if (event.schoolType === 'half') return 'Halbtag';
-      if (event.schoolType === 'off') return 'Schulfrei';
-      if (event.schoolType === 'holiday') return 'Ferien';
-      return 'Schule';
+      if (event.schoolType === 'half') return t('calendar.eventTypes.school.half', 'Halbtag');
+      if (event.schoolType === 'off') return t('calendar.eventTypes.school.off', 'Schulfrei');
+      if (event.schoolType === 'holiday') return t('calendar.eventTypes.school.holiday', 'Ferien');
+      return t('calendar.eventTypes.school', 'Schule');
     }
     if (event.type === 'hort') {
-      if (event.hortType === 'lunch') return 'Hort (Mittag)';
-      if (event.hortType === 'afternoon') return 'Hort (Nachmittag)';
-      return 'Hort';
+      if (event.hortType === 'lunch') return t('calendar.eventTypes.hort.lunch', 'Hort (Mittag)');
+      if (event.hortType === 'afternoon') return t('calendar.eventTypes.hort.afternoon', 'Hort (Nachmittag)');
+      return t('calendar.eventTypes.hort', 'Hort');
     }
-    if (event.type === 'school-holiday') return 'Schulferien';
+    if (event.type === 'school-holiday') return t('calendar.eventTypes.schoolHoliday', 'Schulferien');
     if (event.type === 'work') {
       const workType = (event as any).workType;
-      if (workType === 'off') return 'Frei';
-      if (workType === 'half-am') return 'Morgen';
-      if (workType === 'half-pm') return 'Nachmittag';
-      return 'Arbeit';
+      if (workType === 'off') return t('calendar.eventTypes.work.off', 'Frei');
+      if (workType === 'half-am') return t('calendar.eventTypes.work.halfAm', 'Morgen');
+      if (workType === 'half-pm') return t('calendar.eventTypes.work.halfPm', 'Nachmittag');
+      if (workType === 'full') return t('calendar.eventTypes.work.full', 'Vollzeit');
+      return t('calendar.eventTypes.work', 'Arbeit');
     }
-    if (event.type === 'due') return 'Rechnung';
-    if (event.type === 'reminder') return 'Erinnerung';
+    if (event.type === 'due') return t('calendar.eventTypes.due', 'Rechnung');
+    if (event.type === 'reminder') return t('calendar.eventTypes.reminder', 'Erinnerung');
     if (event.type === 'appointment') {
-      if (event.category === 'termin') return 'Termin';
-      if (event.category === 'aufgabe') return 'Aufgabe';
-      if (event.category === 'zahlung') return 'Zahlung';
-      return 'Termin';
+      if (event.category === 'termin') return t('calendar.eventTypes.appointment.termin', 'Termin');
+      if (event.category === 'aufgabe') return t('calendar.eventTypes.appointment.aufgabe', 'Aufgabe');
+      if (event.category === 'zahlung') return t('calendar.eventTypes.appointment.zahlung', 'Zahlung');
+      return t('calendar.eventTypes.appointment', 'Termin');
     }
-    return 'Event';
+    return t('calendar.eventTypes.event', 'Event');
+  };
+
+  // Translate event title, especially for work events
+  const getEventDisplayTitle = (event: CalendarEvent) => {
+    if (event.type === 'work' && event.personName) {
+      const workType = (event as any).workType;
+      const typeLabel = getEventTypeLabel(event);
+      return `${event.personName}: ${typeLabel}`;
+    }
+    // Translate common German terms in titles
+    let title = event.title;
+    const translations: { [key: string]: string } = {
+      'Vollzeit': t('calendar.eventTypes.work.full', 'Vollzeit'),
+      'Frei': t('calendar.eventTypes.work.off', 'Frei'),
+      'Ferien': t('calendar.eventTypes.school.holiday', 'Ferien'),
+      'Auto Rate': t('finance.categories.carPayment', 'Auto Rate'),
+      'Darlehnen': t('finance.categories.loans', 'Darlehnen'),
+    };
+    Object.keys(translations).forEach(key => {
+      title = title.replace(new RegExp(key, 'g'), translations[key]);
+    });
+    return title;
   };
 
   const isToday = (date: Date) => {
@@ -534,7 +590,7 @@ export default function Calendar() {
   // Add new appointment (with recurring support)
   const handleAddEvent = async () => {
     if (!newEvent.title.trim()) {
-      toast.error('Titel ist erforderlich');
+      toast.error(t('calendar.errors.titleRequired', 'Titel ist erforderlich'));
       return;
     }
 
@@ -553,7 +609,7 @@ export default function Calendar() {
         const baseDateOnly = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
         
         if (baseDateOnly < today) {
-          toast.error('Termine können nicht in der Vergangenheit erstellt werden');
+          toast.error(t('calendar.errors.cannotCreateInPast'));
           return;
         }
       }
@@ -579,7 +635,7 @@ export default function Calendar() {
             isAllDay: !newEvent.time,
           });
         }
-        toast.success(`${dates.length} wiederkehrende Termine erstellt`);
+        toast.success(t('calendar.recurringAppointmentsCreated', '{{count}} wiederkehrende Termine erstellt', { count: dates.length }));
       } else {
         await createReminder({
           title: newEvent.title,
@@ -588,7 +644,7 @@ export default function Calendar() {
           type: eventType,
           isAllDay: !newEvent.time,
         });
-        toast.success('Termin erstellt');
+        toast.success(t('calendar.appointmentCreated', 'Termin erstellt'));
       }
 
       const today = new Date();
@@ -597,30 +653,35 @@ export default function Calendar() {
       setShowAddDialog(false);
       await refreshAll();
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('common.error') + ': ' + error.message);
     }
   };
 
   // Export as PDF
   const handleExportPDF = () => {
-    const monthName = currentDate.toLocaleDateString('de-CH', { month: 'long', year: 'numeric' });
+    const locale = i18n.language === 'de' ? 'de-CH' : i18n.language === 'en' ? 'en-GB' : i18n.language === 'es' ? 'es-ES' : i18n.language === 'nl' ? 'nl-NL' : i18n.language === 'it' ? 'it-IT' : i18n.language === 'fr' ? 'fr-FR' : 'de-CH';
+    const monthKey = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'][currentDate.getMonth()];
+    const monthName = `${t(`calendar.months.${monthKey}`)} ${currentDate.getFullYear()}`;
     
     // Group events by date
     const eventsByDate: Record<string, CalendarEvent[]> = {};
     filteredEvents.forEach(e => {
-      const dateKey = new Date(e.date).toLocaleDateString('de-CH', { weekday: 'long', day: 'numeric', month: 'long' });
+      const date = new Date(e.date);
+      const dayKey = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'][date.getDay() === 0 ? 6 : date.getDay() - 1];
+      const monthKey2 = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'][date.getMonth()];
+      const dateKey = `${t(`calendar.fullDays.${dayKey}`)} ${date.getDate()} ${t(`calendar.months.${monthKey2}`)}`;
       if (!eventsByDate[dateKey]) eventsByDate[dateKey] = [];
       eventsByDate[dateKey].push(e);
     });
 
     const getTypeLabel = (type: string) => {
       switch(type) {
-        case 'due': return 'Rechnung';
-        case 'appointment': return 'Termin';
-        case 'reminder': return 'Erinnerung';
-        case 'work': return 'Arbeit';
-        case 'school': return 'Schule';
-        case 'hort': return 'Hort';
+        case 'due': return t('calendar.eventTypes.due');
+        case 'appointment': return t('calendar.eventTypes.appointment');
+        case 'reminder': return t('calendar.eventTypes.reminder');
+        case 'work': return t('calendar.eventTypes.work');
+        case 'school': return t('calendar.eventTypes.school');
+        case 'hort': return t('calendar.eventTypes.hort');
         default: return '';
       }
     };
@@ -745,7 +806,11 @@ export default function Calendar() {
 
         <div class="footer">
           <span>Nexo</span>
-          <span>Erstellt ${new Date().toLocaleDateString('de-CH')}</span>
+          <span>${t('common.created', 'Erstellt')} ${(() => {
+            const date = new Date();
+            const locale = i18n.language === 'de' ? 'de-CH' : i18n.language === 'en' ? 'en-GB' : i18n.language === 'es' ? 'es-ES' : i18n.language === 'nl' ? 'nl-NL' : i18n.language === 'it' ? 'it-IT' : i18n.language === 'fr' ? 'fr-FR' : 'de-CH';
+            return date.toLocaleDateString(locale);
+          })()}</span>
         </div>
       </body>
       </html>
@@ -756,7 +821,7 @@ export default function Calendar() {
       printWindow.document.write(content);
       printWindow.document.close();
     }
-    toast.success('PDF Export geöffnet');
+    toast.success(t('calendar.pdfExportOpened', 'PDF Export geöffnet'));
   };
 
   // Export as ICS
@@ -788,28 +853,63 @@ export default function Calendar() {
     a.download = `kalender-${currentDate.getFullYear()}-${currentDate.getMonth() + 1}.ics`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success('ICS Datei heruntergeladen');
+    toast.success(t('calendar.icsFileDownloaded', 'ICS Datei heruntergeladen'));
   };
 
   // Drag & Drop handlers
   const handleDragStart = (event: CalendarEvent, e: React.DragEvent) => {
+    if (event.type !== 'appointment') {
+      e.preventDefault();
+      return;
+    }
     setDraggedEvent(event);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', event.id);
+    e.dataTransfer.setData('application/json', JSON.stringify({ type: 'appointment', id: event.id }));
   };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = 'move';
   };
 
   const handleDrop = async (targetDate: Date, e: React.DragEvent) => {
     e.preventDefault();
-    if (!draggedEvent) return;
+    e.stopPropagation(); // Prevent click event from firing
+    
+    // Try to get the dragged event from state first, then from dataTransfer
+    let draggedEventData = draggedEvent;
+    
+    if (!draggedEventData) {
+      try {
+        const jsonData = e.dataTransfer.getData('application/json');
+        if (jsonData) {
+          const parsed = JSON.parse(jsonData);
+          // Find the full event from the events list
+          const allEvents = [...events];
+          draggedEventData = allEvents.find(ev => ev.id === parsed.id) || parsed;
+        }
+      } catch {
+        // Fallback to text data
+        const eventId = e.dataTransfer.getData('text/plain');
+        if (eventId) {
+          // Find the event from the current events list
+          const allEvents = [...events];
+          draggedEventData = allEvents.find(ev => ev.id === eventId);
+        }
+      }
+    }
+    
+    if (!draggedEventData) {
+      console.warn('No dragged event found');
+      setDraggedEvent(null);
+      return;
+    }
     
     // Only allow moving appointments (not invoices or work schedules)
-    if (draggedEvent.type !== 'appointment') {
-      toast.error('Nur Termine können verschoben werden');
+    if (draggedEventData.type !== 'appointment') {
+      toast.error(t('calendar.errors.onlyAppointmentsMovable', 'Nur Termine können verschoben werden'));
       setDraggedEvent(null);
       return;
     }
@@ -818,19 +918,26 @@ export default function Calendar() {
       // Update the reminder date
       const newDate = new Date(targetDate);
       // Keep the original time if exists
-      if (draggedEvent.time) {
-        const [hours, minutes] = draggedEvent.time.split(':');
+      if (draggedEventData.time) {
+        const [hours, minutes] = draggedEventData.time.split(':');
         newDate.setHours(parseInt(hours), parseInt(minutes));
       }
       
       // Extract the reminder ID from the event ID
-      const reminderId = draggedEvent.id.replace('appointment-', '');
-      await updateReminder(reminderId, { date: newDate });
+      // Handle both 'appointment-{id}' and direct ID formats
+      let reminderId = draggedEventData.id;
+      if (reminderId.startsWith('appointment-')) {
+        reminderId = reminderId.replace('appointment-', '');
+      }
       
-      toast.success('Termin verschoben');
+      console.log('Moving appointment:', { eventId: draggedEventData.id, reminderId, newDate });
+      await updateReminder(reminderId, { dueDate: newDate });
+      
+      toast.success(t('calendar.appointmentMoved'));
       await refreshAll();
     } catch (error: any) {
-      toast.error('Fehler beim Verschieben: ' + error.message);
+      console.error('Error moving appointment:', error);
+      toast.error(t('calendar.errors.moveError', 'Fehler beim Verschieben') + ': ' + (error.message || error));
     }
     
     setDraggedEvent(null);
@@ -842,8 +949,8 @@ export default function Calendar() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'Mein Kalender',
-          text: 'Schau dir meinen Kalender an',
+          title: t('calendar.shareTitle', 'Mein Kalender'),
+          text: t('calendar.shareText', 'Schau dir meinen Kalender an'),
           url: shareUrl
         });
       } catch (e) {
@@ -851,34 +958,34 @@ export default function Calendar() {
       }
     } else {
       await navigator.clipboard.writeText(shareUrl);
-      toast.success('Link in Zwischenablage kopiert');
+      toast.success(t('calendar.linkCopied', 'Link in Zwischenablage kopiert'));
     }
   };
 
   // Toggle notifications
   const handleToggleNotifications = async () => {
     if (!('Notification' in window)) {
-      toast.error('Dein Browser unterstützt keine Benachrichtigungen');
+      toast.error(t('calendar.notifications.notSupported', 'Dein Browser unterstützt keine Benachrichtigungen'));
       return;
     }
 
     if (Notification.permission === 'granted') {
       setNotificationsEnabled(!notificationsEnabled);
-      toast.success(notificationsEnabled ? 'Benachrichtigungen deaktiviert' : 'Benachrichtigungen aktiviert');
+      toast.success(notificationsEnabled ? t('calendar.notifications.disabled', 'Benachrichtigungen deaktiviert') : t('calendar.notifications.enabled', 'Benachrichtigungen aktiviert'));
     } else if (Notification.permission === 'denied') {
-      toast.error('Benachrichtigungen wurden blockiert. Bitte in den Browser-Einstellungen aktivieren.');
+      toast.error(t('calendar.notifications.blocked', 'Benachrichtigungen wurden blockiert. Bitte in den Browser-Einstellungen aktivieren.'));
     } else {
       const permission = await Notification.requestPermission();
       if (permission === 'granted') {
         setNotificationsEnabled(true);
-        toast.success('Benachrichtigungen aktiviert');
+        toast.success(t('calendar.notifications.enabled', 'Benachrichtigungen aktiviert'));
         // Send test notification
-        new Notification('Nexo Kalender', {
-          body: 'Benachrichtigungen sind jetzt aktiviert!',
+        new Notification(t('calendar.nexoCalendar', 'Nexo Kalender'), {
+          body: t('calendar.notifications.nowEnabled', 'Benachrichtigungen sind jetzt aktiviert!'),
           icon: '/favicon.ico'
         });
       } else {
-        toast.error('Benachrichtigungen wurden nicht erlaubt');
+        toast.error(t('calendar.notifications.notAllowed', 'Benachrichtigungen wurden nicht erlaubt'));
       }
     }
   };
@@ -896,7 +1003,7 @@ export default function Calendar() {
   };
 
   return (
-    <Layout title="Kalender">
+    <Layout title={t('calendar.title', 'Kalender')}>
       <div className="space-y-6">
         {/* Header */}
         {/* Header Row 1: Navigation */}
@@ -908,7 +1015,7 @@ export default function Calendar() {
                   <ChevronLeft className="w-4 h-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Vorheriger Monat</TooltipContent>
+              <TooltipContent>{t('calendar.previousMonth', 'Vorheriger Monat')}</TooltipContent>
             </Tooltip>
             <h2 className="text-xl font-bold min-w-[180px] text-center">
               {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
@@ -916,8 +1023,8 @@ export default function Calendar() {
             <Button variant="outline" size="icon" onClick={goToNextMonth}>
               <ChevronRight className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="sm" onClick={goToToday}>Heute</Button>
-            <Button variant="outline" size="icon" onClick={refreshAll} title="Aktualisieren">
+            <Button variant="outline" size="sm" onClick={goToToday}>{t('calendar.today')}</Button>
+            <Button variant="outline" size="icon" onClick={refreshAll} title={t('common.refresh')}>
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             </Button>
           </div>
@@ -928,9 +1035,9 @@ export default function Calendar() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="month">Monat</SelectItem>
-                <SelectItem value="week">Woche</SelectItem>
-                <SelectItem value="list">Liste</SelectItem>
+                <SelectItem value="month">{t('calendar.views.month', 'Monat')}</SelectItem>
+                <SelectItem value="week">{t('calendar.views.week', 'Woche')}</SelectItem>
+                <SelectItem value="list">{t('calendar.views.list', 'Liste')}</SelectItem>
               </SelectContent>
             </Select>
             
@@ -940,11 +1047,11 @@ export default function Calendar() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Alle Events</SelectItem>
-                <SelectItem value="due">Rechnungen</SelectItem>
-                <SelectItem value="appointment">Termine</SelectItem>
-                <SelectItem value="work">Arbeitszeiten</SelectItem>
-                <SelectItem value="school">Schule</SelectItem>
+                <SelectItem value="all">{t('calendar.filters.allEvents', 'Alle Events')}</SelectItem>
+                <SelectItem value="due">{t('calendar.filters.bills', 'Rechnungen')}</SelectItem>
+                <SelectItem value="appointment">{t('calendar.filters.appointments', 'Termine')}</SelectItem>
+                <SelectItem value="work">{t('calendar.filters.work', 'Arbeitszeiten')}</SelectItem>
+                <SelectItem value="school">{t('calendar.filters.school', 'Schule')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -959,33 +1066,33 @@ export default function Calendar() {
             setShowAddDialog(true);
           }}>
             <Plus className="w-4 h-4 mr-1" />
-            Termin
+            {t('calendar.appointment', 'Termin')}
           </Button>
 
           <div className="h-6 w-px bg-border" />
 
           <Button variant="outline" size="sm" onClick={() => setShowWorkScheduleDialog(true)}>
             <Briefcase className="w-4 h-4 mr-1" />
-            Arbeit
+            {t('calendar.work', 'Arbeit')}
           </Button>
           <Button variant="outline" size="sm" onClick={() => setShowVacationDialog(true)}>
             <Palmtree className="w-4 h-4 mr-1" />
-            Ferien
+            {t('calendar.vacation', 'Ferien')}
           </Button>
           <Button variant="outline" size="sm" onClick={() => setShowSchoolPlannerDialog(true)}>
             <GraduationCap className="w-4 h-4 mr-1" />
-            Schule
+            {t('calendar.school', 'Schule')}
           </Button>
           <Button variant="outline" size="sm" onClick={() => setShowSchoolHolidayDialog(true)}>
             <Sun className="w-4 h-4 mr-1" />
-            Schulferien
+            {t('calendar.schoolHoliday', 'Schulferien')}
           </Button>
 
           <div className="h-6 w-px bg-border" />
 
           <Button variant="outline" size="sm" onClick={() => setLocation('/bills')}>
             <FileText className="w-4 h-4 mr-1" />
-            Rechnungen
+            {t('nav.bills', 'Rechnungen')}
           </Button>
 
           <div className="h-6 w-px bg-border hidden sm:block" />
@@ -993,7 +1100,7 @@ export default function Calendar() {
           <div className="relative max-w-[180px]">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
-              placeholder="Suchen..."
+              placeholder={t('common.search', 'Suchen...')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-7 h-8 text-sm"
@@ -1003,7 +1110,7 @@ export default function Calendar() {
 
         {/* Header Row 3: Export & Notifications */}
         <div className="flex items-center gap-1 text-sm">
-          <span className="text-muted-foreground mr-1">Export:</span>
+          <span className="text-muted-foreground mr-1">{t('calendar.export', 'Export')}:</span>
           <Button variant="ghost" size="sm" className="h-7 px-2" onClick={handleExportPDF}>
             PDF
           </Button>
@@ -1012,7 +1119,7 @@ export default function Calendar() {
           </Button>
           <Button variant="ghost" size="sm" className="h-7 px-2" onClick={handleShareCalendar}>
             <Share2 className="w-3.5 h-3.5 mr-1" />
-            Teilen
+            {t('calendar.share', 'Teilen')}
           </Button>
           <div className="h-5 w-px bg-border mx-1" />
           <Button 
@@ -1022,7 +1129,7 @@ export default function Calendar() {
             onClick={handleToggleNotifications}
           >
             <BellRing className="w-3.5 h-3.5 mr-1" />
-            {notificationsEnabled ? 'An' : 'Benachrichtigen'}
+            {notificationsEnabled ? t('calendar.notificationsOn', 'An') : t('calendar.notify', 'Benachrichtigen')}
           </Button>
         </div>
 
@@ -1039,10 +1146,10 @@ export default function Calendar() {
             }}
             tabIndex={0}
             role="button"
-            aria-label="Alle anzeigen"
+            aria-label={t('calendar.showAll', 'Alle anzeigen')}
           >
             <CardContent className="pt-4 pb-4">
-              <p className="text-sm text-muted-foreground">Gesamt</p>
+              <p className="text-sm text-muted-foreground">{t('calendar.total', 'Gesamt')}</p>
               <p className="text-2xl font-bold">{stats.total}</p>
             </CardContent>
           </Card>
@@ -1057,10 +1164,10 @@ export default function Calendar() {
             }}
             tabIndex={0}
             role="button"
-            aria-label="Überfällige anzeigen"
+            aria-label={t('calendar.showOverdue', 'Überfällige anzeigen')}
           >
             <CardContent className="pt-4 pb-4">
-              <p className="text-sm text-muted-foreground">Überfällig</p>
+              <p className="text-sm text-muted-foreground">{t('calendar.overdue', 'Überfällig')}</p>
               <p className={`text-2xl font-bold ${stats.overdue > 0 ? 'text-red-600' : ''}`}>{stats.overdue}</p>
             </CardContent>
           </Card>
@@ -1075,10 +1182,10 @@ export default function Calendar() {
             }}
             tabIndex={0}
             role="button"
-            aria-label="Rechnungen anzeigen"
+            aria-label={t('calendar.showBills', 'Rechnungen anzeigen')}
           >
             <CardContent className="pt-4 pb-4">
-              <p className="text-sm text-muted-foreground">Rechnungen</p>
+              <p className="text-sm text-muted-foreground">{t('calendar.bills', 'Rechnungen')}</p>
               <p className="text-2xl font-bold">{stats.dueThisMonth}</p>
             </CardContent>
           </Card>
@@ -1093,10 +1200,10 @@ export default function Calendar() {
             }}
             tabIndex={0}
             role="button"
-            aria-label="Erinnerungen anzeigen"
+            aria-label={t('calendar.showReminders', 'Erinnerungen anzeigen')}
           >
             <CardContent className="pt-4 pb-4">
-              <p className="text-sm text-muted-foreground">Erinnerungen</p>
+              <p className="text-sm text-muted-foreground">{t('calendar.reminders', 'Erinnerungen')}</p>
               <p className="text-2xl font-bold">{stats.reminders}</p>
             </CardContent>
           </Card>
@@ -1105,7 +1212,7 @@ export default function Calendar() {
             onClick={() => setFilterType('appointment')}
           >
             <CardContent className="pt-4 pb-4">
-              <p className="text-sm text-muted-foreground">Termine</p>
+              <p className="text-sm text-muted-foreground">{t('calendar.appointments', 'Termine')}</p>
               <p className="text-2xl font-bold">{stats.appointments}</p>
             </CardContent>
           </Card>
@@ -1113,34 +1220,34 @@ export default function Calendar() {
 
         {/* Color Legend */}
         <div className="flex flex-wrap items-center gap-4 text-sm">
-          <span className="text-muted-foreground">Legende:</span>
+          <span className="text-muted-foreground">{t('calendar.legend', 'Legende')}:</span>
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded bg-rose-400" />
-            <span>Rechnungen</span>
+            <span>{t('calendar.legendBills', 'Rechnungen')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded bg-orange-400" />
-            <span>Termine</span>
+            <span>{t('calendar.legendAppointments', 'Termine')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded bg-slate-300" />
-            <span>Arbeit</span>
+            <span>{t('calendar.legendWork', 'Arbeit')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded bg-emerald-300" />
-            <span>Frei</span>
+            <span>{t('calendar.legendFree', 'Frei')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded bg-cyan-300" />
-            <span>Ferien</span>
+            <span>{t('calendar.legendVacation', 'Ferien')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded bg-purple-400" />
-            <span>Schule</span>
+            <span>{t('calendar.legendSchool', 'Schule')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-3 h-3 rounded bg-pink-400" />
-            <span>Hort</span>
+            <span>{t('calendar.legendHort', 'Hort')}</span>
           </div>
         </div>
 
@@ -1156,11 +1263,19 @@ export default function Calendar() {
                 ))}
               </div>
 
-              <div className="grid grid-cols-7 gap-1">
+              <div 
+                className="grid grid-cols-7 gap-1"
+                onDragOver={handleDragOver}
+              >
                 {calendarDays.map((day, index) => (
                   <div
                     key={index}
-                    onClick={() => handleDayClick(day)}
+                    onClick={(e) => {
+                      // Don't trigger day click if we're dropping an event
+                      if (!draggedEvent) {
+                        handleDayClick(day);
+                      }
+                    }}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(day.date, e)}
                     className={`min-h-[100px] p-2 border rounded-lg cursor-pointer transition-colors
@@ -1206,20 +1321,29 @@ export default function Calendar() {
                         <div
                           key={event.id}
                           draggable={event.type === 'appointment'}
-                          onDragStart={(e) => handleDragStart(event, e)}
+                          onDragStart={(e) => {
+                            handleDragStart(event, e);
+                            // Prevent click event when dragging
+                            e.stopPropagation();
+                          }}
                           onDragEnd={() => setDraggedEvent(null)}
-                          onClick={(e) => handleEventClick(event, e)}
+                          onClick={(e) => {
+                            // Don't trigger click if we just finished dragging
+                            if (!draggedEvent) {
+                              handleEventClick(event, e);
+                            }
+                          }}
                           className={`text-xs px-1 py-0.5 rounded truncate cursor-pointer hover:opacity-80 ${getEventColor(event)} ${
                             event.type === 'appointment' ? 'cursor-grab active:cursor-grabbing' : ''
                           }`}
-                          title={`${event.title}${event.type === 'appointment' ? ' (ziehen zum verschieben)' : ''}`}
+                          title={`${getEventDisplayTitle(event)}${event.type === 'appointment' ? ' (ziehen zum verschieben)' : ''}`}
                         >
-                          {event.title}
+                          {getEventDisplayTitle(event)}
                         </div>
                       ))}
                       {(day.events.length + day.vacations.length + (day.schoolEvents?.length || 0)) > 3 && (
                         <div className="text-xs text-muted-foreground font-medium">
-                          +{day.events.length + day.vacations.length + (day.schoolEvents?.length || 0) - 3} mehr
+                          +{day.events.length + day.vacations.length + (day.schoolEvents?.length || 0) - 3} {t('calendar.more', 'mehr')}
                         </div>
                       )}
                     </div>
@@ -1234,11 +1358,11 @@ export default function Calendar() {
         {view === 'list' && (
           <Card>
             <CardHeader>
-              <CardTitle>Alle Events im {monthNames[currentDate.getMonth()]}</CardTitle>
+              <CardTitle>{t('calendar.allEventsIn', 'Alle Events im')} {monthNames[currentDate.getMonth()]}</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <p className="text-center py-8 text-muted-foreground">Laden...</p>
+                <p className="text-center py-8 text-muted-foreground">{t('common.loading', 'Laden...')}</p>
               ) : filteredEvents.length > 0 ? (
                 <div className="space-y-3">
                   {filteredEvents.map(event => (
@@ -1255,12 +1379,12 @@ export default function Calendar() {
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <h4 className="font-medium">{event.title}</h4>
+                            <h4 className="font-medium">{getEventDisplayTitle(event)}</h4>
                             <Badge variant="secondary" className="text-xs">
                               {getEventTypeLabel(event)}
                             </Badge>
                             {event.isOverdue && (
-                              <Badge className="bg-red-600 text-white">Überfällig</Badge>
+                              <Badge className="bg-red-600 text-white">{t('calendar.overdue', 'Überfällig')}</Badge>
                             )}
                           </div>
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1268,7 +1392,7 @@ export default function Calendar() {
                             {event.time && (
                               <>
                                 <span>•</span>
-                                <span>{event.time} Uhr</span>
+                                <span>{event.time} {t('calendar.oclock', 'Uhr')}</span>
                               </>
                             )}
                             {event.personName && (
@@ -1290,15 +1414,15 @@ export default function Calendar() {
                                 event.status === 'paid' ? 'text-green-600 border-green-600' :
                                 event.status === 'open' ? 'text-orange-600 border-orange-600' : 'text-yellow-600 border-yellow-600'
                               }>
-                                {event.status === 'paid' ? 'Bezahlt' :
-                                 event.status === 'open' ? 'Offen' : 'Verschoben'}
+                                {event.status === 'paid' ? t('finance.paid', 'Bezahlt') :
+                                 event.status === 'open' ? t('finance.open', 'Offen') : t('finance.postponed', 'Verschoben')}
                               </Badge>
                             )}
                           </>
                         ) : (
                           event.completed !== undefined && (
                             <Badge variant="outline" className={event.completed ? 'text-green-600 border-green-600' : 'text-muted-foreground'}>
-                              {event.completed ? 'Erledigt' : 'Ausstehend'}
+                              {event.completed ? t('calendar.completed', 'Erledigt') : t('calendar.pending', 'Ausstehend')}
                             </Badge>
                           )
                         )}
@@ -1309,10 +1433,10 @@ export default function Calendar() {
               ) : (
                 <div className="text-center py-12">
                   <CalendarIcon className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                  <p className="text-muted-foreground mb-4">Keine Events in diesem Monat</p>
+                  <p className="text-muted-foreground mb-4">{t('calendar.noEventsThisMonth', 'Keine Events in diesem Monat')}</p>
                   <Button onClick={() => setShowAddDialog(true)}>
                     <Plus className="w-4 h-4 mr-2" />
-                    Termin erstellen
+                    {t('calendar.createAppointment', 'Termin erstellen')}
                   </Button>
                 </div>
               )}
@@ -1349,7 +1473,7 @@ export default function Calendar() {
                   <div className="min-w-[800px]">
                     {/* Header */}
                     <div className="grid grid-cols-8 border-b">
-                      <div className="p-2 text-center text-sm text-muted-foreground">Zeit</div>
+                      <div className="p-2 text-center text-sm text-muted-foreground">{t('calendar.time', 'Zeit')}</div>
                       {weekDays.map((day, index) => (
                         <div 
                           key={index} 
@@ -1395,9 +1519,9 @@ export default function Calendar() {
                                     key={event.id}
                                     onClick={(e) => { e.stopPropagation(); handleEventClick(event, e); }}
                                     className={`text-xs p-1 rounded cursor-pointer hover:opacity-80 truncate ${getEventColor(event)}`}
-                                    title={event.title}
+                                    title={getEventDisplayTitle(event)}
                                   >
-                                    {event.time && <span className="font-medium">{event.time}</span>} {event.title}
+                                    {event.time && <span className="font-medium">{event.time}</span>} {getEventDisplayTitle(event)}
                                   </div>
                                 ))}
                               </div>
@@ -1409,7 +1533,7 @@ export default function Calendar() {
                     
                     {/* All-day events section */}
                     <div className="mt-4 border-t pt-4">
-                      <div className="text-sm font-medium text-muted-foreground mb-2">Ganztägig / Ohne Uhrzeit</div>
+                      <div className="text-sm font-medium text-muted-foreground mb-2">{t('calendar.allDay', 'Ganztägig / Ohne Uhrzeit')}</div>
                       <div className="grid grid-cols-7 gap-2">
                         {weekDays.map((day, index) => {
                           const allDayEvents = day.events.filter(e => !e.time);
@@ -1421,7 +1545,7 @@ export default function Calendar() {
                                   onClick={(e) => handleEventClick(event, e)}
                                   className={`text-xs p-1.5 rounded cursor-pointer hover:opacity-80 ${getEventColor(event)}`}
                                 >
-                                  <div className="font-medium truncate">{event.title}</div>
+                                  <div className="font-medium truncate">{getEventDisplayTitle(event)}</div>
                                 </div>
                               ))}
                             </div>
@@ -1441,20 +1565,20 @@ export default function Calendar() {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-orange-500" />
-              Anstehend (nächste 7 Tage)
+              {t('calendar.upcoming', 'Anstehend (nächste 7 Tage)')}
             </CardTitle>
             <Select 
               value={upcomingFilter}
               onValueChange={setUpcomingFilter}
             >
               <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter" />
+                <SelectValue placeholder={t('common.filter', 'Filter')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Alle anzeigen</SelectItem>
-                <SelectItem value="due">Nur Rechnungen</SelectItem>
-                <SelectItem value="appointment">Nur Termine</SelectItem>
-                <SelectItem value="overdue">Nur Überfällige</SelectItem>
+                <SelectItem value="all">{t('calendar.showAll', 'Alle anzeigen')}</SelectItem>
+                <SelectItem value="due">{t('calendar.onlyBills', 'Nur Rechnungen')}</SelectItem>
+                <SelectItem value="appointment">{t('calendar.onlyAppointments', 'Nur Termine')}</SelectItem>
+                <SelectItem value="overdue">{t('calendar.onlyOverdue', 'Nur Überfällige')}</SelectItem>
               </SelectContent>
             </Select>
           </CardHeader>
@@ -1517,12 +1641,12 @@ export default function Calendar() {
                   <div className="text-center py-6 text-muted-foreground">
                     <CheckCircle className="w-8 h-8 mx-auto mb-2 text-green-500" />
                     {upcomingFilter === 'all' 
-                      ? 'Keine Einträge in den nächsten 7 Tagen'
+                      ? t('calendar.noEntriesNext7Days')
                       : upcomingFilter === 'due'
-                        ? 'Keine Rechnungen fällig'
+                        ? t('calendar.noBillsDue')
                         : upcomingFilter === 'appointment'
-                          ? 'Keine Termine'
-                          : 'Keine überfälligen Einträge'}
+                          ? t('calendar.noAppointments')
+                          : t('calendar.noOverdueEntries')}
                   </div>
                 );
               }
@@ -1545,7 +1669,7 @@ export default function Calendar() {
                           <Palmtree className="w-4 h-4" />
                         </div>
                         <div>
-                          <p className="font-medium">{vacation.title || 'Ferien'}</p>
+                          <p className="font-medium">{vacation.title || t('calendar.vacation', 'Ferien')}</p>
                           <p className="text-sm text-muted-foreground">
                             {formatShortDate(vacation.startDate)} - {formatShortDate(vacation.endDate)} • {vacation.personName}
                           </p>
@@ -1565,7 +1689,7 @@ export default function Calendar() {
                           {getEventIcon(event)}
                         </div>
                         <div>
-                          <p className="font-medium">{event.title}</p>
+                          <p className="font-medium">{getEventDisplayTitle(event)}</p>
                           <p className="text-sm text-muted-foreground">
                             {formatDate(event.date)} {event.personName && `• ${event.personName}`}
                           </p>
@@ -1587,22 +1711,22 @@ export default function Calendar() {
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="sm:max-w-[550px]">
           <DialogHeader>
-            <DialogTitle className="text-xl">Neuer Termin</DialogTitle>
+            <DialogTitle className="text-xl">{t('calendar.newAppointment', 'Neuer Termin')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-5">
             <div>
-              <Label>Titel *</Label>
+              <Label>{t('calendar.titleRequired', 'Titel')} *</Label>
               <Input
                 value={newEvent.title}
                 onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
-                placeholder="z.B. Arzttermin, Meeting..."
+                placeholder={t('reminders.titlePlaceholder', 'z.B. Arzttermin, Meeting...')}
                 className="mt-2"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Datum *</Label>
+                <Label>{t('calendar.dateRequired', 'Datum')} *</Label>
                 <Input
                   type="date"
                   value={newEvent.date}
@@ -1611,7 +1735,7 @@ export default function Calendar() {
                 />
               </div>
               <div>
-                <Label>Uhrzeit</Label>
+                <Label>{t('calendar.time', 'Uhrzeit')}</Label>
                 <Input
                   type="time"
                   value={newEvent.time}
@@ -1623,41 +1747,41 @@ export default function Calendar() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Kategorie</Label>
+                <Label>{t('calendar.category', 'Kategorie')}</Label>
                 <Select value={newEvent.category} onValueChange={(v) => setNewEvent({ ...newEvent, category: v })}>
                   <SelectTrigger className="mt-2">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="general">Allgemein</SelectItem>
-                    <SelectItem value="work">Arbeit</SelectItem>
-                    <SelectItem value="personal">Persönlich</SelectItem>
-                    <SelectItem value="health">Gesundheit</SelectItem>
-                    <SelectItem value="finance">Finanzen</SelectItem>
+                    <SelectItem value="general">{t('calendar.categories.general', 'Allgemein')}</SelectItem>
+                    <SelectItem value="work">{t('calendar.categories.work', 'Arbeit')}</SelectItem>
+                    <SelectItem value="personal">{t('calendar.categories.personal', 'Persönlich')}</SelectItem>
+                    <SelectItem value="health">{t('calendar.categories.health', 'Gesundheit')}</SelectItem>
+                    <SelectItem value="finance">{t('calendar.categories.finance', 'Finanzen')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Priorität</Label>
+                <Label>{t('calendar.priority', 'Priorität')}</Label>
                 <Select value={newEvent.priority} onValueChange={(v) => setNewEvent({ ...newEvent, priority: v })}>
                   <SelectTrigger className="mt-2">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="low">Niedrig</SelectItem>
-                    <SelectItem value="medium">Mittel</SelectItem>
-                    <SelectItem value="high">Hoch</SelectItem>
+                    <SelectItem value="low">{t('calendar.priorities.low', 'Niedrig')}</SelectItem>
+                    <SelectItem value="medium">{t('calendar.priorities.medium', 'Mittel')}</SelectItem>
+                    <SelectItem value="high">{t('calendar.priorities.high', 'Hoch')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div>
-              <Label>Beschreibung</Label>
+              <Label>{t('finance.description', 'Beschreibung')}</Label>
               <Textarea
                 value={newEvent.description}
                 onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
-                placeholder="Optionale Beschreibung..."
+                placeholder={t('reminders.notesPlaceholder', 'Optionale Beschreibung...')}
                 className="mt-2"
                 rows={3}
               />
@@ -1673,38 +1797,38 @@ export default function Calendar() {
                 />
                 <Label htmlFor="recurring" className="flex items-center gap-2 cursor-pointer">
                   <Repeat className="w-4 h-4" />
-                  Wiederholen
+                  {t('calendar.repeat', 'Wiederholen')}
                 </Label>
               </div>
               
               {newEvent.isRecurring && (
                 <div className="grid grid-cols-2 gap-3 pt-2">
                   <div>
-                    <Label className="text-xs">Intervall</Label>
+                    <Label className="text-xs">{t('calendar.interval', 'Intervall')}</Label>
                     <Select value={newEvent.recurrenceRule} onValueChange={(v: any) => setNewEvent({ ...newEvent, recurrenceRule: v })}>
                       <SelectTrigger className="mt-1">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="daily">Täglich</SelectItem>
-                        <SelectItem value="weekly">Wöchentlich</SelectItem>
-                        <SelectItem value="monthly">Monatlich</SelectItem>
-                        <SelectItem value="yearly">Jährlich</SelectItem>
+                        <SelectItem value="daily">{t('finance.daily', 'Täglich')}</SelectItem>
+                        <SelectItem value="weekly">{t('finance.weekly', 'Wöchentlich')}</SelectItem>
+                        <SelectItem value="monthly">{t('finance.monthly', 'Monatlich')}</SelectItem>
+                        <SelectItem value="yearly">{t('finance.yearly', 'Jährlich')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <Label className="text-xs">Anzahl</Label>
+                    <Label className="text-xs">{t('calendar.count', 'Anzahl')}</Label>
                     <Select value={String(newEvent.recurrenceCount)} onValueChange={(v) => setNewEvent({ ...newEvent, recurrenceCount: parseInt(v) })}>
                       <SelectTrigger className="mt-1">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="2">2 Termine</SelectItem>
-                        <SelectItem value="4">4 Termine</SelectItem>
-                        <SelectItem value="6">6 Termine</SelectItem>
-                        <SelectItem value="12">12 Termine</SelectItem>
-                        <SelectItem value="52">52 Termine</SelectItem>
+                        <SelectItem value="2">{t('calendar.appointmentsCount', '{{count}} Termine', { count: 2 })}</SelectItem>
+                        <SelectItem value="4">{t('calendar.appointmentsCount', '{{count}} Termine', { count: 4 })}</SelectItem>
+                        <SelectItem value="6">{t('calendar.appointmentsCount', '{{count}} Termine', { count: 6 })}</SelectItem>
+                        <SelectItem value="12">{t('calendar.appointmentsCount', '{{count}} Termine', { count: 12 })}</SelectItem>
+                        <SelectItem value="52">{t('calendar.appointmentsCount', '{{count}} Termine', { count: 52 })}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1713,9 +1837,9 @@ export default function Calendar() {
             </div>
           </div>
           <DialogFooter className="mt-4">
-            <Button variant="outline" onClick={() => setShowAddDialog(false)}>Abbrechen</Button>
+            <Button variant="outline" onClick={() => setShowAddDialog(false)}>{t('common.cancel', 'Abbrechen')}</Button>
             <Button onClick={handleAddEvent}>
-              {newEvent.isRecurring ? `${newEvent.recurrenceCount} Termine erstellen` : 'Erstellen'}
+              {newEvent.isRecurring ? t('calendar.createAppointmentsCount', '{{count}} Termine erstellen', { count: newEvent.recurrenceCount }) : t('common.create', 'Erstellen')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1755,11 +1879,11 @@ export default function Calendar() {
                   {dayEvents.length === 0 ? (
                     <div className="text-center py-4 bg-muted/30 rounded-lg">
                       <CalendarIcon className="w-10 h-10 mx-auto text-muted-foreground/50 mb-2" />
-                      <p className="text-muted-foreground text-sm">Keine Events an diesem Tag</p>
+                      <p className="text-muted-foreground text-sm">{t('calendar.noEventsThisDay', 'Keine Events an diesem Tag')}</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <p className="text-sm font-medium text-muted-foreground">{dayEvents.length} {dayEvents.length === 1 ? 'Event' : 'Events'}</p>
+                      <p className="text-sm font-medium text-muted-foreground">{dayEvents.length} {dayEvents.length === 1 ? t('calendar.event', 'Event') : t('calendar.events', 'Events')}</p>
                       {dayEvents.map(event => (
                         <div
                           key={event.id}
@@ -1778,7 +1902,7 @@ export default function Calendar() {
                                 {getEventIcon(event)}
                               </div>
                               <div>
-                                <h4 className="font-medium text-sm">{event.title}</h4>
+                                <h4 className="font-medium text-sm">{getEventDisplayTitle(event)}</h4>
                                 <p className="text-xs text-muted-foreground">
                                   {getEventTypeLabel(event)}
                                   {event.personName && ` • ${event.personName}`}
@@ -1796,7 +1920,7 @@ export default function Calendar() {
 
                   {/* Quick Actions */}
                   <div className="border-t pt-4">
-                    <p className="text-sm font-medium text-muted-foreground mb-3">Schnellaktionen</p>
+                    <p className="text-sm font-medium text-muted-foreground mb-3">{t('calendar.quickActions', 'Schnellaktionen')}</p>
                     <div className="grid grid-cols-2 gap-2">
                       <Button 
                         variant="outline" 
@@ -1809,81 +1933,81 @@ export default function Calendar() {
                         }}
                       >
                         <CalendarIcon className="w-4 h-4" />
-                        <span className="text-xs">Termin erstellen</span>
+                        <span className="text-xs">{t('calendar.createAppointment', 'Termin erstellen')}</span>
                       </Button>
                       
                       <Button 
                         variant="outline" 
                         className="h-auto py-3 flex-col gap-1"
                         onClick={() => {
-                          toast.info('Wähle eine Person und füge eine Rechnung hinzu');
+                          toast.info(t('calendar.info.selectPersonAddBill', 'Wähle eine Person und füge eine Rechnung hinzu'));
                           setShowDayDialog(false);
                           setTimeout(() => setLocation('/people'), 100);
                         }}
                       >
                         <FileText className="w-4 h-4" />
-                        <span className="text-xs">Rechnung hinzufügen</span>
+                        <span className="text-xs">{t('calendar.addBill', 'Rechnung hinzufügen')}</span>
                       </Button>
                       
                       <Button 
                         variant="outline" 
                         className="h-auto py-3 flex-col gap-1"
                         onClick={() => {
-                          toast.info('Erfasse eine neue Ausgabe oder Einnahme');
+                          toast.info(t('calendar.info.recordExpenseOrIncome', 'Erfasse eine neue Ausgabe oder Einnahme'));
                           setShowDayDialog(false);
                           setTimeout(() => setLocation('/finance'), 100);
                         }}
                       >
                         <ArrowDownLeft className="w-4 h-4" />
-                        <span className="text-xs">Ausgabe erfassen</span>
+                        <span className="text-xs">{t('calendar.recordExpense', 'Ausgabe erfassen')}</span>
                       </Button>
                       
                       <Button 
                         variant="outline" 
                         className="h-auto py-3 flex-col gap-1"
                         onClick={() => {
-                          toast.info('Erstelle eine neue Erinnerung');
+                          toast.info(t('calendar.info.createReminder', 'Erstelle eine neue Erinnerung'));
                           setShowDayDialog(false);
                           setTimeout(() => setLocation('/reminders'), 100);
                         }}
                       >
                         <Bell className="w-4 h-4" />
-                        <span className="text-xs">Erinnerung</span>
+                        <span className="text-xs">{t('calendar.reminder', 'Erinnerung')}</span>
                       </Button>
                     </div>
                   </div>
 
                   {/* Quick Navigation */}
                   <div className="border-t pt-4">
-                    <p className="text-sm font-medium text-muted-foreground mb-3">Navigation</p>
+                    <p className="text-sm font-medium text-muted-foreground mb-3">{t('calendar.navigation', 'Navigation')}</p>
                     <div className="flex flex-wrap gap-2">
                       <Button 
                         variant="ghost" 
                         size="sm"
                         onClick={() => { setShowDayDialog(false); setTimeout(() => setLocation('/bills'), 100); }}
                       >
-                        Rechnungen
+                        {t('nav.bills', 'Rechnungen')}
                       </Button>
                       <Button 
                         variant="ghost" 
                         size="sm"
                         onClick={() => { setShowDayDialog(false); setTimeout(() => setLocation('/people'), 100); }}
                       >
-                        Personen
+                        {t('nav.people', 'Personen')}
                       </Button>
                       <Button 
                         variant="ghost" 
                         size="sm"
                         onClick={() => { setShowDayDialog(false); setTimeout(() => setLocation('/finance'), 100); }}
                       >
-                        Finanzen
+                        {t('nav.finance', 'Finanzen')}
                       </Button>
                       <Button 
                         variant="ghost" 
                         size="sm"
                         onClick={() => { setShowDayDialog(false); setTimeout(() => setLocation('/reminders'), 100); }}
                       >
-                        Erinnerungen
+                        {t('nav.reminders', 'Erinnerungen')}
                       </Button>
                     </div>
                   </div>
@@ -1921,8 +2045,8 @@ export default function Calendar() {
                 <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-300 flex items-center gap-3">
                   <AlertTriangle className="w-5 h-5 text-red-600" />
                   <div>
-                    <p className="text-red-600 font-medium">Diese Rechnung ist überfällig!</p>
-                    <p className="text-sm text-red-500">Bitte so schnell wie möglich bearbeiten.</p>
+                    <p className="text-red-600 font-medium">{t('calendar.billOverdue', 'Diese Rechnung ist überfällig!')}</p>
+                    <p className="text-sm text-red-500">{t('calendar.pleaseProcess', 'Bitte so schnell wie möglich bearbeiten.')}</p>
                   </div>
                 </div>
               )}
@@ -1930,14 +2054,14 @@ export default function Calendar() {
               {/* Hauptinformationen */}
               <div className="grid grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
                 <div>
-                  <p className="text-sm text-muted-foreground">Datum</p>
+                  <p className="text-sm text-muted-foreground">{t('finance.date', 'Datum')}</p>
                   <p className="font-medium">{formatDate(selectedEvent.date)}</p>
                   {selectedEvent.time && (
-                    <p className="text-sm text-muted-foreground">{selectedEvent.time} Uhr</p>
+                    <p className="text-sm text-muted-foreground">{selectedEvent.time} {t('calendar.oclock', 'Uhr')}</p>
                   )}
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Typ</p>
+                  <p className="text-sm text-muted-foreground">{t('calendar.type', 'Typ')}</p>
                   <Badge className={getEventColor(selectedEvent)}>
                     {getEventTypeLabel(selectedEvent)}
                   </Badge>
@@ -1948,14 +2072,14 @@ export default function Calendar() {
               {selectedEvent.personName && (
                 <div className="flex items-center justify-between p-3 border rounded-lg">
                   <div>
-                    <p className="text-sm text-muted-foreground">Person</p>
+                    <p className="text-sm text-muted-foreground">{t('finance.person', 'Person')}</p>
                     <p className="font-medium">{selectedEvent.personName}</p>
                   </div>
                   <Button variant="outline" size="sm" onClick={() => {
                     setShowEventDialog(false);
                     setLocation('/people');
                   }}>
-                    Zur Person
+                    {t('calendar.goToPerson', 'Zur Person')}
                   </Button>
                 </div>
               )}
@@ -1965,7 +2089,7 @@ export default function Calendar() {
                 <div className="p-4 border rounded-lg">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-muted-foreground">Betrag</p>
+                      <p className="text-sm text-muted-foreground">{t('finance.amount', 'Betrag')}</p>
                       <p className="text-2xl font-bold">{formatAmount(selectedEvent.amount)}</p>
                     </div>
                     {selectedEvent.status && (
@@ -1977,24 +2101,24 @@ export default function Calendar() {
                           'text-yellow-600 border-yellow-600 bg-yellow-50'
                         }`}
                       >
-                        {selectedEvent.status === 'paid' ? 'Bezahlt' :
-                         selectedEvent.status === 'open' ? 'Offen' : 'Verschoben'}
+                        {selectedEvent.status === 'paid' ? t('finance.paid', 'Bezahlt') :
+                         selectedEvent.status === 'open' ? t('finance.open', 'Offen') : t('finance.postponed', 'Verschoben')}
                       </Badge>
                     )}
                   </div>
                   
                   {selectedEvent.direction && (
                     <div className="mt-3 pt-3 border-t">
-                      <p className="text-sm text-muted-foreground mb-1">Richtung</p>
+                      <p className="text-sm text-muted-foreground mb-1">{t('calendar.direction', 'Richtung')}</p>
                       {selectedEvent.direction === 'incoming' ? (
                         <span className="flex items-center gap-2 text-green-600">
                           <ArrowDownLeft className="w-4 h-4" /> 
-                          <span>Forderung (Person schuldet mir)</span>
+                          <span>{t('calendar.claim', 'Forderung (Person schuldet mir)')}</span>
                         </span>
                       ) : (
                         <span className="flex items-center gap-2 text-red-600">
                           <ArrowUpRight className="w-4 h-4" /> 
-                          <span>Verbindlichkeit (Ich schulde Person)</span>
+                          <span>{t('calendar.liability', 'Verbindlichkeit (Ich schulde Person)')}</span>
                         </span>
                       )}
                     </div>
@@ -2005,7 +2129,7 @@ export default function Calendar() {
               {/* Beschreibung */}
               {selectedEvent.description && (
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Beschreibung</p>
+                  <p className="text-sm text-muted-foreground mb-1">{t('finance.description', 'Beschreibung')}</p>
                   <p className="text-sm bg-muted/50 p-3 rounded-lg">{selectedEvent.description}</p>
                 </div>
               )}
@@ -2013,16 +2137,16 @@ export default function Calendar() {
               {/* Status für Termine */}
               {selectedEvent.type === 'appointment' && selectedEvent.completed !== undefined && (
                 <div className="flex items-center justify-between p-3 border rounded-lg">
-                  <span>Status</span>
+                  <span>{t('calendar.status', 'Status')}</span>
                   <Badge variant="outline" className={selectedEvent.completed ? 'text-green-600 border-green-600' : 'text-muted-foreground'}>
-                    {selectedEvent.completed ? 'Erledigt' : 'Ausstehend'}
+                    {selectedEvent.completed ? t('calendar.completed', 'Erledigt') : t('calendar.pending', 'Ausstehend')}
                   </Badge>
                 </div>
               )}
 
               {/* Quick Actions */}
               <div className="border-t pt-4 mt-4">
-                <p className="text-sm font-medium text-muted-foreground mb-3">Schnellaktionen</p>
+                <p className="text-sm font-medium text-muted-foreground mb-3">{t('calendar.quickActions', 'Schnellaktionen')}</p>
                 <div className="grid grid-cols-2 gap-2">
                   {selectedEvent.type === 'due' && selectedEvent.personId && (
                     <>
@@ -2031,26 +2155,26 @@ export default function Calendar() {
                         size="sm"
                         className="w-full"
                         onClick={() => {
-                          toast.info('Öffne Person um Rechnung zu bearbeiten');
+                          toast.info(t('calendar.info.openPersonEditBill', 'Öffne Person um Rechnung zu bearbeiten'));
                           setShowEventDialog(false);
                           setTimeout(() => setLocation('/people'), 100);
                         }}
                       >
                         <Edit2 className="w-4 h-4 mr-2" />
-                        Rechnung bearbeiten
+                        {t('calendar.editBill', 'Rechnung bearbeiten')}
                       </Button>
                       <Button 
                         variant="outline" 
                         size="sm"
                         className="w-full"
                         onClick={() => {
-                          toast.info('Erfasse die Zahlung als Ausgabe');
+                          toast.info(t('calendar.info.recordPaymentAsExpense', 'Erfasse die Zahlung als Ausgabe'));
                           setShowEventDialog(false);
                           setTimeout(() => setLocation('/finance'), 100);
                         }}
                       >
                         <ArrowUpRight className="w-4 h-4 mr-2" />
-                        Als Ausgabe erfassen
+                        {t('calendar.recordAsExpense', 'Als Ausgabe erfassen')}
                       </Button>
                     </>
                   )}
@@ -2061,13 +2185,13 @@ export default function Calendar() {
                         size="sm"
                         className="w-full"
                         onClick={() => {
-                          toast.info('Öffne Erinnerungen zum Bearbeiten');
+                          toast.info(t('calendar.info.openRemindersToEdit', 'Öffne Erinnerungen zum Bearbeiten'));
                           setShowEventDialog(false);
                           setTimeout(() => setLocation('/reminders'), 100);
                         }}
                       >
                         <Edit2 className="w-4 h-4 mr-2" />
-                        Bearbeiten
+                        {t('common.edit')}
                       </Button>
                       <Button 
                         variant="outline" 
@@ -2077,16 +2201,16 @@ export default function Calendar() {
                           try {
                             const reminderId = selectedEvent.id.replace('appointment-', '');
                             await updateReminder(reminderId, { status: selectedEvent.completed ? 'ausstehend' : 'erledigt' });
-                            toast.success(selectedEvent.completed ? 'Als ausstehend markiert' : 'Als erledigt markiert');
+                            toast.success(selectedEvent.completed ? t('calendar.markedAsPending') : t('calendar.markedAsCompleted'));
                             setShowEventDialog(false);
                             fetchEvents();
                           } catch (error) {
-                            toast.error('Fehler beim Aktualisieren');
+                            toast.error(t('calendar.errors.updateError'));
                           }
                         }}
                       >
                         <CheckCircle className="w-4 h-4 mr-2" />
-                        {selectedEvent.completed ? 'Als ausstehend' : 'Als erledigt'}
+                        {selectedEvent.completed ? t('calendar.markAsPending', 'Als ausstehend') : t('calendar.markAsCompleted', 'Als erledigt')}
                       </Button>
                     </>
                   )}
@@ -2100,28 +2224,28 @@ export default function Calendar() {
                   size="sm"
                   onClick={() => { setShowEventDialog(false); setTimeout(() => setLocation('/bills'), 100); }}
                 >
-                  Alle Rechnungen
+                  {t('calendar.allBills', 'Alle Rechnungen')}
                 </Button>
                 <Button 
                   variant="ghost" 
                   size="sm"
                   onClick={() => { setShowEventDialog(false); setTimeout(() => setLocation('/people'), 100); }}
                 >
-                  Personen
+                  {t('nav.people', 'Personen')}
                 </Button>
                 <Button 
                   variant="ghost" 
                   size="sm"
                   onClick={() => { setShowEventDialog(false); setTimeout(() => setLocation('/finance'), 100); }}
                 >
-                  Finanzen
+                  {t('nav.finance', 'Finanzen')}
                 </Button>
               </div>
             </div>
           )}
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setShowEventDialog(false)}>
-              Schliessen
+              {t('common.close', 'Schliessen')}
             </Button>
           </DialogFooter>
         </DialogContent>

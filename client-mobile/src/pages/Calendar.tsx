@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import MobileLayout from '@/components/MobileLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,7 @@ interface CalendarEvent {
 }
 
 export default function MobileCalendar() {
+  const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -214,9 +216,9 @@ export default function MobileCalendar() {
         const isUserInitiated = prevDataRef.current === '';
         if (isUserInitiated) {
           if (apiError?.code === 'unauthenticated' || apiError?.message?.includes('UNAUTHORIZED')) {
-            toast.error('Bitte anmelden');
+            toast.error(t('calendar.errors.pleaseLogin', 'Bitte anmelden'));
           } else if (apiError?.code === 'unavailable' || apiError?.message?.includes('network')) {
-            toast.error('Netzwerkfehler - Bitte erneut versuchen');
+            toast.error(t('calendar.errors.networkError', 'Netzwerkfehler - Bitte erneut versuchen'));
           }
         }
         
@@ -449,9 +451,29 @@ export default function MobileCalendar() {
     }
   }, [fetchEvents]);
 
-  const monthNames = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 
-                      'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-  const dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+  const monthNames = [
+    t('calendar.months.january', 'Januar'),
+    t('calendar.months.february', 'Februar'),
+    t('calendar.months.march', 'März'),
+    t('calendar.months.april', 'April'),
+    t('calendar.months.may', 'Mai'),
+    t('calendar.months.june', 'Juni'),
+    t('calendar.months.july', 'Juli'),
+    t('calendar.months.august', 'August'),
+    t('calendar.months.september', 'September'),
+    t('calendar.months.october', 'Oktober'),
+    t('calendar.months.november', 'November'),
+    t('calendar.months.december', 'Dezember')
+  ];
+  const dayNames = [
+    t('calendar.days.monday', 'Mo'),
+    t('calendar.days.tuesday', 'Di'),
+    t('calendar.days.wednesday', 'Mi'),
+    t('calendar.days.thursday', 'Do'),
+    t('calendar.days.friday', 'Fr'),
+    t('calendar.days.saturday', 'Sa'),
+    t('calendar.days.sunday', 'So')
+  ];
 
   const getDaysInMonth = (date: Date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
@@ -765,7 +787,7 @@ export default function MobileCalendar() {
   };
 
   return (
-    <MobileLayout title="Kalender" showSidebar={true}>
+    <MobileLayout title={t('calendar.title', 'Kalender')} showSidebar={true}>
       {/* Close Button - Fixed position top right, aligned with header */}
       <Button
         variant="ghost"
@@ -810,7 +832,7 @@ export default function MobileCalendar() {
           onClick={goToToday}
           className="w-full h-10 min-h-[44px]"
         >
-          Heute
+          {t('calendar.today', 'Heute')}
         </Button>
       </div>
 
@@ -875,7 +897,7 @@ export default function MobileCalendar() {
       {/* Today's Events Section */}
       {todayEvents.length > 0 && (
         <div className="mobile-card mt-4">
-          <h3 className="text-sm font-semibold mb-3">Heute - Termine & Events</h3>
+          <h3 className="text-sm font-semibold mb-3">{t('calendar.todayEvents', 'Heute - Termine & Events')}</h3>
           <div className="space-y-2">
             {todayEvents.map((event) => (
               <Card 
@@ -925,7 +947,7 @@ export default function MobileCalendar() {
                 })}
               </DialogTitle>
               <DialogDescription className="sr-only">
-                Details für den ausgewählten Tag mit Wetter, Terminen und Schnellaktionen
+                {t('calendar.dayDialogDescription', 'Details für den ausgewählten Tag mit Wetter, Terminen und Schnellaktionen')}
               </DialogDescription>
               <Button
                 variant="ghost"
@@ -944,23 +966,23 @@ export default function MobileCalendar() {
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold flex items-center gap-2">
                   <Cloud className="w-4 h-4" />
-                  Wetter
+                  {t('calendar.weather', 'Wetter')}
                 </h3>
               </div>
               
               {weatherLoading ? (
                 <div className="flex flex-col items-center justify-center py-4">
-                  <div className="text-xs text-muted-foreground">Lädt Wetterdaten...</div>
+                  <div className="text-xs text-muted-foreground">{t('calendar.loadingWeather', 'Lädt Wetterdaten...')}</div>
                   {weatherError && (
-                    <div className="text-xs text-red-500 mt-2">Fehler: {weatherError.message}</div>
+                    <div className="text-xs text-red-500 mt-2">{t('calendar.errors.weatherError', 'Fehler')}: {weatherError.message}</div>
                   )}
                 </div>
               ) : weatherError ? (
                 <div className="text-xs text-muted-foreground text-center py-2">
-                  <p className="text-red-500 mb-1">Fehler beim Laden</p>
+                  <p className="text-red-500 mb-1">{t('calendar.errors.loadingError', 'Fehler beim Laden')}</p>
                   <p className="opacity-70">{weatherError.message}</p>
                   {!location && (
-                    <p className="text-xs mt-2 opacity-50">Bitte Standort in Einstellungen eingeben</p>
+                    <p className="text-xs mt-2 opacity-50">{t('calendar.errors.pleaseEnterLocation', 'Bitte Standort in Einstellungen eingeben')}</p>
                   )}
                 </div>
               ) : weather ? (
@@ -989,7 +1011,7 @@ export default function MobileCalendar() {
                       )}
                       {weather.humidity !== undefined && (
                         <div>
-                          <span>Luftfeuchtigkeit: {weather.humidity}%</span>
+                          <span>{t('calendar.humidity', 'Luftfeuchtigkeit')}: {weather.humidity}%</span>
                         </div>
                       )}
                     </div>
@@ -999,11 +1021,11 @@ export default function MobileCalendar() {
                 <div className="text-xs text-muted-foreground text-center py-2">
                   {!location ? (
                     <>
-                      <p>Kein Standort konfiguriert</p>
-                      <p className="text-xs mt-1 opacity-70">Bitte in Einstellungen einen Standort eingeben</p>
+                      <p>{t('calendar.noLocationConfigured', 'Kein Standort konfiguriert')}</p>
+                      <p className="text-xs mt-1 opacity-70">{t('calendar.pleaseEnterLocationInSettings', 'Bitte in Einstellungen einen Standort eingeben')}</p>
                     </>
                   ) : (
-                    'Keine Wetterdaten verfügbar'
+                    t('calendar.noWeatherDataAvailable', 'Keine Wetterdaten verfügbar')
                   )}
                 </div>
               )}
@@ -1011,10 +1033,10 @@ export default function MobileCalendar() {
 
             {/* Events Section */}
             <div>
-              <h3 className="text-sm font-semibold mb-2">Termine & Events</h3>
+              <h3 className="text-sm font-semibold mb-2">{t('calendar.appointmentsAndEvents', 'Termine & Events')}</h3>
               {dayEvents.length === 0 ? (
                 <div className="text-sm text-muted-foreground text-center py-3 bg-muted/30 rounded-lg">
-                  <p>Keine Events an diesem Tag</p>
+                  <p>{t('calendar.noEventsToday', 'Keine Events an diesem Tag')}</p>
                   <p className="text-xs mt-2 opacity-70">
                       Debug: {events.length} Events geladen, {selectedDate ? `Datum: ${formatDateLocal(selectedDate)}` : 'Kein Datum ausgewählt'}
                       {events.length > 0 && (
@@ -1058,7 +1080,7 @@ export default function MobileCalendar() {
 
             {/* Quick Actions */}
             <div>
-              <h3 className="text-sm font-semibold mb-2">Schnellaktionen</h3>
+              <h3 className="text-sm font-semibold mb-2">{t('calendar.quickActions', 'Schnellaktionen')}</h3>
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   variant="outline"
@@ -1068,7 +1090,7 @@ export default function MobileCalendar() {
                   className="h-auto py-3 flex flex-col items-center gap-2 rounded-xl"
                 >
                   <CalendarPlus className="w-5 h-5" />
-                  <span className="text-xs">Termin erstellen</span>
+                  <span className="text-xs">{t('calendar.createAppointment', 'Termin erstellen')}</span>
                 </Button>
                 <Button
                   variant="outline"
@@ -1078,7 +1100,7 @@ export default function MobileCalendar() {
                   className="h-auto py-3 flex flex-col items-center gap-2 rounded-xl"
                 >
                   <Wallet className="w-5 h-5" />
-                  <span className="text-xs">Finanz-Eintrag</span>
+                  <span className="text-xs">{t('calendar.financeEntry', 'Finanz-Eintrag')}</span>
                 </Button>
               </div>
             </div>
@@ -1090,7 +1112,7 @@ export default function MobileCalendar() {
               onClick={() => setShowDayDialog(false)}
               className="h-11 min-h-[44px] w-full rounded-xl text-sm font-medium"
             >
-              Schliessen
+              {t('common.close', 'Schliessen')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1179,7 +1201,7 @@ export default function MobileCalendar() {
                     <div className="flex items-center gap-3 bg-muted/30 rounded-xl p-4">
                       <Wallet className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <Label className="text-xs text-muted-foreground block mb-1">Betrag</Label>
+                        <Label className="text-xs text-muted-foreground block mb-1">{t('calendar.amount', 'Betrag')}</Label>
                         <p className="text-sm font-semibold">CHF {(selectedEvent.amount / 100).toFixed(2)}</p>
                       </div>
                     </div>
@@ -1189,7 +1211,7 @@ export default function MobileCalendar() {
                     <div className="flex items-center gap-3 bg-muted/30 rounded-xl p-4">
                       <Bell className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <Label className="text-xs text-muted-foreground block mb-1">Person</Label>
+                        <Label className="text-xs text-muted-foreground block mb-1">{t('calendar.person', 'Person')}</Label>
                         <p className="text-sm font-medium">{selectedEvent.personName}</p>
                       </div>
                     </div>
@@ -1199,9 +1221,9 @@ export default function MobileCalendar() {
                     <div className="flex items-center gap-3 bg-muted/30 rounded-xl p-4">
                       <CheckCircle className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <Label className="text-xs text-muted-foreground block mb-1">Status</Label>
+                        <Label className="text-xs text-muted-foreground block mb-1">{t('calendar.status', 'Status')}</Label>
                         <Badge variant={selectedEvent.status === 'paid' ? 'default' : 'secondary'} className="text-xs">
-                          {selectedEvent.status === 'paid' ? 'Bezahlt' : selectedEvent.status === 'pending' ? 'Ausstehend' : selectedEvent.status}
+                          {selectedEvent.status === 'paid' ? t('calendar.paid', 'Bezahlt') : selectedEvent.status === 'pending' ? t('calendar.pending', 'Ausstehend') : selectedEvent.status}
                         </Badge>
                       </div>
                     </div>
@@ -1211,7 +1233,7 @@ export default function MobileCalendar() {
                     <div className="flex items-center gap-3 bg-red-50 dark:bg-red-950/20 rounded-xl p-4 border border-red-200 dark:border-red-800">
                       <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-red-600 dark:text-red-400">Überfällig</p>
+                        <p className="text-sm font-medium text-red-600 dark:text-red-400">{t('calendar.overdue', 'Überfällig')}</p>
                       </div>
                     </div>
                   )}
@@ -1226,7 +1248,7 @@ export default function MobileCalendar() {
               onClick={() => setShowEventDialog(false)}
               className="h-11 min-h-[44px] w-full rounded-xl text-sm font-medium"
             >
-              Schliessen
+              {t('common.close', 'Schliessen')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1243,22 +1265,22 @@ export default function MobileCalendar() {
       }}>
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-4 pb-2">
-            <DialogTitle className="text-lg font-semibold">Termin erstellen</DialogTitle>
+            <DialogTitle className="text-lg font-semibold">{t('calendar.createAppointment', 'Termin erstellen')}</DialogTitle>
           </DialogHeader>
           
           <div className="px-5 pb-2 space-y-3">
             <div>
-              <label className="text-sm font-medium mb-1 block">Titel</label>
+              <label className="text-sm font-medium mb-1 block">{t('reminders.titleField', 'Titel')}</label>
               <input
                 type="text"
                 id="reminder-title"
-                placeholder="z.B. Arzttermin"
+                placeholder={t('reminders.titlePlaceholder', 'z.B. Arzttermin')}
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm"
                 autoFocus
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Datum</label>
+              <label className="text-sm font-medium mb-1 block">{t('reminders.dueDate', 'Datum')}</label>
               <input
                 type="text"
                 id="reminder-date"
@@ -1282,7 +1304,7 @@ export default function MobileCalendar() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Uhrzeit (optional)</label>
+              <label className="text-sm font-medium mb-1 block">{t('calendar.timeOptional', 'Uhrzeit (optional)')}</label>
               <input
                 type="time"
                 id="reminder-time"
@@ -1290,10 +1312,10 @@ export default function MobileCalendar() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Notizen (optional)</label>
+              <label className="text-sm font-medium mb-1 block">{t('calendar.notesOptional', 'Notizen (optional)')}</label>
               <textarea
                 id="reminder-notes"
-                placeholder="Weitere Details..."
+                placeholder={t('calendar.moreDetails', 'Weitere Details...')}
                 rows={2}
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm resize-none"
               />
@@ -1306,7 +1328,7 @@ export default function MobileCalendar() {
               onClick={() => setShowCreateReminderModal(false)}
               className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium"
             >
-              Abbrechen
+              {t('common.cancel', 'Abbrechen')}
             </Button>
             <Button 
               variant="default" 
@@ -1318,14 +1340,14 @@ export default function MobileCalendar() {
                   const notesInput = document.getElementById('reminder-notes') as HTMLTextAreaElement;
                   
                   if (!titleInput.value.trim()) {
-                    toast.error('Bitte gib einen Titel ein');
+                    toast.error(t('calendar.errors.titleRequired', 'Bitte gib einen Titel ein'));
                     return;
                   }
                   
                   // Parse German date format (DD.MM.YYYY)
                   const parsedDate = parseDateGerman(dateInput.value);
                   if (!parsedDate) {
-                    toast.error('Bitte gib ein gültiges Datum ein (DD.MM.YYYY)');
+                    toast.error(t('calendar.errors.invalidDate', 'Bitte gib ein gültiges Datum ein (DD.MM.YYYY)'));
                     return;
                   }
                   
@@ -1335,7 +1357,7 @@ export default function MobileCalendar() {
                   const selectedDateOnly = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate());
                   
                   if (selectedDateOnly < today) {
-                    toast.error('Termine können nicht in der Vergangenheit erstellt werden');
+                    toast.error(t('calendar.errors.cannotCreateInPast', 'Termine können nicht in der Vergangenheit erstellt werden'));
                     return;
                   }
                   
@@ -1355,7 +1377,7 @@ export default function MobileCalendar() {
                     notes: notesInput.value.trim() || null,
                   });
                   
-                  toast.success('Termin erstellt');
+                  toast.success(t('calendar.appointmentCreated', 'Termin erstellt'));
                   setShowCreateReminderModal(false);
                   setShowDayDialog(false);
                   // Refresh events to sync everywhere
@@ -1365,12 +1387,12 @@ export default function MobileCalendar() {
                     setSelectedDate(new Date(selectedDate));
                   }
                 } catch (error: any) {
-                  toast.error(error.message || 'Fehler beim Erstellen des Termins');
+                  toast.error(error.message || t('calendar.errors.createAppointmentError', 'Fehler beim Erstellen des Termins'));
                 }
               }}
               className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium"
             >
-              Erstellen
+              {t('common.create', 'Erstellen')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1387,25 +1409,25 @@ export default function MobileCalendar() {
       }}>
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-4 pb-2">
-            <DialogTitle className="text-lg font-semibold">Finanz-Eintrag erstellen</DialogTitle>
+            <DialogTitle className="text-lg font-semibold">{t('calendar.createFinanceEntry', 'Finanz-Eintrag erstellen')}</DialogTitle>
             <DialogDescription className="sr-only">
-              Erstellen Sie einen neuen Finanz-Eintrag mit Beschreibung, Betrag, Typ und Datum
+              {t('calendar.createFinanceEntryDescription', 'Erstellen Sie einen neuen Finanz-Eintrag mit Beschreibung, Betrag, Typ und Datum')}
             </DialogDescription>
           </DialogHeader>
           
           <div className="px-5 pb-2 space-y-3">
             <div>
-              <label className="text-sm font-medium mb-1 block">Beschreibung</label>
+              <label className="text-sm font-medium mb-1 block">{t('finance.description', 'Beschreibung')}</label>
               <input
                 type="text"
                 id="finance-description"
-                placeholder="z.B. Einkauf, Gehalt"
+                placeholder={t('calendar.descriptionPlaceholder', 'z.B. Einkauf, Gehalt')}
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm"
                 autoFocus
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Betrag (CHF)</label>
+              <label className="text-sm font-medium mb-1 block">{t('finance.amount', 'Betrag')} (CHF)</label>
               <input
                 type="number"
                 id="finance-amount"
@@ -1415,17 +1437,17 @@ export default function MobileCalendar() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Typ</label>
+              <label className="text-sm font-medium mb-1 block">{t('finance.type', 'Typ')}</label>
               <select
                 id="finance-type"
                 className="w-full px-3 py-2 border border-border rounded-lg text-sm"
               >
-                <option value="einnahme">Einnahme</option>
-                <option value="ausgabe">Ausgabe</option>
+                <option value="einnahme">{t('finance.income', 'Einnahme')}</option>
+                <option value="ausgabe">{t('finance.expense', 'Ausgabe')}</option>
               </select>
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Datum</label>
+              <label className="text-sm font-medium mb-1 block">{t('reminders.dueDate', 'Datum')}</label>
               <input
                 type="text"
                 id="finance-date"
@@ -1456,7 +1478,7 @@ export default function MobileCalendar() {
               onClick={() => setShowCreateFinanceModal(false)}
               className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium"
             >
-              Abbrechen
+              {t('common.cancel', 'Abbrechen')}
             </Button>
             <Button 
               variant="default" 
@@ -1468,19 +1490,19 @@ export default function MobileCalendar() {
                   const dateInput = document.getElementById('finance-date') as HTMLInputElement;
                   
                   if (!descriptionInput.value.trim()) {
-                    toast.error('Bitte gib eine Beschreibung ein');
+                    toast.error(t('calendar.errors.descriptionRequired', 'Bitte gib eine Beschreibung ein'));
                     return;
                   }
                   
                   // Parse German date format (DD.MM.YYYY)
                   const parsedDate = parseDateGerman(dateInput.value);
                   if (!parsedDate) {
-                    toast.error('Bitte gib ein gültiges Datum ein (DD.MM.YYYY)');
+                    toast.error(t('calendar.errors.invalidDate', 'Bitte gib ein gültiges Datum ein (DD.MM.YYYY)'));
                     return;
                   }
                   
                   if (!amountInput.value || parseFloat(amountInput.value) <= 0) {
-                    toast.error('Bitte gib einen gültigen Betrag ein');
+                    toast.error(t('calendar.errors.invalidAmount', 'Bitte gib einen gültigen Betrag ein'));
                     return;
                   }
                   
@@ -1489,23 +1511,23 @@ export default function MobileCalendar() {
                     amount: Math.round(parseFloat(amountInput.value) * 100), // Convert to Rappen
                     type: typeInput.value as 'einnahme' | 'ausgabe',
                     date: new Date(parsedDate),
-                    category: 'Sonstiges',
+                    category: t('finance.categories.expense.other', 'Sonstiges'),
                     currency: 'CHF',
                     isRecurring: false,
                   });
                   
-                  toast.success('Finanz-Eintrag erstellt');
+                  toast.success(t('calendar.financeEntryCreated', 'Finanz-Eintrag erstellt'));
                   setShowCreateFinanceModal(false);
                   setShowDayDialog(false);
                   // Refresh events to sync everywhere
                   await fetchEvents();
                 } catch (error: any) {
-                  toast.error(error.message || 'Fehler beim Erstellen des Finanz-Eintrags');
+                  toast.error(error.message || t('calendar.errors.createFinanceEntryError', 'Fehler beim Erstellen des Finanz-Eintrags'));
                 }
               }}
               className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium"
             >
-              Erstellen
+              {t('common.create', 'Erstellen')}
             </Button>
           </DialogFooter>
         </DialogContent>

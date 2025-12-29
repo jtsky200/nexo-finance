@@ -464,6 +464,7 @@ export interface Person {
   name: string;
   email?: string | null;
   phone?: string | null;
+  notes?: string | null;
   totalOwed: number;
   currency: string;
   createdAt: Date;

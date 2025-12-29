@@ -9,9 +9,16 @@
     <meta name="description" content="Nexo - Personal Finance & Tax Assistant. Verwalten Sie Ihre Finanzen, Rechnungen, Termine und Steuern." />
     <meta name="theme-color" content="#000000" />
     <title>Nexo - Personal Finance & Tax Assistant</title>    
-    <!-- Mobile redirect script -->
+    <!-- Domain redirect script - Redirect Firebase URLs to custom domain -->
     <script>
       (function() {
+        // Redirect Firebase hosting URLs to custom domain
+        var hostname = window.location.hostname;
+        if (hostname === 'nexo-jtsky100.web.app' || hostname === 'nexo-jtsky100.firebaseapp.com') {
+          window.location.href = 'https://nexo.report' + window.location.pathname + window.location.search;
+          return;
+        }
+        
         // Check if user is on a mobile device
         var isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         // Check screen width as fallback
@@ -21,7 +28,7 @@
         
         if ((isMobile || isSmallScreen) && !preferDesktop) {
           // Redirect to mobile version
-          window.location.href = 'https://m-nexo-jtsky100.web.app' + window.location.pathname;
+          window.location.href = 'https://m.nexo.report' + window.location.pathname;
         }
       })();
     </script>

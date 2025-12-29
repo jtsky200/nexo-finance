@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { X, ArrowRight, MessageSquare } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
+import { useTranslation } from 'react-i18next';
 
 const TUTORIAL_STORAGE_KEY = 'nexo_tutorial_highlight';
 
@@ -18,65 +19,45 @@ interface TutorialHighlightProps {
 }
 
 export function TutorialHighlight({ onComplete, onOpenChat }: TutorialHighlightProps) {
+  const { t } = useTranslation();
   const [steps, setSteps] = useState<TutorialStep[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
   const [isVisible, setIsVisible] = useState(false);
 
-  // Lade Tutorial-Schritte aus LocalStorage
+  // Lade Tutorial-Schritte aus LocalStorage und höre auf Custom-Event
   useEffect(() => {
-    const stored = localStorage.getItem(TUTORIAL_STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as TutorialStep[];
-        if (parsed.length > 0) {
-          setSteps(parsed);
-          setIsVisible(true);
-          setCurrentStep(0);
+    const loadTutorial = () => {
+      const stored = localStorage.getItem(TUTORIAL_STORAGE_KEY);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored) as TutorialStep[];
+          if (parsed.length > 0) {
+            setSteps(parsed);
+            setIsVisible(true);
+            setCurrentStep(0);
+          }
+        } catch (e) {
+          console.error('Fehler beim Laden des Tutorials:', e);
         }
-      } catch (e) {
-        console.error('Fehler beim Laden des Tutorials:', e);
-      }
-    }
-  }, []);
-
-  // Finde das Ziel-Element und positioniere das Highlight
-  useEffect(() => {
-    if (!isVisible || steps.length === 0) return;
-
-    const step = steps[currentStep];
-    if (!step) return;
-
-    const findElement = () => {
-      const element = document.querySelector(step.selector);
-      if (element) {
-        const rect = element.getBoundingClientRect();
-        setTargetRect(rect);
-        
-        // Scrolle zum Element
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     };
 
-    // Kurze Verzögerung für DOM-Updates
-    const timer = setTimeout(findElement, 300);
-    
-    // Aktualisiere bei Resize
-    window.addEventListener('resize', findElement);
-    
+    // Lade sofort beim Mount
+    loadTutorial();
+
+    // Höre auf Custom-Event für Tutorial-Start
+    const handleTutorialStart = () => {
+      // Kurze Verzögerung, damit DOM bereit ist
+      setTimeout(loadTutorial, 100);
+    };
+
+    window.addEventListener('nexo-tutorial-start', handleTutorialStart);
+
     return () => {
-      clearTimeout(timer);
-      window.removeEventListener('resize', findElement);
+      window.removeEventListener('nexo-tutorial-start', handleTutorialStart);
     };
-  }, [isVisible, steps, currentStep]);
-
-  const handleNext = useCallback(() => {
-    if (currentStep < steps.length - 1) {
-      setCurrentStep(prev => prev + 1);
-    } else {
-      handleClose();
-    }
-  }, [currentStep, steps.length]);
+  }, []);
 
   const handleClose = useCallback(() => {
     setIsVisible(false);
@@ -85,6 +66,84 @@ export function TutorialHighlight({ onComplete, onOpenChat }: TutorialHighlightP
     localStorage.removeItem(TUTORIAL_STORAGE_KEY);
     onComplete?.();
   }, [onComplete]);
+
+  // Finde das Ziel-Element und positioniere das Highlight
+  useEffect(() => {
+    if (!isVisible || steps.length === 0) return;
+
+    const step = steps[currentStep];
+    if (!step) return;
+
+    let retryCount = 0;
+    const maxRetries = 10;
+
+    const findElement = () => {
+      const element = document.querySelector(step.selector);
+      if (element) {
+        const rect = element.getBoundingClientRect();
+        // Prüfe ob Element sichtbar ist (nicht 0x0)
+        if (rect.width > 0 && rect.height > 0) {
+          setTargetRect(rect);
+          
+          // Scrolle zum Element
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const tryFindElement = () => {
+      if (findElement()) {
+        return; // Element gefunden
+      }
+
+      // Retry wenn Element noch nicht im DOM ist
+      if (retryCount < maxRetries) {
+        retryCount++;
+        setTimeout(tryFindElement, 200);
+      } else {
+        console.warn(`Tutorial-Element nicht gefunden: ${step.selector}`);
+        // Überspringe diesen Schritt
+        if (currentStep < steps.length - 1) {
+          setTimeout(() => {
+            setCurrentStep(prev => prev + 1);
+          }, 100);
+        } else {
+          setTimeout(() => {
+            handleClose();
+          }, 100);
+        }
+      }
+    };
+
+    // Starte Suche mit initialer Verzögerung
+    const timer = setTimeout(tryFindElement, 300);
+    
+    // Aktualisiere bei Resize und Scroll
+    const handleResize = () => {
+      findElement();
+    };
+    const handleScroll = () => {
+      findElement();
+    };
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('scroll', handleScroll, true); // true = capture phase für alle Scroll-Events
+    
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [isVisible, steps, currentStep, handleClose]);
+
+  const handleNext = useCallback(() => {
+    if (currentStep < steps.length - 1) {
+      setCurrentStep(prev => prev + 1);
+    } else {
+      handleClose();
+    }
+  }, [currentStep, steps.length, handleClose]);
 
   const handleOpenChat = useCallback(() => {
     handleClose();
@@ -101,19 +160,41 @@ export function TutorialHighlight({ onComplete, onOpenChat }: TutorialHighlightP
   // Berechne Position für das Tooltip
   const getTooltipStyle = () => {
     const tooltipWidth = 320;
-    const tooltipHeight = 150;
+    const tooltipHeight = 180; // Etwas größer für bessere Sichtbarkeit
     const margin = 16;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
 
-    let top = targetRect.bottom + margin;
+    // Berechne verfügbaren Platz oben und unten
+    const spaceAbove = targetRect.top - margin;
+    const spaceBelow = viewportHeight - targetRect.bottom - margin;
+    
+    // Entscheide, ob Tooltip oben oder unten platziert werden soll
+    let top: number;
+    let preferBottom = spaceBelow >= tooltipHeight || spaceBelow >= spaceAbove;
+    
+    if (preferBottom && spaceBelow >= tooltipHeight) {
+      // Platziere unten
+      top = targetRect.bottom + margin;
+    } else if (spaceAbove >= tooltipHeight) {
+      // Platziere oben
+      top = targetRect.top - tooltipHeight - margin;
+    } else {
+      // Nicht genug Platz oben oder unten - platziere in der Mitte des Viewports
+      top = Math.max(margin, (viewportHeight - tooltipHeight) / 2);
+    }
+
+    // Stelle sicher, dass top innerhalb des Viewports ist
+    top = Math.max(margin, Math.min(top, viewportHeight - tooltipHeight - margin));
+
+    // Berechne horizontale Position (zentriert am Element)
     let left = targetRect.left + (targetRect.width / 2) - (tooltipWidth / 2);
 
-    // Korrigiere Position wenn ausserhalb des Viewports
-    if (left < margin) left = margin;
-    if (left + tooltipWidth > window.innerWidth - margin) {
-      left = window.innerWidth - tooltipWidth - margin;
-    }
-    if (top + tooltipHeight > window.innerHeight - margin) {
-      top = targetRect.top - tooltipHeight - margin;
+    // Korrigiere horizontale Position wenn ausserhalb des Viewports
+    if (left < margin) {
+      left = margin;
+    } else if (left + tooltipWidth > viewportWidth - margin) {
+      left = viewportWidth - tooltipWidth - margin;
     }
 
     return { top, left, width: tooltipWidth };
@@ -168,11 +249,12 @@ export function TutorialHighlight({ onComplete, onOpenChat }: TutorialHighlightP
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-medium text-gray-500">
-            Schritt {currentStep + 1} von {steps.length}
+            {t('tutorial.step', 'Schritt {{current}} von {{total}}', { current: currentStep + 1, total: steps.length })}
           </span>
           <button
             onClick={handleClose}
             className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+            aria-label={t('common.close', 'Schliessen')}
           >
             <X className="w-4 h-4 text-gray-400" />
           </button>
@@ -189,9 +271,10 @@ export function TutorialHighlight({ onComplete, onOpenChat }: TutorialHighlightP
             size="sm"
             onClick={handleOpenChat}
             className="text-gray-500"
+            disabled={!onOpenChat}
           >
             <MessageSquare className="w-4 h-4 mr-1" />
-            Zum Chat
+            {t('tutorial.toChat', 'Zum Chat')}
           </Button>
 
           <Button
@@ -201,11 +284,11 @@ export function TutorialHighlight({ onComplete, onOpenChat }: TutorialHighlightP
           >
             {currentStep < steps.length - 1 ? (
               <>
-                Weiter
+                {t('common.next', 'Weiter')}
                 <ArrowRight className="w-4 h-4 ml-1" />
               </>
             ) : (
-              'Fertig'
+              t('common.finish', 'Fertig')
             )}
           </Button>
         </div>
@@ -222,41 +305,43 @@ export function startTutorial(steps: TutorialStep[]) {
 }
 
 // Vordefinierte Tutorial-Schritte für verschiedene Seiten
+// NOTE: Diese Presets werden nicht direkt verwendet, da sie hardcodierte deutsche Strings enthalten.
+// Tutorial-Schritte sollten immer mit t() erstellt werden, z.B. in Layout.tsx oder Topbar.tsx
 export const TUTORIAL_PRESETS = {
   finances: [
     {
       selector: '[data-tutorial="add-entry"]',
-      title: 'Eintrag hinzufügen',
-      description: 'Klicke hier, um eine neue Einnahme oder Ausgabe zu erfassen.',
+      title: '', // Wird nicht verwendet - muss mit t() erstellt werden
+      description: '', // Wird nicht verwendet - muss mit t() erstellt werden
     },
     {
       selector: '[data-tutorial="total-income"]',
-      title: 'Gesamteinnahmen',
-      description: 'Hier siehst du die Summe aller deiner Einnahmen.',
+      title: '', // Wird nicht verwendet - muss mit t() erstellt werden
+      description: '', // Wird nicht verwendet - muss mit t() erstellt werden
     },
     {
       selector: '[data-tutorial="total-expenses"]',
-      title: 'Gesamtausgaben',
-      description: 'Hier siehst du die Summe aller deiner Ausgaben.',
+      title: '', // Wird nicht verwendet - muss mit t() erstellt werden
+      description: '', // Wird nicht verwendet - muss mit t() erstellt werden
     },
   ],
   bills: [
     {
       selector: '[data-tutorial="add-bill"]',
-      title: 'Rechnung hinzufügen',
-      description: 'Klicke hier, um eine neue Rechnung zu erstellen.',
+      title: '', // Wird nicht verwendet - muss mit t() erstellt werden
+      description: '', // Wird nicht verwendet - muss mit t() erstellt werden
     },
     {
       selector: '[data-tutorial="scan-bill"]',
-      title: 'Rechnung scannen',
-      description: 'Scanne eine Rechnung mit deiner Kamera für automatische Erkennung.',
+      title: '', // Wird nicht verwendet - muss mit t() erstellt werden
+      description: '', // Wird nicht verwendet - muss mit t() erstellt werden
     },
   ],
   reminders: [
     {
       selector: '[data-tutorial="add-reminder"]',
-      title: 'Erinnerung erstellen',
-      description: 'Klicke hier, um eine neue Erinnerung zu erstellen.',
+      title: '', // Wird nicht verwendet - muss mit t() erstellt werden
+      description: '', // Wird nicht verwendet - muss mit t() erstellt werden
     },
   ],
 };

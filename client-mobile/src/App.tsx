@@ -22,6 +22,8 @@ import Reminders from '@/pages/Reminders';
 import People from '@/pages/People';
 import Documents from '@/pages/Documents';
 import Taxes from '@/pages/Taxes';
+import Help from '@/pages/Help';
+import FAQ from '@/pages/FAQ';
 
 // Protected Route Wrapper Component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -88,6 +90,8 @@ function AppRoutes() {
         <Route path="/shopping" component={Shopping} />
         <Route path="/taxes" component={Taxes} />
         <Route path="/settings" component={Settings} />
+        <Route path="/help" component={Help} />
+        <Route path="/faq" component={FAQ} />
         <Route>
           <AIChat />
         </Route>

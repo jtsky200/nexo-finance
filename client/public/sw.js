@@ -2,7 +2,7 @@
  * Service Worker für Background-Sync und Offline-Support
  */
 
-const CACHE_NAME = 'nexo-v1';
+const CACHE_NAME = 'nexo-v2';
 const RUNTIME_CACHE = 'nexo-runtime';
 const OFFLINE_URL = '/offline.html';
 

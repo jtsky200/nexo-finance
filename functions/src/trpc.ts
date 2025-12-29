@@ -103,6 +103,128 @@ export const protectedProcedure = t.procedure.use(requireUser);
 async function createContext(opts: { req: Request }): Promise<{ user: any | null; req: Request }> {
   let user: any = null;
 
+  // Verify App Check token (optional but recommended for security)
+  // This follows Firebase App Check best practices:
+  // - Tokens are automatically sent from client
+  // - Backend verifies tokens to ensure requests come from legitimate apps
+  // - Verification is non-blocking (doesn't reject requests if App Check isn't configured)
+  try {
+    const appCheckToken = opts.req.headers.get('X-Firebase-AppCheck');
+    if (appCheckToken) {
+      try {
+        // Verify App Check token using Firebase Admin SDK
+        // This verifies the token was issued by Firebase App Check
+        // and returns claims including appId, token expiration, etc.
+        const appCheckClaims = await admin.appCheck().verifyToken(appCheckToken);
+        
+        // Get action name from header (if provided)
+        const action = opts.req.headers.get('X-AppCheck-Action') || 'unknown';
+        
+        // Log App Check verification for monitoring (only in development)
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[App Check] Token verified:', {
+            appId: appCheckClaims.appId,
+            action,
+            // Don't log full token for security
+          });
+        }
+        
+        // Token is valid - request is from a legitimate app instance
+        // Firebase App Check handles score-based decisions internally
+        // The token verification itself indicates the request passed reCAPTCHA v3 scoring
+        
+        // Score-based logic (handled by Firebase App Check):
+        // - reCAPTCHA v3 returns scores from 0.0 (bot) to 1.0 (human)
+        // - Firebase App Check uses these scores internally
+        // - Low scores (< 0.5 typically) result in token verification failure
+        // - Successful verification means score was acceptable (typically >= 0.5)
+        // - We don't have direct access to scores, but successful verification = good score
+        
+        // Log successful verification for analytics (optional, only for important actions)
+        if (action === 'login' || action === 'register' || action === 'reset_password') {
+          try {
+            await admin.firestore().collection('securityEvents').add({
+              type: 'auth_success',
+              severity: 'low',
+              message: `App Check verified for ${action} action`,
+              userId: user?.id || null,
+              details: {
+                action,
+                appId: appCheckClaims.appId,
+              },
+              timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          } catch (logError) {
+            // Don't fail request if logging fails
+            console.error('[App Check] Failed to log security event:', logError);
+          }
+        }
+        
+        // In production, you could:
+        // - Track action-specific metrics in Firebase Console
+        // - Use appId to track which app instance made the request
+        // - Implement rate limiting based on appId and action
+        // - Monitor for patterns (e.g., many failed verifications = potential attack)
+        
+      } catch (appCheckError) {
+        // App Check verification failed - this could indicate:
+        // - Invalid/expired token
+        // - Token from unauthorized app
+        // - App Check not properly configured
+        
+        // Get action name from header (if provided)
+        const action = opts.req.headers.get('X-AppCheck-Action') || 'unknown';
+        
+        // Log warning (non-blocking - App Check is optional until enforced)
+        console.warn('[App Check] Token verification failed:', {
+          error: appCheckError instanceof Error ? appCheckError.message : String(appCheckError),
+          action,
+        });
+        
+        // Log security event for invalid token (score-based rejection)
+        // Low reCAPTCHA v3 scores result in token verification failure
+        // This indicates potential bot or suspicious activity
+        try {
+          // Log to Firestore securityEvents collection
+          await admin.firestore().collection('securityEvents').add({
+            type: 'invalid_token',
+            severity: 'high',
+            message: 'App Check token verification failed - possible low reCAPTCHA score',
+            userId: user?.id || null,
+            details: {
+              action,
+              error: appCheckError instanceof Error ? appCheckError.message : String(appCheckError),
+              // Note: reCAPTCHA v3 scores (0.0-1.0) are handled internally
+              // Low scores (< 0.5 typically) result in verification failure
+            },
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        } catch (logError) {
+          // Don't fail request if security logging fails
+          console.error('[App Check] Failed to log security event:', logError);
+        }
+        
+        // TODO: When App Check enforcement is enabled, you should:
+        // 1. Reject requests with invalid tokens (throw error)
+        // 2. Implement rate limiting based on action and appId
+        // 3. Block suspicious IPs or app instances
+      }
+    } else {
+      // No App Check token provided
+      // This is expected if App Check isn't configured yet
+      // Once App Check is enforced, requests without tokens will be rejected
+      if (process.env.NODE_ENV === 'development') {
+        console.debug('[App Check] No token provided in request');
+      }
+    }
+  } catch (error) {
+    // App Check verification is optional, don't block requests
+    // This catch handles any unexpected errors in the verification process
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[App Check] Verification error:', error);
+    }
+  }
+
   try {
     // Try to get user from Firebase Auth token
     const authHeader = opts.req.headers.get('authorization');
@@ -3141,6 +3263,7 @@ async function fetchWeatherFromAPI(location: string, date: Date, apiKey: string)
 // Use OpenAI Assistants API
 async function invokeLLM(params: {
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  language?: string;
 }, apiKey: string, ctx: { user: any | null }): Promise<any> {
   if (!apiKey || apiKey.trim() === '') {
     throw new Error('OPENAI_API_KEY is not configured. Please set it in Firebase Functions environment variables or secrets.');
@@ -3227,11 +3350,25 @@ async function invokeLLM(params: {
     const swissNow = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Zurich' }));
     const currentDate = swissNow.toISOString().split('T')[0];
     
+    // Language mapping for response instructions
+    const userLanguage = params.language || 'de';
+    const languageInstructions: Record<string, string> = {
+      'de': 'Antworte IMMER auf Deutsch.',
+      'en': 'ALWAYS respond in English.',
+      'es': 'Responde SIEMPRE en español.',
+      'nl': 'Antwoord ALTIJD in het Nederlands.',
+      'it': 'Rispondi SEMPRE in italiano.',
+      'fr': 'Réponds TOUJOURS en français.',
+    };
+    const responseLanguageInstruction = languageInstructions[userLanguage] || languageInstructions['de'];
+    
     const runBody: any = {
       assistant_id: assistantId,
       // Additional instructions to make the AI smarter for this specific request
       additional_instructions: `
 KRITISCHE ANWEISUNGEN - UNBEDINGT BEFOLGEN:
+
+SPRACHE: ${responseLanguageInstruction}
 
 AKTUELLES DATUM: ${currentDate} (Schweizer Zeit, Europe/Zurich)
 BENUTZER-ID: ${firebaseUserId || 'unbekannt'}
@@ -3795,6 +3932,7 @@ const appRouter = router({
           role: z.enum(['system', 'user', 'assistant']),
           content: z.string(),
         })),
+        language: z.string().optional().default('de'),
       }))
       .mutation(async ({ ctx, input }) => {
         try {
@@ -3816,6 +3954,7 @@ const appRouter = router({
           try {
             const result = await invokeLLM({
               messages: input.messages,
+              language: input.language || 'de',
             }, apiKey, ctx);
 
             // Extract the assistant's response
@@ -3873,6 +4012,8 @@ export const trpc = onRequest(
     cors: true,
     maxInstances: 10,
     secrets: [openaiApiKeySecret, openWeatherMapApiKey], // Include secrets for OpenAI and OpenWeatherMap
+    // Note: enforceAppCheck is only available for onCall, not onRequest
+    // App Check verification is handled manually in createContext function
   },
   async (req, res) => {
     try {

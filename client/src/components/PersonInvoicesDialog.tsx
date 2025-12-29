@@ -48,7 +48,7 @@ interface PersonInvoicesDialogProps {
 }
 
 export default function PersonInvoicesDialog({ person, open, onOpenChange, onDataChanged, highlightInvoiceId }: PersonInvoicesDialogProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState<'invoices' | 'appointments' | 'documents'>('invoices');
   const [isSubmittingInvoice, setIsSubmittingInvoice] = useState(false);
   const [isSubmittingAppointment, setIsSubmittingAppointment] = useState(false);
@@ -176,7 +176,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
   // Appointment handlers
   const handleAddAppointment = async () => {
     if (!newAppointment.title || !newAppointment.dueDate) {
-      toast.error('Bitte Titel und Datum eingeben');
+      toast.error(t('personInvoices.enterTitleAndDate'));
       return;
     }
 
@@ -193,7 +193,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         personName: person.name,
       } as any);
       
-      toast.success('Termin hinzugefügt');
+      toast.success(t('personInvoices.appointmentAdded'));
       setNewAppointment({
         title: '',
         type: 'termin',
@@ -209,7 +209,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         // Silently fail - data will refresh on next dialog open
       }
     } catch (error: any) {
-      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+      toast.error(t('personInvoices.error', { error: error.message || t('common.unknownError') }));
     } finally {
       setIsSubmittingAppointment(false);
     }
@@ -217,7 +217,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
 
   const handleUpdateAppointment = async () => {
     if (!editingAppointment || !editingAppointment.title) {
-      toast.error('Bitte Titel eingeben');
+      toast.error(t('personInvoices.enterTitle'));
       return;
     }
 
@@ -231,7 +231,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         recurrenceRule: editingAppointment.recurrenceRule !== 'none' ? editingAppointment.recurrenceRule : undefined,
       });
       
-      toast.success('Termin aktualisiert');
+      toast.success(t('personInvoices.appointmentUpdated'));
       setEditingAppointment(null);
       try {
         await refreshData();
@@ -239,7 +239,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         // Silently fail - data will refresh on next dialog open
       }
     } catch (error: any) {
-      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+      toast.error(t('personInvoices.error', { error: error.message || t('common.unknownError') }));
     } finally {
       setIsSubmittingAppointment(false);
     }
@@ -250,7 +250,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
 
     try {
       await deleteReminder(deleteAppointmentId);
-      toast.success('Termin gelöscht');
+      toast.success(t('personInvoices.appointmentDeleted'));
       setDeleteAppointmentId(null);
       try {
         await refreshData();
@@ -258,7 +258,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         // Silently fail - data will refresh on next dialog open
       }
     } catch (error: any) {
-      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+      toast.error(t('personInvoices.error', { error: error.message || t('common.unknownError') }));
     }
   };
 
@@ -267,7 +267,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
     try {
       const d = date?.toDate ? date.toDate() : new Date(date);
       if (isNaN(d.getTime())) return '-';
-      return d.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      return d.toLocaleDateString(i18n.language, { day: '2-digit', month: '2-digit', year: 'numeric' });
     } catch {
       return '-';
     }
@@ -312,7 +312,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
 
   const handleAddInvoice = async () => {
     if (!newInvoice.amount || !newInvoice.description) {
-      toast.error('Bitte Beschreibung und Betrag eingeben');
+      toast.error(t('personInvoices.enterDescriptionAndAmount'));
       return;
     }
 
@@ -347,7 +347,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         installmentInterval: newInvoice.isInstallmentPlan ? newInvoice.installmentInterval : undefined,
       });
       
-      toast.success('Rechnung hinzugefügt');
+      toast.success(t('personInvoices.invoiceAdded'));
       setNewInvoice({
         amount: '',
         description: '',
@@ -377,7 +377,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         // Don't show error to user, data will refresh on next open
       }
     } catch (error: any) {
-      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+      toast.error(t('personInvoices.error', { error: error.message || t('common.unknownError') }));
     } finally {
       setIsSubmittingInvoice(false);
     }
@@ -385,7 +385,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
 
   const handleConvertToInstallment = async () => {
     if (!invoiceToConvert || !convertInstallmentAmount || parseFloat(convertInstallmentAmount) <= 0) {
-      toast.error('Bitte Rate-Betrag eingeben (grösser als 0)');
+      toast.error(t('personInvoices.enterInstallmentAmount'));
       return;
     }
 
@@ -396,7 +396,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       const installmentCount = Math.ceil(totalAmount / rateAmount);
       
       if (installmentCount < 2) {
-        toast.error('Rate-Betrag ist zu hoch. Mindestens 2 Raten erforderlich.');
+        toast.error(t('personInvoices.installmentAmountTooHigh'));
         return;
       }
 
@@ -406,7 +406,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         installmentInterval: convertInstallmentInterval,
         startDate: invoiceToConvert.dueDate ? new Date(invoiceToConvert.dueDate) : new Date(),
       });
-      toast.success('Rechnung erfolgreich in Raten umgewandelt');
+      toast.success(t('personInvoices.invoiceConvertedToInstallments'));
                 setShowConvertToInstallmentDialog(false);
                 setInvoiceToConvert(null);
                 setConvertInstallmentAmount('');
@@ -417,7 +417,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         // Silently fail - data will refresh on next dialog open
       }
     } catch (error: any) {
-      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+      toast.error(t('personInvoices.error', { error: error.message || t('common.unknownError') }));
     } finally {
       setIsSubmittingInstallment(false);
     }
@@ -425,7 +425,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
 
   const handleUpdateInvoice = async () => {
     if (!editingInvoice || !editingInvoice.amount || !editingInvoice.description) {
-      toast.error('Bitte alle Felder ausfüllen');
+      toast.error(t('personInvoices.fillAllFields'));
       return;
     }
 
@@ -451,7 +451,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         await updateInvoiceStatus(person.id, editingInvoice.id, editingInvoice.status);
       }
       
-      toast.success('Rechnung aktualisiert');
+      toast.success(t('personInvoices.invoiceUpdated'));
       setEditingInvoice(null);
       try {
         await refreshData();
@@ -459,7 +459,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         // Silently fail - data will refresh on next dialog open
       }
     } catch (error: any) {
-      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+      toast.error(t('personInvoices.error', { error: error.message || t('common.unknownError') }));
     } finally {
       setIsSubmittingInvoice(false);
     }
@@ -468,14 +468,14 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
   const handleStatusChange = async (invoiceId: string, newStatus: string) => {
     try {
       await updateInvoiceStatus(person.id, invoiceId, newStatus);
-      toast.success('Status aktualisiert');
+      toast.success(t('personInvoices.statusUpdated'));
       try {
         await refreshData();
       } catch (refreshError) {
         // Silently fail - data will refresh on next dialog open
       }
     } catch (error: any) {
-      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+      toast.error(t('personInvoices.error', { error: error.message || t('common.unknownError') }));
     }
   };
 
@@ -484,11 +484,11 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
 
     try {
       await deleteInvoice(person.id, deleteInvoiceId);
-      toast.success('Rechnung gelöscht');
+      toast.success(t('personInvoices.invoiceDeleted'));
       await refreshData();
       setDeleteInvoiceId(null);
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('personInvoices.error', { error: error.message || t('common.unknownError') }));
     }
   };
 
@@ -538,12 +538,12 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       imageUrl: data.imageUrl || prev.imageUrl,
     }));
     setShowAddDialog(true);
-    toast.success('Daten übernommen');
+    toast.success(t('personInvoices.dataCopied'));
   };
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
-    toast.success(`${label} kopiert`);
+    toast.success(t('personInvoices.copied', { label }));
   };
 
   const handleClose = (isOpen: boolean) => {
@@ -556,11 +556,11 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
   const getStatusBadge = useCallback((status: string) => {
     switch (status) {
       case 'paid':
-        return <Badge className="bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-0.5">Bezahlt</Badge>;
+        return <Badge className="bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-0.5">{t('finance.paid')}</Badge>;
       case 'postponed':
-        return <Badge className="bg-orange-500 hover:bg-orange-600 text-white text-xs px-2 py-0.5">Verschoben</Badge>;
+        return <Badge className="bg-orange-500 hover:bg-orange-600 text-white text-xs px-2 py-0.5">{t('finance.postponed')}</Badge>;
       default:
-        return <Badge className="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-0.5">Offen</Badge>;
+        return <Badge className="bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-0.5">{t('finance.open')}</Badge>;
     }
   }, []);
 
@@ -579,7 +579,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 <div>
                   <h2 className="text-lg font-bold">{person?.name}</h2>
                   <p className="text-sm text-muted-foreground">
-                    {invoices.length} Rechnungen · {appointments.length} Termine
+                    {t('people.invoicesAndAppointments', '{{invoices}} Rechnungen · {{appointments}} Termine', { invoices: invoices.length, appointments: appointments.length })}
                   </p>
                 </div>
               </div>
@@ -597,7 +597,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 <>
                   <Button variant="outline" onClick={() => setShowScanner(true)} size="sm">
                     <Camera className="w-4 h-4 mr-2" />
-                    Scannen
+                    {t('people.scan')}
                   </Button>
                   <Button 
                     variant="outline" 
@@ -615,17 +615,17 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                     className="border-primary/20 text-primary hover:bg-primary/5"
                   >
                     <CreditCard className="w-4 h-4 mr-2" />
-                    Raten
+                    {t('people.installments')}
                   </Button>
                   <Button onClick={() => setShowAddDialog(true)} size="sm">
                     <Plus className="w-4 h-4 mr-2" />
-                    Rechnung
+                    {t('people.invoice')}
                   </Button>
                 </>
               ) : (
                 <Button onClick={() => setShowAddAppointmentDialog(true)} size="sm">
                   <Plus className="w-4 h-4 mr-2" />
-                  Termin
+                  {t('people.appointment')}
                 </Button>
               )}
             </div>
@@ -638,15 +638,15 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               <TabsList className="grid w-full grid-cols-3 mb-6">
                 <TabsTrigger value="invoices" className="gap-2">
                   <FileText className="w-4 h-4" />
-                  Rechnungen ({invoices.length})
+                  {t('people.invoices')} ({invoices.length})
                 </TabsTrigger>
                 <TabsTrigger value="appointments" className="gap-2">
                   <CalendarDays className="w-4 h-4" />
-                  Termine ({appointments.length})
+                  {t('people.appointments')} ({appointments.length})
                 </TabsTrigger>
                 <TabsTrigger value="documents" className="gap-2">
                   <FolderOpen className="w-4 h-4" />
-                  Dokumente
+                  {t('documents.title')}
                 </TabsTrigger>
               </TabsList>
 
@@ -655,21 +655,21 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 {/* Statistics */}
                 <div className="grid grid-cols-3 gap-3 mb-6">
                   <div className="bg-slate-100 dark:bg-slate-800 rounded-xl p-4">
-                    <p className="text-xs text-muted-foreground mb-1">Gesamt</p>
+                    <p className="text-xs text-muted-foreground mb-1">{t('common.total')}</p>
                     <p className="text-lg font-bold truncate">{formatAmount(totalAmount)}</p>
                   </div>
                   <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900 rounded-xl p-4">
-                    <p className="text-xs text-red-600 dark:text-red-400 mb-1">Offen</p>
+                    <p className="text-xs text-red-600 dark:text-red-400 mb-1">{t('finance.open')}</p>
                     <p className="text-lg font-bold text-red-600 truncate">{formatAmount(openAmount)}</p>
                   </div>
                   <div className="bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-900 rounded-xl p-4">
-                    <p className="text-xs text-green-600 dark:text-green-400 mb-1">Bezahlt</p>
+                    <p className="text-xs text-green-600 dark:text-green-400 mb-1">{t('finance.paid')}</p>
                     <p className="text-lg font-bold text-green-600 truncate">{formatAmount(paidAmount)}</p>
                   </div>
                 </div>
             
                 {isLoading ? (
-              <div className="text-center py-10 text-muted-foreground">Laden...</div>
+              <div className="text-center py-10 text-muted-foreground">{t('common.loading', 'Laden...')}</div>
             ) : invoices.length > 0 ? (
               <div className="space-y-3">
                 {invoices.map((invoice: any) => (
@@ -713,10 +713,10 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-sm font-medium flex items-center gap-2">
                             <CreditCard className="w-4 h-4" />
-                            Ratenvereinbarung
+                            {t('people.installmentPlan')}
                           </span>
                           <span className="text-xs text-muted-foreground">
-                            {invoice.installments.filter((inst: any) => inst.status === 'paid').length} / {invoice.installments.length} bezahlt
+                            {invoice.installments.filter((inst: any) => inst.status === 'paid').length} / {invoice.installments.length} {t('finance.paid').toLowerCase()}
                           </span>
                         </div>
                         <div className="w-full bg-background rounded-full h-2 mb-2">
@@ -855,15 +855,15 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
             ) : (
                   <div className="border border-dashed rounded-xl py-12 text-center">
                     <FileText className="w-12 h-12 mx-auto text-muted-foreground/30 mb-4" />
-                    <p className="text-muted-foreground mb-4">Noch keine Rechnungen</p>
+                    <p className="text-muted-foreground mb-4">{t('people.noInvoicesYet', 'Noch keine Rechnungen')}</p>
                     <div className="flex gap-2 justify-center">
                       <Button variant="outline" onClick={() => setShowScanner(true)} className="h-9">
                         <Camera className="w-4 h-4 mr-2" />
-                        Scannen
+                        {t('documents.scan', 'Scannen')}
                       </Button>
                       <Button onClick={() => setShowAddDialog(true)} className="h-9">
                         <Plus className="w-4 h-4 mr-2" />
-                        Neu
+                        {t('common.new', 'Neu')}
                       </Button>
                     </div>
                   </div>
@@ -873,7 +873,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               {/* Appointments Tab */}
               <TabsContent value="appointments" className="mt-0">
                 {appointmentsLoading ? (
-                  <div className="text-center py-10 text-muted-foreground">Laden...</div>
+                  <div className="text-center py-10 text-muted-foreground">{t('common.loading')}</div>
                 ) : appointments.length > 0 ? (
                   <div className="space-y-3">
                     {appointments.map((appointment: any) => (
@@ -885,16 +885,16 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                           <div className="flex items-center gap-2 min-w-0">
                             <h4 className="font-semibold truncate">{appointment.title}</h4>
                             <Badge variant="outline" className="text-xs">
-                              {appointment.type === 'termin' ? 'Termin' : 
-                               appointment.type === 'aufgabe' ? 'Aufgabe' : 
-                               appointment.type === 'geburtstag' ? 'Geburtstag' : 'Andere'}
+                              {appointment.type === 'termin' ? t('calendar.appointmentTypes.termin') : 
+                               appointment.type === 'aufgabe' ? t('calendar.appointmentTypes.aufgabe') : 
+                               appointment.type === 'geburtstag' ? t('calendar.appointmentTypes.geburtstag') : t('calendar.appointmentTypes.andere')}
                             </Badge>
                             {appointment.recurrenceRule && (
                               <Badge variant="secondary" className="text-xs">
                                 <Repeat className="w-3 h-3 mr-1" />
-                                {appointment.recurrenceRule === 'daily' ? 'Täglich' :
-                                 appointment.recurrenceRule === 'weekly' ? 'Wöchentlich' :
-                                 appointment.recurrenceRule === 'monthly' ? 'Monatlich' : 'Jährlich'}
+                                {appointment.recurrenceRule === 'daily' ? t('reminders.recurrence.daily') :
+                                 appointment.recurrenceRule === 'weekly' ? t('reminders.recurrence.weekly') :
+                                 appointment.recurrenceRule === 'monthly' ? t('reminders.recurrence.monthly') : t('reminders.recurrence.yearly')}
                               </Badge>
                             )}
                           </div>
@@ -940,10 +940,10 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 ) : (
                   <div className="border border-dashed rounded-xl py-12 text-center">
                     <CalendarDays className="w-12 h-12 mx-auto text-muted-foreground/30 mb-4" />
-                    <p className="text-muted-foreground mb-4">Noch keine Termine</p>
+                    <p className="text-muted-foreground mb-4">{t('people.noAppointmentsYet')}</p>
                     <Button onClick={() => setShowAddAppointmentDialog(true)} className="h-9">
                       <Plus className="w-4 h-4 mr-2" />
-                      Termin hinzufügen
+                      {t('people.addAppointment')}
                     </Button>
                   </div>
                 )}
@@ -973,12 +973,12 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="sm:max-w-[450px]">
           <DialogHeader className="pb-4">
-            <DialogTitle className="text-xl">Neue Rechnung</DialogTitle>
+            <DialogTitle className="text-xl">{t('people.newInvoice')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             {newInvoice.imageUrl && (
               <div className="relative">
-                <img src={newInvoice.imageUrl} alt="" className="w-full h-32 object-cover rounded-lg border" />
+                <img src={newInvoice.imageUrl} alt={t('invoice.previewAlt', 'Vorschau')} className="w-full h-32 object-cover rounded-lg border" />
                 <Button 
                   variant="secondary" 
                   size="icon"
@@ -991,18 +991,18 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
             )}
 
             <div>
-              <Label>Beschreibung *</Label>
+              <Label>{t('people.description')} *</Label>
               <Input
                 value={newInvoice.description}
                 onChange={(e) => setNewInvoice({ ...newInvoice, description: e.target.value })}
-                placeholder="z.B. Miete, Strom..."
+                placeholder={t('people.descriptionPlaceholder')}
                 className="mt-2 h-10"
               />
             </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Betrag (CHF) *</Label>
+                <Label>{t('people.amountCHF')} *</Label>
                 <Input
                   type="number"
                   step="0.01"
@@ -1013,7 +1013,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 />
               </div>
               <div>
-                <Label>Datum</Label>
+                <Label>{t('common.date')}</Label>
                 <Input
                   type="date"
                   value={newInvoice.date}
@@ -1026,7 +1026,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
             {/* Richtung für externe Personen */}
             {person?.type === 'external' && (
               <div>
-                <Label>Richtung</Label>
+                <Label>{t('people.direction')}</Label>
                 <Select
                   value={newInvoice.direction}
                   onValueChange={(value: 'incoming' | 'outgoing') => setNewInvoice({ ...newInvoice, direction: value })}
@@ -1038,13 +1038,13 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                     <SelectItem value="incoming">
                       <span className="flex items-center gap-2">
                         <ArrowDownLeft className="w-4 h-4 text-green-600" />
-                        Person schuldet mir
+                        {t('people.personOwesMe')}
                       </span>
                     </SelectItem>
                     <SelectItem value="outgoing">
                       <span className="flex items-center gap-2">
                         <ArrowUpRight className="w-4 h-4 text-red-600" />
-                        Ich schulde Person
+                        {t('people.iOwePerson')}
                       </span>
                     </SelectItem>
                   </SelectContent>
@@ -1053,7 +1053,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
             )}
 
             <div>
-              <Label>Status</Label>
+              <Label>{t('common.status')}</Label>
               <Select
                 value={newInvoice.status}
                 onValueChange={(value) => setNewInvoice({ ...newInvoice, status: value })}
@@ -1065,19 +1065,19 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   <SelectItem value="open">
                     <span className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-red-500" />
-                      Offen
+                      {t('finance.open')}
                     </span>
                   </SelectItem>
                   <SelectItem value="paid">
                     <span className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-green-500" />
-                      Bezahlt
+                      {t('finance.paid')}
                     </span>
                   </SelectItem>
                   <SelectItem value="postponed">
                     <span className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-orange-500" />
-                      Verschoben
+                      {t('finance.postponed')}
                     </span>
                   </SelectItem>
                 </SelectContent>
@@ -1088,7 +1088,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
             <div>
               <Label className="flex items-center gap-2">
                 <Clock className="w-4 h-4" />
-                Fälligkeitsdatum
+                {t('people.dueDate')}
               </Label>
               <Input
                 type="date"
@@ -1112,13 +1112,13 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 />
                 <Label htmlFor="reminderEnabled" className="flex items-center gap-2 cursor-pointer">
                   <Bell className="w-4 h-4" />
-                  Erinnerung aktivieren
+                  {t('people.enableReminder')}
                 </Label>
               </div>
               
               {newInvoice.reminderEnabled && (
                 <div>
-                  <Label>Erinnerungsdatum</Label>
+                  <Label>{t('people.reminderDate')}</Label>
                   <Input
                     type="date"
                     value={newInvoice.reminderDate}
@@ -1126,7 +1126,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                     className="mt-2 h-10"
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Die Erinnerung erscheint im Kalender
+                    {t('people.reminderAppearsInCalendar')}
                   </p>
                 </div>
               )}
@@ -1145,13 +1145,13 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 />
                 <Label htmlFor="isRecurring" className="flex items-center gap-2 cursor-pointer">
                   <Repeat className="w-4 h-4" />
-                  Wiederkehrende Rechnung
+                  {t('people.recurringInvoice')}
                 </Label>
               </div>
               
               {newInvoice.isRecurring && (
                 <div>
-                  <Label>Wiederholungsintervall</Label>
+                  <Label>{t('people.recurrenceInterval')}</Label>
                   <Select
                     value={newInvoice.recurringInterval}
                     onValueChange={(value: any) => setNewInvoice({ ...newInvoice, recurringInterval: value })}
@@ -1160,14 +1160,14 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="weekly">Wöchentlich</SelectItem>
-                      <SelectItem value="monthly">Monatlich</SelectItem>
-                      <SelectItem value="quarterly">Vierteljährlich</SelectItem>
-                      <SelectItem value="yearly">Jährlich</SelectItem>
+                      <SelectItem value="weekly">{t('reminders.recurrence.weekly')}</SelectItem>
+                      <SelectItem value="monthly">{t('reminders.recurrence.monthly')}</SelectItem>
+                      <SelectItem value="quarterly">{t('reminders.recurrence.quarterly')}</SelectItem>
+                      <SelectItem value="yearly">{t('reminders.recurrence.yearly')}</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Die Rechnung wird automatisch zum Fälligkeitsdatum neu erstellt
+                    {t('people.invoiceAutoRecreated')}
                   </p>
                 </div>
               )}
@@ -1187,7 +1187,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 />
                 <Label htmlFor="isInstallmentPlan" className="flex items-center gap-2 cursor-pointer">
                   <CalendarDays className="w-4 h-4" />
-                  Ratenvereinbarung
+                  {t('people.installmentPlan')}
                 </Label>
               </div>
               
@@ -1196,10 +1196,10 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label>
-                        {newInvoice.installmentInterval === 'weekly' && 'Wöchentliche Rate *'}
-                        {newInvoice.installmentInterval === 'monthly' && 'Monatliche Rate *'}
-                        {newInvoice.installmentInterval === 'quarterly' && 'Quartalsrate *'}
-                        {newInvoice.installmentInterval === 'yearly' && 'Jährliche Rate *'}
+                        {newInvoice.installmentInterval === 'weekly' && t('people.weeklyRate') + ' *'}
+                        {newInvoice.installmentInterval === 'monthly' && t('people.monthlyRate') + ' *'}
+                        {newInvoice.installmentInterval === 'quarterly' && t('people.quarterlyRate') + ' *'}
+                        {newInvoice.installmentInterval === 'yearly' && t('people.yearlyRate') + ' *'}
                       </Label>
                       <Input
                         type="number"
@@ -1225,15 +1225,15 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                             });
                           }
                         }}
-                        placeholder="z.B. 500.00"
+                        placeholder={t('people.amountPlaceholder')}
                         className="mt-2 h-10"
                       />
                       <p className="text-xs text-muted-foreground mt-1">
-                        Betrag pro {newInvoice.installmentInterval === 'weekly' ? 'Woche' : newInvoice.installmentInterval === 'monthly' ? 'Monat' : newInvoice.installmentInterval === 'quarterly' ? 'Quartal' : 'Jahr'} in CHF
+                        {t('people.amountPer')} {newInvoice.installmentInterval === 'weekly' ? t('people.week') : newInvoice.installmentInterval === 'monthly' ? t('people.month') : newInvoice.installmentInterval === 'quarterly' ? t('people.quarter') : t('people.year')} {t('people.inCHF')}
                       </p>
                     </div>
                     <div>
-                      <Label>Ratenintervall *</Label>
+                      <Label>{t('people.installmentInterval')} *</Label>
                       <Select
                         value={newInvoice.installmentInterval}
                         onValueChange={(value: any) => {
@@ -1250,26 +1250,26 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="weekly">Wöchentlich</SelectItem>
-                          <SelectItem value="monthly">Monatlich</SelectItem>
-                          <SelectItem value="quarterly">Vierteljährlich</SelectItem>
-                          <SelectItem value="yearly">Jährlich</SelectItem>
+                          <SelectItem value="weekly">{t('reminders.recurrence.weekly')}</SelectItem>
+                          <SelectItem value="monthly">{t('reminders.recurrence.monthly')}</SelectItem>
+                          <SelectItem value="quarterly">{t('reminders.recurrence.quarterly')}</SelectItem>
+                          <SelectItem value="yearly">{t('reminders.recurrence.yearly')}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
                   {newInvoice.amount && newInvoice.installmentAmount && parseFloat(newInvoice.installmentAmount) > 0 && (
                     <div className="p-3 bg-muted rounded-lg">
-                      <p className="text-sm font-medium">Ratenübersicht</p>
+                      <p className="text-sm font-medium">{t('people.installmentOverview')}</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Anzahl Raten: {newInvoice.installmentCount}
+                        {t('people.numberOfInstallments')}: {newInvoice.installmentCount}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Rate-Betrag: {roundTo5Rappen(parseFloat(newInvoice.installmentAmount)).toFixed(2)} CHF
+                        {t('people.installmentAmount')}: {roundTo5Rappen(parseFloat(newInvoice.installmentAmount)).toFixed(2)} CHF
                       </p>
                       {newInvoice.dueDate && (
                         <p className="text-xs text-muted-foreground mt-1">
-                          Letzte Rate fällig: {(() => {
+                          {t('people.lastInstallmentDue')}: {(() => {
                             const startDate = new Date(newInvoice.dueDate);
                             const interval = newInvoice.installmentInterval;
                             const lastDate = new Date(startDate);
@@ -1279,7 +1279,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                               case 'quarterly': lastDate.setMonth(lastDate.getMonth() + ((newInvoice.installmentCount - 1) * 3)); break;
                               case 'yearly': lastDate.setFullYear(lastDate.getFullYear() + (newInvoice.installmentCount - 1)); break;
                             }
-                            return lastDate.toLocaleDateString('de-CH');
+                            return lastDate.toLocaleDateString(i18n.language);
                           })()}
                         </p>
                       )}
@@ -1291,11 +1291,11 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
 
             {/* Notizen */}
             <div>
-              <Label>Notizen</Label>
+              <Label>{t('common.notes')}</Label>
               <Textarea
                 value={newInvoice.notes}
                 onChange={(e) => setNewInvoice({ ...newInvoice, notes: e.target.value })}
-                placeholder="Optionale Notizen..."
+                placeholder={t('people.optionalNotes')}
                 className="mt-2"
                 rows={2}
               />
@@ -1304,7 +1304,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
             {(newInvoice.iban || newInvoice.creditorName) && (
               <div className="p-4 bg-muted rounded-lg space-y-2 text-sm">
                 <p className="font-medium flex items-center gap-2">
-                  <QrCode className="w-4 h-4" /> Zahlungsdetails
+                  <QrCode className="w-4 h-4" /> {t('people.paymentDetails')}
                 </p>
                 {newInvoice.creditorName && <p className="text-muted-foreground">{newInvoice.creditorName}</p>}
                 {newInvoice.iban && (
@@ -1320,15 +1320,15 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
 
             <Button variant="outline" className="w-full h-10" onClick={() => { setShowAddDialog(false); setShowScanner(true); }}>
               <Camera className="w-4 h-4 mr-2" />
-              Rechnung scannen
+              {t('people.scanInvoice', 'Rechnung scannen')}
             </Button>
           </div>
           <DialogFooter className="mt-4 gap-2">
             <Button variant="outline" onClick={() => setShowAddDialog(false)} className="h-10">
-              Abbrechen
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleAddInvoice} className="h-10">
-              Hinzufügen
+              {t('common.add')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1340,11 +1340,11 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         <Dialog open={!!editingInvoice} onOpenChange={() => setEditingInvoice(null)}>
           <DialogContent className="sm:max-w-[450px]">
             <DialogHeader className="pb-4">
-              <DialogTitle className="text-xl">Rechnung bearbeiten</DialogTitle>
+              <DialogTitle className="text-xl">{t('people.editInvoice')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <Label>Beschreibung *</Label>
+                <Label>{t('people.description')} *</Label>
                 <Input
                   value={editingInvoice.description}
                   onChange={(e) => setEditingInvoice({ ...editingInvoice, description: e.target.value })}
@@ -1353,7 +1353,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Betrag (CHF) *</Label>
+                  <Label>{t('people.amountCHF')} *</Label>
                   <Input
                     type="number"
                     step="0.01"
@@ -1363,7 +1363,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   />
                 </div>
                 <div>
-                  <Label>Datum</Label>
+                  <Label>{t('common.date')}</Label>
                   <Input
                     type="date"
                     value={editingInvoice.date}
@@ -1376,7 +1376,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               {/* Richtung für externe Personen */}
               {person?.type === 'external' && (
                 <div>
-                  <Label>Richtung</Label>
+                  <Label>{t('people.direction')}</Label>
                   <Select
                     value={editingInvoice.direction || 'incoming'}
                     onValueChange={(value) => setEditingInvoice({ ...editingInvoice, direction: value })}
@@ -1388,13 +1388,13 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                       <SelectItem value="incoming">
                         <span className="flex items-center gap-2">
                           <ArrowDownLeft className="w-4 h-4 text-green-600" />
-                          Person schuldet mir
+                          {t('people.personOwesMe')}
                         </span>
                       </SelectItem>
                       <SelectItem value="outgoing">
                         <span className="flex items-center gap-2">
                           <ArrowUpRight className="w-4 h-4 text-red-600" />
-                          Ich schulde Person
+                          {t('people.iOwePerson')}
                         </span>
                       </SelectItem>
                     </SelectContent>
@@ -1404,7 +1404,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
 
               {/* Status */}
               <div>
-                <Label>Status</Label>
+                <Label>{t('common.status')}</Label>
                 <Select
                   value={editingInvoice.status || 'open'}
                   onValueChange={(value) => setEditingInvoice({ ...editingInvoice, status: value })}
@@ -1416,19 +1416,19 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                     <SelectItem value="open">
                       <span className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-red-500" />
-                        Offen
+                        {t('finance.open')}
                       </span>
                     </SelectItem>
                     <SelectItem value="paid">
                       <span className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-green-500" />
-                        Bezahlt
+                        {t('finance.paid')}
                       </span>
                     </SelectItem>
                     <SelectItem value="postponed">
                       <span className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-orange-500" />
-                        Verschoben
+                        {t('finance.postponed')}
                       </span>
                     </SelectItem>
                   </SelectContent>
@@ -1439,7 +1439,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               <div>
                 <Label className="flex items-center gap-2">
                   <Clock className="w-4 h-4" />
-                  Fälligkeitsdatum
+                  {t('people.dueDate')}
                 </Label>
                 <Input
                   type="date"
@@ -1463,13 +1463,13 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   />
                   <Label htmlFor="editReminderEnabled" className="flex items-center gap-2 cursor-pointer">
                     <Bell className="w-4 h-4" />
-                    Erinnerung aktivieren
+                    {t('people.enableReminder')}
                   </Label>
                 </div>
                 
                 {editingInvoice.reminderEnabled && (
                   <div>
-                    <Label>Erinnerungsdatum</Label>
+                    <Label>{t('people.reminderDate')}</Label>
                     <Input
                       type="date"
                       value={editingInvoice.reminderDate || ''}
@@ -1493,13 +1493,13 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   />
                   <Label htmlFor="editIsRecurring" className="flex items-center gap-2 cursor-pointer">
                     <Repeat className="w-4 h-4" />
-                    Wiederkehrende Rechnung
+                    {t('people.recurringInvoice')}
                   </Label>
                 </div>
                 
                 {editingInvoice.isRecurring && (
                   <div>
-                    <Label>Wiederholungsintervall</Label>
+                    <Label>{t('people.recurrenceInterval')}</Label>
                     <Select
                       value={editingInvoice.recurringInterval || 'monthly'}
                       onValueChange={(value) => setEditingInvoice({ ...editingInvoice, recurringInterval: value })}
@@ -1508,10 +1508,10 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="weekly">Wöchentlich</SelectItem>
-                        <SelectItem value="monthly">Monatlich</SelectItem>
-                        <SelectItem value="quarterly">Vierteljährlich</SelectItem>
-                        <SelectItem value="yearly">Jährlich</SelectItem>
+                        <SelectItem value="weekly">{t('reminders.recurrence.weekly')}</SelectItem>
+                        <SelectItem value="monthly">{t('reminders.recurrence.monthly')}</SelectItem>
+                        <SelectItem value="quarterly">{t('reminders.recurrence.quarterly')}</SelectItem>
+                        <SelectItem value="yearly">{t('reminders.recurrence.yearly')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1520,11 +1520,11 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
 
               {/* Notizen */}
               <div>
-                <Label>Notizen</Label>
+                <Label>{t('common.notes')}</Label>
                 <Textarea
                   value={editingInvoice.notes || ''}
                   onChange={(e) => setEditingInvoice({ ...editingInvoice, notes: e.target.value })}
-                  placeholder="Optionale Notizen..."
+                  placeholder={t('people.optionalNotes')}
                   className="mt-2"
                   rows={2}
                 />
@@ -1532,10 +1532,10 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
             </div>
             <DialogFooter className="mt-4 gap-2">
               <Button variant="outline" onClick={() => setEditingInvoice(null)} className="h-10">
-                Abbrechen
+                {t('common.cancel')}
               </Button>
               <Button onClick={handleUpdateInvoice} className="h-10" disabled={isSubmittingInvoice}>
-                {isSubmittingInvoice ? 'Wird gespeichert...' : 'Speichern'}
+                {isSubmittingInvoice ? t('personInvoices.saving') : t('common.save')}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1545,15 +1545,15 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       <AlertDialog open={!!deleteInvoiceId} onOpenChange={(open) => !open && setDeleteInvoiceId(null)}>
         <AlertDialogContent className="max-w-[400px]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Rechnung löschen?</AlertDialogTitle>
+            <AlertDialogTitle>{t('people.deleteInvoice')}</AlertDialogTitle>
             <AlertDialogDescription className="mt-2">
-              Diese Aktion kann nicht rückgängig gemacht werden.
+              {t('common.actionCannotBeUndone')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-4 gap-2">
-            <AlertDialogCancel className="h-10">Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel className="h-10">{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteInvoice} className="h-10 bg-red-600 hover:bg-red-700">
-              Löschen
+              {t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1563,22 +1563,22 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       <Dialog open={showAddAppointmentDialog} onOpenChange={setShowAddAppointmentDialog}>
         <DialogContent className="sm:max-w-[450px]">
           <DialogHeader className="pb-4">
-            <DialogTitle className="text-xl">Neuer Termin für {person?.name}</DialogTitle>
+            <DialogTitle className="text-xl">{t('people.newAppointmentFor')} {person?.name}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label>Titel *</Label>
+              <Label>{t('calendar.title')} *</Label>
               <Input
                 value={newAppointment.title}
                 onChange={(e) => setNewAppointment({ ...newAppointment, title: e.target.value })}
-                placeholder="z.B. Arzttermin, Treffen..."
+                placeholder={t('people.appointmentPlaceholder')}
                 className="mt-2 h-10"
               />
             </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Typ</Label>
+                <Label>{t('calendar.type')}</Label>
                 <Select
                   value={newAppointment.type}
                   onValueChange={(value: any) => setNewAppointment({ ...newAppointment, type: value })}
@@ -1587,15 +1587,15 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="termin">Termin</SelectItem>
-                    <SelectItem value="aufgabe">Aufgabe</SelectItem>
-                    <SelectItem value="geburtstag">Geburtstag</SelectItem>
-                    <SelectItem value="andere">Andere</SelectItem>
+                    <SelectItem value="termin">{t('calendar.appointmentTypes.termin')}</SelectItem>
+                    <SelectItem value="aufgabe">{t('calendar.appointmentTypes.aufgabe')}</SelectItem>
+                    <SelectItem value="geburtstag">{t('calendar.appointmentTypes.geburtstag')}</SelectItem>
+                    <SelectItem value="andere">{t('calendar.appointmentTypes.andere')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Datum *</Label>
+                <Label>{t('common.date')} *</Label>
                 <Input
                   type="date"
                   value={newAppointment.dueDate}
@@ -1611,34 +1611,34 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 checked={newAppointment.isAllDay}
                 onCheckedChange={(checked) => setNewAppointment({ ...newAppointment, isAllDay: checked as boolean })}
               />
-              <Label htmlFor="isAllDay" className="cursor-pointer">Ganztägig</Label>
+              <Label htmlFor="isAllDay" className="cursor-pointer">{t('calendar.allDay')}</Label>
             </div>
 
             <div>
-              <Label>Wiederholung</Label>
+              <Label>{t('people.recurrence')}</Label>
               <Select
                 value={newAppointment.recurrenceRule}
                 onValueChange={(value: any) => setNewAppointment({ ...newAppointment, recurrenceRule: value })}
               >
                 <SelectTrigger className="mt-2 h-10">
-                  <SelectValue placeholder="Keine Wiederholung" />
+                  <SelectValue placeholder={t('personInvoices.noRecurrence')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Keine</SelectItem>
-                  <SelectItem value="daily">Täglich</SelectItem>
-                  <SelectItem value="weekly">Wöchentlich</SelectItem>
-                  <SelectItem value="monthly">Monatlich</SelectItem>
-                  <SelectItem value="yearly">Jährlich</SelectItem>
+                  <SelectItem value="none">{t('reminders.recurrence.none')}</SelectItem>
+                  <SelectItem value="daily">{t('reminders.recurrence.daily')}</SelectItem>
+                  <SelectItem value="weekly">{t('reminders.recurrence.weekly')}</SelectItem>
+                  <SelectItem value="monthly">{t('reminders.recurrence.monthly')}</SelectItem>
+                  <SelectItem value="yearly">{t('reminders.recurrence.yearly')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div>
-              <Label>Notizen</Label>
+              <Label>{t('common.notes')}</Label>
               <Textarea
                 value={newAppointment.notes}
                 onChange={(e) => setNewAppointment({ ...newAppointment, notes: e.target.value })}
-                placeholder="Optionale Notizen..."
+                placeholder={t('people.optionalNotes')}
                 className="mt-2"
                 rows={2}
               />
@@ -1646,10 +1646,10 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
           </div>
           <DialogFooter className="mt-4 gap-2">
             <Button variant="outline" onClick={() => setShowAddAppointmentDialog(false)} className="h-10">
-              Abbrechen
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleAddAppointment} className="h-10">
-              Hinzufügen
+              {t('common.add')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1660,11 +1660,11 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
         <Dialog open={!!editingAppointment} onOpenChange={() => setEditingAppointment(null)}>
           <DialogContent className="sm:max-w-[450px]">
             <DialogHeader className="pb-4">
-              <DialogTitle className="text-xl">Termin bearbeiten</DialogTitle>
+              <DialogTitle className="text-xl">{t('people.editAppointment')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <Label>Titel *</Label>
+                <Label>{t('calendar.title')} *</Label>
                 <Input
                   value={editingAppointment.title}
                   onChange={(e) => setEditingAppointment({ ...editingAppointment, title: e.target.value })}
@@ -1674,7 +1674,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Typ</Label>
+                  <Label>{t('calendar.type')}</Label>
                   <Select
                     value={editingAppointment.type}
                     onValueChange={(value) => setEditingAppointment({ ...editingAppointment, type: value })}
@@ -1683,15 +1683,15 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="termin">Termin</SelectItem>
-                      <SelectItem value="aufgabe">Aufgabe</SelectItem>
-                      <SelectItem value="geburtstag">Geburtstag</SelectItem>
-                      <SelectItem value="andere">Andere</SelectItem>
+                      <SelectItem value="termin">{t('calendar.appointmentTypes.termin')}</SelectItem>
+                      <SelectItem value="aufgabe">{t('calendar.appointmentTypes.aufgabe')}</SelectItem>
+                      <SelectItem value="geburtstag">{t('calendar.appointmentTypes.geburtstag')}</SelectItem>
+                      <SelectItem value="andere">{t('calendar.appointmentTypes.andere')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label>Datum *</Label>
+                  <Label>{t('common.date')} *</Label>
                   <Input
                     type="date"
                     value={editingAppointment.dueDate}
@@ -1707,34 +1707,34 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   checked={editingAppointment.isAllDay}
                   onCheckedChange={(checked) => setEditingAppointment({ ...editingAppointment, isAllDay: checked as boolean })}
                 />
-                <Label htmlFor="editIsAllDay" className="cursor-pointer">Ganztägig</Label>
+                <Label htmlFor="editIsAllDay" className="cursor-pointer">{t('calendar.allDay')}</Label>
               </div>
 
               <div>
-                <Label>Wiederholung</Label>
+                <Label>{t('people.recurrence')}</Label>
                 <Select
                   value={editingAppointment.recurrenceRule || 'none'}
                   onValueChange={(value) => setEditingAppointment({ ...editingAppointment, recurrenceRule: value })}
                 >
                   <SelectTrigger className="mt-2 h-10">
-                    <SelectValue placeholder="Keine Wiederholung" />
+                    <SelectValue placeholder={t('personInvoices.noRecurrence')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Keine</SelectItem>
-                    <SelectItem value="daily">Täglich</SelectItem>
-                    <SelectItem value="weekly">Wöchentlich</SelectItem>
-                    <SelectItem value="monthly">Monatlich</SelectItem>
-                    <SelectItem value="yearly">Jährlich</SelectItem>
+                    <SelectItem value="none">{t('reminders.recurrence.none')}</SelectItem>
+                    <SelectItem value="daily">{t('reminders.recurrence.daily')}</SelectItem>
+                    <SelectItem value="weekly">{t('reminders.recurrence.weekly')}</SelectItem>
+                    <SelectItem value="monthly">{t('reminders.recurrence.monthly')}</SelectItem>
+                    <SelectItem value="yearly">{t('reminders.recurrence.yearly')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
-                <Label>Notizen</Label>
+                <Label>{t('common.notes')}</Label>
                 <Textarea
                   value={editingAppointment.notes || ''}
                   onChange={(e) => setEditingAppointment({ ...editingAppointment, notes: e.target.value })}
-                  placeholder="Optionale Notizen..."
+                  placeholder={t('people.optionalNotes')}
                   className="mt-2"
                   rows={2}
                 />
@@ -1742,10 +1742,10 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
             </div>
             <DialogFooter className="mt-4 gap-2">
               <Button variant="outline" onClick={() => setEditingAppointment(null)} className="h-10">
-                Abbrechen
+                {t('common.cancel')}
               </Button>
               <Button onClick={handleUpdateAppointment} className="h-10">
-                Speichern
+                {t('common.save')}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1756,15 +1756,15 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
       <AlertDialog open={!!deleteAppointmentId} onOpenChange={(open) => !open && setDeleteAppointmentId(null)}>
         <AlertDialogContent className="max-w-[400px]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Termin löschen?</AlertDialogTitle>
+            <AlertDialogTitle>{t('people.deleteAppointment')}</AlertDialogTitle>
             <AlertDialogDescription className="mt-2">
-              Diese Aktion kann nicht rückgängig gemacht werden.
+              {t('common.actionCannotBeUndone')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-4 gap-2">
-            <AlertDialogCancel className="h-10">Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel className="h-10">{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteAppointment} className="h-10 bg-red-600 hover:bg-red-700">
-              Löschen
+              {t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1776,23 +1776,23 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
           <DialogHeader className="pb-4 border-b">
             <DialogTitle className="text-2xl flex items-center gap-2">
               <CreditCard className="w-6 h-6" />
-              Ratenverwaltung
+              {t('people.installmentManagement')}
             </DialogTitle>
             {selectedInvoiceForPayment && (
               <p className="text-sm text-muted-foreground mt-1">
-                Rechnung: {selectedInvoiceForPayment.description}
+                {t('people.invoice')}: {selectedInvoiceForPayment.description}
               </p>
             )}
           </DialogHeader>
           {!selectedInvoiceForPayment ? (
             <div className="py-8 text-center text-muted-foreground">
-              <p>Keine Rechnung ausgewählt</p>
+              <p>{t('people.noInvoiceSelected')}</p>
             </div>
           ) : !selectedInvoiceForPayment.installments || !Array.isArray(selectedInvoiceForPayment.installments) || selectedInvoiceForPayment.installments.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
               <CreditCard className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p className="font-medium mb-2">Keine Raten gefunden</p>
-              <p className="text-sm">Diese Rechnung hat noch keine Ratenvereinbarung oder die Raten wurden noch nicht erstellt.</p>
+              <p className="font-medium mb-2">{t('people.noInstallmentsFound')}</p>
+              <p className="text-sm">{t('people.noInstallmentsDescription')}</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -1820,13 +1820,13 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                           // Fallback: Berechne aus Gesamtbetrag
                           rateAmountChf = invoiceAmountChf / totalInstallments;
                         }
-                        const intervalText = selectedInvoiceForPayment.installmentInterval === 'weekly' ? 'Woche' : selectedInvoiceForPayment.installmentInterval === 'monthly' ? 'Monat' : selectedInvoiceForPayment.installmentInterval === 'quarterly' ? 'Quartal' : 'Jahr';
-                        return `${totalInstallments} Raten à ${rateAmountChf.toFixed(2)} CHF pro ${intervalText}`;
+                        const intervalText = selectedInvoiceForPayment.installmentInterval === 'weekly' ? t('people.week') : selectedInvoiceForPayment.installmentInterval === 'monthly' ? t('people.month') : selectedInvoiceForPayment.installmentInterval === 'quarterly' ? t('people.quarter') : t('people.year');
+                        return t('people.installmentsPerInterval', { count: totalInstallments, amount: rateAmountChf.toFixed(2), interval: intervalText });
                       })()}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-muted-foreground">Gesamtbetrag</p>
+                    <p className="text-xs text-muted-foreground">{t('people.totalAmount')}</p>
                     <p className="text-lg font-bold">{formatAmount(selectedInvoiceForPayment.amount)}</p>
                   </div>
                 </div>
@@ -1854,7 +1854,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 {/* Statistics */}
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Bezahlt</p>
+                    <p className="text-xs text-muted-foreground mb-1">{t('finance.paid')}</p>
                     <p className="text-sm font-semibold text-green-600">
                       {formatAmount(((() => {
                         // Berechne totalPaid aus installments, falls nicht vorhanden (Fallback)
@@ -1870,7 +1870,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Noch offen</p>
+                    <p className="text-xs text-muted-foreground mb-1">{t('people.stillOpen')}</p>
                     <p className="text-sm font-semibold text-red-600">
                       {formatAmount(((() => {
                         const invoiceAmountRappen = selectedInvoiceForPayment.amount || 0;
@@ -1888,9 +1888,9 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Fertig am</p>
+                    <p className="text-xs text-muted-foreground mb-1">{t('people.completionDate')}</p>
                     <p className="text-sm font-semibold">
-                      {selectedInvoiceForPayment.installmentEndDate ? formatDate(selectedInvoiceForPayment.installmentEndDate) : 'Nicht gesetzt'}
+                      {selectedInvoiceForPayment.installmentEndDate ? formatDate(selectedInvoiceForPayment.installmentEndDate) : t('people.notSet')}
                     </p>
                   </div>
                 </div>
@@ -1899,9 +1899,9 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               {/* Installments List */}
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <Label className="text-base font-semibold">Alle Raten</Label>
+                  <Label className="text-base font-semibold">{t('people.allInstallments')}</Label>
                   <Badge variant="outline">
-                    {selectedInvoiceForPayment.installments.filter((inst: any) => inst.status === 'paid').length} / {selectedInvoiceForPayment.installments.length} bezahlt
+                    {selectedInvoiceForPayment.installments.filter((inst: any) => inst.status === 'paid').length} / {selectedInvoiceForPayment.installments.length} {t('people.paidLower')}
                   </Badge>
                 </div>
                 
@@ -1962,28 +1962,28 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                               </div>
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
-                                  <span className="text-sm font-semibold">Rate {inst.number}</span>
+                                  <span className="text-sm font-semibold">{t('people.rate')} {inst.number}</span>
                                   <Badge variant={
                                     inst.status === 'paid' ? 'default' : 
                                     inst.status === 'partial' ? 'secondary' : 
                                     isOverdue ? 'destructive' : 'outline'
                                   }>
-                                    {inst.status === 'paid' ? 'Bezahlt' : 
-                                     inst.status === 'partial' ? 'Teilweise' : 
-                                     isOverdue ? 'Überfällig' : 'Offen'}
+                                    {inst.status === 'paid' ? t('finance.paid') : 
+                                     inst.status === 'partial' ? t('people.partial') : 
+                                     isOverdue ? t('finance.overdue') : t('finance.open')}
                                   </Badge>
                                 </div>
                                 <div className="text-xs text-muted-foreground">
                                   {dueDateObj ? (
                                     <span className={isOverdue ? 'text-red-600 font-medium' : ''}>
-                                      Fällig: {formatDate(dueDateObj)}
+                                      {t('people.due')}: {formatDate(dueDateObj)}
                                     </span>
                                   ) : (
-                                    <span>Kein Fälligkeitsdatum</span>
+                                    <span>{t('people.noDueDate')}</span>
                                   )}
                                   {inst.paidDate && (
                                     <span className="ml-3 text-green-600">
-                                      Bezahlt: {formatDate(inst.paidDate?.toDate ? inst.paidDate.toDate() : (typeof inst.paidDate === 'string' ? new Date(inst.paidDate) : new Date(inst.paidDate)))}
+                                      {t('finance.paid')}: {formatDate(inst.paidDate?.toDate ? inst.paidDate.toDate() : (typeof inst.paidDate === 'string' ? new Date(inst.paidDate) : new Date(inst.paidDate)))}
                                     </span>
                                   )}
                                 </div>
@@ -1992,22 +1992,22 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                             
                             {inst.notes && (
                               <div className="mt-2 p-2 bg-muted rounded text-xs">
-                                <p className="text-muted-foreground mb-1">Kommentar:</p>
+                                <p className="text-muted-foreground mb-1">{t('people.comment')}:</p>
                                 <p>{inst.notes}</p>
                               </div>
                             )}
                             
                             <div className="grid grid-cols-3 gap-3 mt-3 text-xs">
                               <div>
-                                <p className="text-muted-foreground mb-1">Rate</p>
+                                <p className="text-muted-foreground mb-1">{t('people.rate')}</p>
                                 <p className="font-semibold">{formatAmount(amountInRappen)}</p>
                               </div>
                               <div>
-                                <p className="text-muted-foreground mb-1">Bezahlt</p>
+                                <p className="text-muted-foreground mb-1">{t('finance.paid')}</p>
                                 <p className="font-semibold text-green-600">{formatAmount(paidInRappen)}</p>
                               </div>
                               <div>
-                                <p className="text-muted-foreground mb-1">Noch offen</p>
+                                <p className="text-muted-foreground mb-1">{t('people.stillOpen')}</p>
                                 <p className={`font-semibold ${remainingInRappen > 0 ? 'text-red-600' : 'text-green-600'}`}>
                                   {formatAmount(remainingInRappen)}
                                 </p>
@@ -2035,7 +2035,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                                   setPaymentAmount((remainingInRappen / 100).toFixed(2));
                                 }}
                               >
-                                {inst.status === 'partial' ? 'Weiter zahlen' : 'Bezahlen'}
+                                {inst.status === 'partial' ? t('people.continuePaying') : t('people.pay')}
                               </Button>
                             )}
                             {inst.paidAmount > 0 && (
@@ -2048,7 +2048,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                                   setPaymentAmount('');
                                 }}
                               >
-                                Bearbeiten
+                                {t('common.edit')}
                               </Button>
                             )}
                             <Button
@@ -2062,7 +2062,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                               }}
                             >
                               <Edit2 className="w-3 h-3 mr-1" />
-                              Bearbeiten
+                              {t('common.edit')}
                             </Button>
                           </div>
                         </div>
@@ -2076,7 +2076,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               {selectedInstallment && (
                 <div className="p-4 border rounded-lg bg-background">
                   <div className="flex items-center justify-between mb-4">
-                    <Label className="text-base font-semibold">Zahlung erfassen</Label>
+                    <Label className="text-base font-semibold">{t('people.recordPayment')}</Label>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -2092,14 +2092,14 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   <div className="space-y-4">
                     <div className="p-3 bg-muted rounded-lg">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-muted-foreground">Rate {selectedInstallment.number}</span>
+                        <span className="text-sm text-muted-foreground">{t('people.rate')} {selectedInstallment.number}</span>
                         <Badge variant={selectedInstallment.status === 'paid' ? 'default' : selectedInstallment.status === 'partial' ? 'secondary' : 'outline'}>
-                          {selectedInstallment.status === 'paid' ? 'Bezahlt' : selectedInstallment.status === 'partial' ? 'Teilweise' : 'Offen'}
+                          {selectedInstallment.status === 'paid' ? t('finance.paid') : selectedInstallment.status === 'partial' ? t('people.partial') : t('finance.open')}
                         </Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-3 text-xs">
                         <div>
-                          <p className="text-muted-foreground mb-1">Rate</p>
+                          <p className="text-muted-foreground mb-1">{t('people.rate')}</p>
                           <p className="font-semibold">{formatAmount((() => {
                             // Intelligente Erkennung der Einheit für Rate-Anzeige
                             const invoiceAmountChf = (selectedInvoiceForPayment.amount || 0) / 100;
@@ -2112,7 +2112,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                           })())}</p>
                         </div>
                         <div>
-                          <p className="text-muted-foreground mb-1">Bereits bezahlt</p>
+                          <p className="text-muted-foreground mb-1">{t('people.alreadyPaid')}</p>
                           <p className="font-semibold text-green-600">{formatAmount((() => {
                             // Intelligente Erkennung der Einheit mit Hilfsfunktion
                             const invoiceAmountChf = (selectedInvoiceForPayment.amount || 0) / 100;
@@ -2127,13 +2127,13 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                           })())}</p>
                         </div>
                         <div>
-                          <p className="text-muted-foreground mb-1">Fälligkeitsdatum</p>
+                          <p className="text-muted-foreground mb-1">{t('people.dueDate')}</p>
                           <p className="font-semibold">
-                            {selectedInstallment.dueDate ? formatDate(selectedInstallment.dueDate?.toDate ? selectedInstallment.dueDate.toDate() : (typeof selectedInstallment.dueDate === 'string' ? new Date(selectedInstallment.dueDate) : new Date(selectedInstallment.dueDate))) : 'Nicht gesetzt'}
+                            {selectedInstallment.dueDate ? formatDate(selectedInstallment.dueDate?.toDate ? selectedInstallment.dueDate.toDate() : (typeof selectedInstallment.dueDate === 'string' ? new Date(selectedInstallment.dueDate) : new Date(selectedInstallment.dueDate))) : t('people.notSet')}
                           </p>
                         </div>
                         <div>
-                          <p className="text-muted-foreground mb-1">Noch zu zahlen</p>
+                          <p className="text-muted-foreground mb-1">{t('people.stillToPay')}</p>
                           <p className="font-semibold text-red-600">
                             {formatAmount((() => {
                               // Intelligente Erkennung der Einheit mit Hilfsfunktion
@@ -2157,7 +2157,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                     </div>
 
                     <div>
-                      <Label>Zahlungsbetrag (CHF) *</Label>
+                      <Label>{t('people.paymentAmountCHF')} *</Label>
                       <Input
                         type="number"
                         step="0.01"
@@ -2167,7 +2167,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                         className="mt-2 h-10"
                       />
                       <p className="text-xs text-muted-foreground mt-1">
-                        Maximal: {formatAmount((() => {
+                        {t('people.maximum')}: {formatAmount((() => {
                           // Intelligente Erkennung der Einheit
                           const invoiceAmountChf = (selectedInvoiceForPayment.amount || 0) / 100;
                           const installmentsAreInChf = areInstallmentsInChf(selectedInvoiceForPayment.installments || [], invoiceAmountChf);
@@ -2185,7 +2185,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
 
                     {selectedInstallment.notes && (
                       <div className="p-2 bg-muted rounded text-xs">
-                        <p className="text-muted-foreground mb-1">Kommentar:</p>
+                        <p className="text-muted-foreground mb-1">{t('people.comment')}:</p>
                         <p>{selectedInstallment.notes}</p>
                       </div>
                     )}
@@ -2199,18 +2199,18 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                           setPaymentAmount('');
                         }}
                       >
-                        Abbrechen
+                        {t('common.cancel')}
                       </Button>
                       <Button
                         className="flex-1 h-10"
                         onClick={async () => {
                           if (!selectedInvoiceForPayment || !selectedInstallment || !paymentAmount) {
-                            toast.error('Bitte alle Felder ausfüllen');
+                            toast.error(t('personInvoices.fillAllFields'));
                             return;
                           }
                           const amount = parseFloat(paymentAmount);
                           if (amount <= 0) {
-                            toast.error('Betrag muss grösser als 0 sein');
+                            toast.error(t('personInvoices.amountMustBeGreaterThanZero'));
                             return;
                           }
                           // Intelligente Erkennung der Einheit für Validierung
@@ -2229,7 +2229,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                           const installmentPaidAmountChf = paidAmountChf;
                           const remaining = installmentAmountChf - installmentPaidAmountChf;
                           if (amount > remaining) {
-                            toast.error(`Betrag darf nicht grösser als ${formatAmount(remaining * 100)} sein`);
+                            toast.error(t('personInvoices.amountTooHigh', { max: formatAmount(remaining * 100) }));
                             return;
                           }
                           try {
@@ -2247,7 +2247,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                                 result 
                               });
                             }
-                            toast.success('Zahlung erfolgreich erfasst');
+                            toast.success(t('personInvoices.paymentRecorded'));
                             setSelectedInstallment(null);
                             setPaymentAmount('');
                             // Refresh data - useEffect will update selectedInvoiceForPayment automatically
@@ -2265,11 +2265,11 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                             if (process.env.NODE_ENV === 'development') {
                               console.error('[Ratenverwaltung] Fehler beim Erfassen der Zahlung:', error);
                             }
-                            toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+                            toast.error(t('personInvoices.error', { error: error.message || t('common.unknownError') }));
                           }
                         }}
                       >
-                        Zahlung erfassen
+                        {t('people.recordPayment')}
                       </Button>
                     </div>
                   </div>
@@ -2288,7 +2288,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               }} 
               className="h-10"
             >
-              Schliessen
+              {t('common.close')}
             </Button>
             {selectedInvoiceForPayment && selectedInvoiceForPayment.installments && selectedInvoiceForPayment.installments.length > 0 && (
               <Button 
@@ -2299,7 +2299,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                     const updatedInvoice = invoices.find((inv: any) => inv.id === selectedInvoiceForPayment.id);
                     if (updatedInvoice) {
                       setSelectedInvoiceForPayment(updatedInvoice);
-                      toast.success('Daten aktualisiert');
+                      toast.success(t('personInvoices.dataUpdated'));
                     }
                   } catch (error) {
                     // Silently fail - data will refresh on next dialog open
@@ -2307,7 +2307,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                 }}
                 className="h-10"
               >
-                Aktualisieren
+                {t('common.refresh')}
               </Button>
             )}
           </DialogFooter>
@@ -2320,11 +2320,11 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
           <DialogHeader>
             <DialogTitle className="text-xl flex items-center gap-2">
               <CreditCard className="w-5 h-5" />
-              In Raten umwandeln
+              {t('people.convertToInstallments')}
             </DialogTitle>
             {invoiceToConvert && (
               <p className="text-sm text-muted-foreground mt-1">
-                Rechnung: {invoiceToConvert.description} - {formatAmount(invoiceToConvert.amount)}
+                {t('people.invoice')}: {invoiceToConvert.description} - {formatAmount(invoiceToConvert.amount)}
               </p>
             )}
           </DialogHeader>
@@ -2333,10 +2333,10 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
             <div className="space-y-4 py-4">
               <div>
                 <Label>
-                  {convertInstallmentInterval === 'weekly' && 'Wöchentliche Rate *'}
-                  {convertInstallmentInterval === 'monthly' && 'Monatliche Rate *'}
-                  {convertInstallmentInterval === 'quarterly' && 'Quartalsrate *'}
-                  {convertInstallmentInterval === 'yearly' && 'Jährliche Rate *'}
+                  {convertInstallmentInterval === 'weekly' && t('people.weeklyRate') + ' *'}
+                  {convertInstallmentInterval === 'monthly' && t('people.monthlyRate') + ' *'}
+                  {convertInstallmentInterval === 'quarterly' && t('people.quarterlyRate') + ' *'}
+                  {convertInstallmentInterval === 'yearly' && t('people.yearlyRate') + ' *'}
                 </Label>
                 <Input
                   type="number"
@@ -2346,16 +2346,16 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   onChange={(e) => {
                     setConvertInstallmentAmount(e.target.value);
                   }}
-                  placeholder="z.B. 500.00"
+                  placeholder={t('people.amountPlaceholder')}
                   className="mt-2 h-10"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Betrag pro {convertInstallmentInterval === 'weekly' ? 'Woche' : convertInstallmentInterval === 'monthly' ? 'Monat' : convertInstallmentInterval === 'quarterly' ? 'Quartal' : 'Jahr'} in CHF
+                  {t('people.amountPer')} {convertInstallmentInterval === 'weekly' ? t('people.week') : convertInstallmentInterval === 'monthly' ? t('people.month') : convertInstallmentInterval === 'quarterly' ? t('people.quarter') : t('people.year')} {t('people.inCHF')}
                 </p>
               </div>
               
               <div>
-                <Label>Ratenintervall *</Label>
+                <Label>{t('people.installmentInterval')} *</Label>
                 <Select
                   value={convertInstallmentInterval}
                   onValueChange={(value: any) => setConvertInstallmentInterval(value)}
@@ -2364,26 +2364,26 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="weekly">Wöchentlich</SelectItem>
-                    <SelectItem value="monthly">Monatlich</SelectItem>
-                    <SelectItem value="quarterly">Vierteljährlich</SelectItem>
-                    <SelectItem value="yearly">Jährlich</SelectItem>
+                    <SelectItem value="weekly">{t('reminders.recurrence.weekly')}</SelectItem>
+                    <SelectItem value="monthly">{t('reminders.recurrence.monthly')}</SelectItem>
+                    <SelectItem value="quarterly">{t('reminders.recurrence.quarterly')}</SelectItem>
+                    <SelectItem value="yearly">{t('reminders.recurrence.yearly')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               
               {convertInstallmentAmount && parseFloat(convertInstallmentAmount) > 0 && (
                 <div className="p-4 bg-muted rounded-lg">
-                  <p className="text-sm font-medium mb-2">Ratenübersicht</p>
+                  <p className="text-sm font-medium mb-2">{t('people.installmentOverview')}</p>
                   <p className="text-xs text-muted-foreground">
-                    Anzahl Raten: {(() => {
+                    {t('people.numberOfInstallments')}: {(() => {
                       const totalAmount = invoiceToConvert.amount / 100;
                       const rateAmount = roundTo5Rappen(parseFloat(convertInstallmentAmount));
                       return Math.ceil(totalAmount / rateAmount);
                     })()}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Rate-Betrag: {roundTo5Rappen(parseFloat(convertInstallmentAmount)).toFixed(2)} CHF
+                    {t('people.installmentAmount')}: {roundTo5Rappen(parseFloat(convertInstallmentAmount)).toFixed(2)} CHF
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     {(() => {
@@ -2398,7 +2398,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                         case 'quarterly': lastDate.setMonth(lastDate.getMonth() + ((count - 1) * 3)); break;
                         case 'yearly': lastDate.setFullYear(lastDate.getFullYear() + (count - 1)); break;
                       }
-                      return `Letzte Rate fällig: ${lastDate.toLocaleDateString('de-CH')}`;
+                      return t('personInvoices.lastInstallmentDue', { date: lastDate.toLocaleDateString(i18n.language) });
                     })()}
                   </p>
                 </div>
@@ -2417,10 +2417,10 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               }} 
               className="h-10"
             >
-              Abbrechen
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleConvertToInstallment} className="h-10" disabled={isSubmittingInstallment}>
-              {isSubmittingInstallment ? 'Wird umgewandelt...' : 'Umwandeln'}
+              {isSubmittingInstallment ? t('people.converting') : t('people.convert')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2432,11 +2432,11 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
           <DialogHeader>
             <DialogTitle className="text-xl flex items-center gap-2">
               <Edit2 className="w-5 h-5" />
-              Rate bearbeiten
+              {t('people.editInstallment')}
             </DialogTitle>
             {editingInstallment && (
               <p className="text-sm text-muted-foreground mt-1">
-                Rate {editingInstallment.number} - {formatAmount(editingInstallment.amount * 100)}
+                {t('people.rate')} {editingInstallment.number} - {formatAmount(editingInstallment.amount * 100)}
               </p>
             )}
           </DialogHeader>
@@ -2444,7 +2444,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
           {editingInstallment && (
             <div className="space-y-4 py-4">
               <div>
-                <Label>Fälligkeitsdatum</Label>
+                <Label>{t('people.dueDate')}</Label>
                 <Input
                   type="date"
                   value={installmentNewDate}
@@ -2454,11 +2454,11 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               </div>
               
               <div>
-                <Label>Kommentar</Label>
+                <Label>{t('people.comment')}</Label>
                 <Textarea
                   value={installmentNote}
                   onChange={(e) => setInstallmentNote(e.target.value)}
-                  placeholder="Optionaler Kommentar zu dieser Rate..."
+                  placeholder={t('people.optionalCommentForInstallment')}
                   rows={3}
                   className="mt-2"
                 />
@@ -2476,7 +2476,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               }} 
               className="h-10"
             >
-              Abbrechen
+              {t('common.cancel')}
             </Button>
             <Button
               onClick={async () => {
@@ -2495,7 +2495,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                   });
                   
                   await updateInstallmentPlan(person.id, selectedInvoiceForPayment.id, updatedInstallments);
-                  toast.success('Rate erfolgreich aktualisiert');
+                  toast.success(t('personInvoices.installmentUpdated'));
                   setEditingInstallment(null);
                   setInstallmentNote('');
                   setInstallmentNewDate('');
@@ -2509,7 +2509,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
                     // Silently fail - data will refresh on next dialog open
                   }
                 } catch (error: any) {
-                  toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+                  toast.error(t('personInvoices.error', { error: error.message || t('common.unknownError') }));
                 } finally {
                   setIsSubmittingInstallment(false);
                 }
@@ -2517,7 +2517,7 @@ export default function PersonInvoicesDialog({ person, open, onOpenChange, onDat
               className="h-10"
               disabled={isSubmittingInstallment}
             >
-              {isSubmittingInstallment ? 'Wird gespeichert...' : 'Speichern'}
+              {isSubmittingInstallment ? t('people.saving') : t('common.save')}
             </Button>
           </DialogFooter>
         </DialogContent>

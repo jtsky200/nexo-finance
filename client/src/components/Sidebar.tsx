@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 
 import SidebarCalendarDayDialog from './SidebarCalendarDayDialog';
+import NexoLogo from './NexoLogo';
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -39,15 +40,15 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
 
   const navItems = useMemo(() => [
     { path: '/dashboard', icon: LayoutDashboard, label: t('nav.dashboard') },
-    { path: '/calendar', icon: Calendar, label: 'Kalender' },
+    { path: '/calendar', icon: Calendar, label: t('nav.calendar') },
     { path: '/reminders', icon: Bell, label: t('nav.reminders') },
     { path: '/finance', icon: Wallet, label: t('nav.finance') },
-    { path: '/people', icon: Users, label: t('nav.people', 'Personen') },
-    { path: '/bills', icon: ClipboardList, label: t('nav.bills', 'Rechnungen') },
-    { path: '/documents', icon: ScanLine, label: 'Dokumente' },
+    { path: '/people', icon: Users, label: t('nav.people') },
+    { path: '/bills', icon: ClipboardList, label: t('nav.bills') },
+    { path: '/documents', icon: ScanLine, label: t('nav.documents') },
     { path: '/shopping', icon: ShoppingCart, label: t('nav.shopping') },
     { path: '/taxes', icon: FileText, label: t('nav.taxes') },
-    { path: '/ai-chat', icon: MessageSquare, label: 'Assistent' },
+    { path: '/ai-chat', icon: MessageSquare, label: t('nav.assistant') },
     { path: '/settings', icon: Settings, label: t('nav.settings') },
   ], [t]);
 
@@ -91,7 +92,20 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     setShowDayDialog(true);
   }, []);
 
-  const monthNames = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+  const monthNames = useMemo(() => [
+    t('calendar.months.january', 'Jan').substring(0, 3),
+    t('calendar.months.february', 'Feb').substring(0, 3),
+    t('calendar.months.march', 'Mär').substring(0, 3),
+    t('calendar.months.april', 'Apr').substring(0, 3),
+    t('calendar.months.may', 'Mai').substring(0, 3),
+    t('calendar.months.june', 'Jun').substring(0, 3),
+    t('calendar.months.july', 'Jul').substring(0, 3),
+    t('calendar.months.august', 'Aug').substring(0, 3),
+    t('calendar.months.september', 'Sep').substring(0, 3),
+    t('calendar.months.october', 'Okt').substring(0, 3),
+    t('calendar.months.november', 'Nov').substring(0, 3),
+    t('calendar.months.december', 'Dez').substring(0, 3),
+  ], [t]);
 
   return (
     <>
@@ -105,6 +119,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       
       {/* Sidebar */}
       <aside
+        data-tutorial="navigation"
         className={cn(
           "fixed top-0 left-0 h-full bg-card border-r border-border z-50 transition-transform duration-300",
           "w-64 flex flex-col",
@@ -113,12 +128,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       >
         {/* Logo and close button */}
         <div className="h-16 flex items-center justify-between px-6 border-b border-border">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-lg">N</span>
-            </div>
-            <span className="font-bold text-xl text-foreground">Nexo</span>
-          </div>
+          <NexoLogo variant="full" size="md" />
           {onClose && (
             <button
               onClick={onClose}
@@ -210,7 +220,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
             }}
             className="w-full mt-2 text-xs py-1.5 text-center text-primary hover:bg-accent rounded transition-colors"
           >
-            Heute
+            {t('calendar.today', 'Heute')}
           </button>
         </div>
 

@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 import { useLocation } from 'wouter';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -35,6 +37,7 @@ interface SidebarCalendarDayDialogProps {
 }
 
 export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: SidebarCalendarDayDialogProps) {
+  const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -82,11 +85,11 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
     }
   };
 
-  const formatDate = (d: Date) => {
-    const weekdays = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
-    const months = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-    return `${weekdays[d.getDay()]}, ${d.getDate()}. ${months[d.getMonth()]} ${d.getFullYear()}`;
-  };
+  const formatDate = useMemo(() => (d: Date) => {
+    const dayKey = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][d.getDay()];
+    const monthKey = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'][d.getMonth()];
+    return `${t('calendar.fullDays.' + dayKey)}, ${d.getDate()}. ${t('calendar.months.' + monthKey)} ${d.getFullYear()}`;
+  }, [t]);
 
   const getEventIcon = (type: string) => {
     switch (type) {
@@ -118,21 +121,13 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
   };
 
   const getEventTypeLabel = (type: string) => {
-    switch (type) {
-      case 'due': return 'Rechnung';
-      case 'reminder': return 'Erinnerung';
-      case 'appointment': return 'Termin';
-      case 'work': return 'Arbeit';
-      case 'vacation': return 'Ferien';
-      case 'school': return 'Schule';
-      case 'hort': return 'Hort';
-      case 'school-holiday': return 'Schulferien';
-      default: return 'Ereignis';
-    }
+    const key = type === 'school-holiday' ? 'calendar.eventTypeLabels.school-holiday' : `calendar.eventTypeLabels.${type}`;
+    return t(key, t('calendar.eventTypeLabels.event'));
   };
 
   const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' }).format(amount / 100);
+    const locale = i18n.language === 'de' ? 'de-CH' : i18n.language === 'en' ? 'en-GB' : i18n.language === 'fr' ? 'fr-CH' : i18n.language === 'it' ? 'it-CH' : i18n.language;
+    return new Intl.NumberFormat(locale, { style: 'currency', currency: 'CHF' }).format(amount / 100);
   };
 
   const handleQuickAction = (action: string) => {
@@ -151,7 +146,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
       case 'invoice':
         onOpenChange(false);
         setLocation('/people');
-        toast.info('Wähle eine Person, um eine Rechnung hinzuzufügen');
+        toast.info(t('calendar.sidebarDayDialog.selectPersonToAddBill'));
         break;
       case 'expense':
         onOpenChange(false);
@@ -166,7 +161,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
 
   const handleSaveAppointment = async () => {
     if (!quickAddData.title || !date) {
-      toast.error('Bitte Titel eingeben');
+      toast.error(t('calendar.errors.enterTitle'));
       return;
     }
 
@@ -179,11 +174,11 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
         notes: quickAddData.notes || undefined,
       } as any);
       
-      toast.success('Termin erstellt');
+      toast.success(t('calendar.sidebarDayDialog.appointmentCreated'));
       setShowQuickAdd(null);
       fetchEventsForDate();
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('calendar.errors.createError') + ': ' + error.message);
     }
   };
 
@@ -191,7 +186,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
     if (!date) return;
     
     if (!quickAddData.personId) {
-      toast.error('Bitte Person auswählen');
+      toast.error(t('calendar.errors.selectPerson'));
       return;
     }
 
@@ -204,12 +199,12 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
         personName: quickAddData.personName,
       });
       
-      toast.success(quickAddData.workType === 'off' ? 'Frei eingetragen' : 'Arbeitszeit eingetragen');
+      toast.success(quickAddData.workType === 'off' ? t('calendar.sidebarDayDialog.freeEntered') : t('calendar.sidebarDayDialog.workScheduleEntered'));
       setShowQuickAdd(null);
       setQuickAddData({ ...quickAddData, personId: '', personName: '' });
       fetchEventsForDate();
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('calendar.errors.createError') + ': ' + error.message);
     }
   };
 
@@ -217,7 +212,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
     if (!date) return;
     
     if (!quickAddData.personId) {
-      toast.error('Bitte Person auswählen');
+      toast.error(t('calendar.errors.selectPerson'));
       return;
     }
 
@@ -227,17 +222,17 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
         startDate: date.toISOString(),
         endDate: date.toISOString(),
         type: 'urlaub',
-        title: 'Urlaub',
+        title: t('calendar.vacation'),
         personId: quickAddData.personId,
         personName: quickAddData.personName,
       });
       
-      toast.success('Urlaub eingetragen');
+      toast.success(t('calendar.sidebarDayDialog.vacationEntered'));
       setShowQuickAdd(null);
       setQuickAddData({ ...quickAddData, personId: '', personName: '' });
       fetchEventsForDate();
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('calendar.errors.createError') + ': ' + error.message);
     }
   };
 
@@ -256,7 +251,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
               <div>
                 <h2 className="font-semibold text-base">{formatDate(date)}</h2>
                 <p className="text-xs text-muted-foreground">
-                  {events.length} {events.length === 1 ? 'Ereignis' : 'Ereignisse'}
+                  {events.length} {events.length === 1 ? t('calendar.sidebarDayDialog.event') : t('calendar.sidebarDayDialog.events')}
                 </p>
               </div>
             </div>
@@ -274,7 +269,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">
               <Clock className="w-6 h-6 mx-auto mb-2 animate-pulse" />
-              <p className="text-sm">Laden...</p>
+              <p className="text-sm">{t('calendar.sidebarDayDialog.loading')}</p>
             </div>
           ) : events.length > 0 ? (
             <div className="space-y-2">
@@ -292,7 +287,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
                         <span className="font-medium text-sm truncate">{event.title}</span>
                         {event.isOverdue && (
                           <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
-                            Überfällig
+                            {t('calendar.sidebarDayDialog.overdue')}
                           </Badge>
                         )}
                       </div>
@@ -316,9 +311,9 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
               <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 mx-auto mb-3 flex items-center justify-center">
                 <AlertCircle className="w-6 h-6 text-muted-foreground" />
               </div>
-              <p className="text-sm font-medium mb-1">Keine Ereignisse</p>
+              <p className="text-sm font-medium mb-1">{t('calendar.sidebarDayDialog.noEvents')}</p>
               <p className="text-xs text-muted-foreground">
-                An diesem Tag sind keine Termine oder Aufgaben geplant.
+                {t('calendar.sidebarDayDialog.noEventsDescription')}
               </p>
             </div>
           )}
@@ -329,22 +324,22 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
           {showQuickAdd === 'appointment' ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Neuer Termin</p>
+                <p className="text-sm font-medium">{t('calendar.sidebarDayDialog.newAppointment')}</p>
                 <button onClick={() => setShowQuickAdd(null)} className="text-muted-foreground hover:text-foreground">
                   <X className="w-4 h-4" />
                 </button>
               </div>
               <div>
-                <Label className="text-xs">Titel *</Label>
+                <Label className="text-xs">{t('calendar.sidebarDayDialog.titleRequired')}</Label>
                 <Input
                   value={quickAddData.title}
                   onChange={(e) => setQuickAddData({ ...quickAddData, title: e.target.value })}
-                  placeholder="z.B. Arzttermin"
+                  placeholder={t('calendar.sidebarDayDialog.titlePlaceholder')}
                   className="h-9 mt-1"
                 />
               </div>
               <div>
-                <Label className="text-xs">Typ</Label>
+                <Label className="text-xs">{t('calendar.sidebarDayDialog.type')}</Label>
                 <Select
                   value={quickAddData.type}
                   onValueChange={(v) => setQuickAddData({ ...quickAddData, type: v })}
@@ -353,42 +348,42 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="termin">Termin</SelectItem>
-                    <SelectItem value="aufgabe">Aufgabe</SelectItem>
-                    <SelectItem value="geburtstag">Geburtstag</SelectItem>
-                    <SelectItem value="andere">Andere</SelectItem>
+                    <SelectItem value="termin">{t('calendar.appointmentTypes.termin')}</SelectItem>
+                    <SelectItem value="aufgabe">{t('calendar.appointmentTypes.aufgabe')}</SelectItem>
+                    <SelectItem value="geburtstag">{t('calendar.appointmentTypes.geburtstag')}</SelectItem>
+                    <SelectItem value="andere">{t('calendar.appointmentTypes.andere')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">Notizen</Label>
+                <Label className="text-xs">{t('calendar.sidebarDayDialog.notes')}</Label>
                 <Textarea
                   value={quickAddData.notes}
                   onChange={(e) => setQuickAddData({ ...quickAddData, notes: e.target.value })}
-                  placeholder="Optional"
+                  placeholder={t('calendar.sidebarDayDialog.optional')}
                   className="mt-1"
                   rows={2}
                 />
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setShowQuickAdd(null)} className="flex-1">
-                  Abbrechen
+                  {t('common.cancel')}
                 </Button>
                 <Button size="sm" onClick={handleSaveAppointment} className="flex-1">
-                  Speichern
+                  {t('common.save')}
                 </Button>
               </div>
             </div>
           ) : showQuickAdd === 'work' ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Arbeitszeit eintragen</p>
+                <p className="text-sm font-medium">{t('calendar.sidebarDayDialog.enterWorkSchedule')}</p>
                 <button onClick={() => setShowQuickAdd(null)} className="text-muted-foreground hover:text-foreground">
                   <X className="w-4 h-4" />
                 </button>
               </div>
               <div>
-                <Label className="text-xs">Person *</Label>
+                <Label className="text-xs">{t('calendar.sidebarDayDialog.personRequired')}</Label>
                 <Select
                   value={quickAddData.personId}
                   onValueChange={(v) => {
@@ -397,7 +392,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
                   }}
                 >
                   <SelectTrigger className="h-9 mt-1">
-                    <SelectValue placeholder="Person wählen" />
+                    <SelectValue placeholder={t('calendar.sidebarDayDialog.selectPerson')} />
                   </SelectTrigger>
                   <SelectContent>
                     {householdPeople.map(p => (
@@ -414,7 +409,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
                   className="h-12 flex-col gap-1"
                 >
                   <Briefcase className="w-4 h-4" />
-                  <span className="text-xs">Ganztags</span>
+                  <span className="text-xs">{t('calendar.sidebarDayDialog.fullDay')}</span>
                 </Button>
                 <Button
                   variant={quickAddData.workType === 'morning' ? 'default' : 'outline'}
@@ -423,7 +418,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
                   className="h-12 flex-col gap-1"
                 >
                   <Coffee className="w-4 h-4" />
-                  <span className="text-xs">Vormittag</span>
+                  <span className="text-xs">{t('calendar.sidebarDayDialog.morning')}</span>
                 </Button>
                 <Button
                   variant={quickAddData.workType === 'afternoon' ? 'default' : 'outline'}
@@ -432,7 +427,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
                   className="h-12 flex-col gap-1"
                 >
                   <Sun className="w-4 h-4" />
-                  <span className="text-xs">Nachmittag</span>
+                  <span className="text-xs">{t('calendar.sidebarDayDialog.afternoon')}</span>
                 </Button>
                 <Button
                   variant={quickAddData.workType === 'off' ? 'default' : 'outline'}
@@ -441,28 +436,28 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
                   className="h-12 flex-col gap-1"
                 >
                   <CalendarOff className="w-4 h-4" />
-                  <span className="text-xs">Frei</span>
+                  <span className="text-xs">{t('calendar.sidebarDayDialog.free')}</span>
                 </Button>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setShowQuickAdd(null)} className="flex-1">
-                  Abbrechen
+                  {t('common.cancel')}
                 </Button>
                 <Button size="sm" onClick={handleSaveWorkSchedule} className="flex-1">
-                  Speichern
+                  {t('common.save')}
                 </Button>
               </div>
             </div>
           ) : showQuickAdd === 'vacation' ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium">Urlaub/Ferien eintragen</p>
+                <p className="text-sm font-medium">{t('calendar.sidebarDayDialog.enterVacation')}</p>
                 <button onClick={() => setShowQuickAdd(null)} className="text-muted-foreground hover:text-foreground">
                   <X className="w-4 h-4" />
                 </button>
               </div>
               <div>
-                <Label className="text-xs">Person *</Label>
+                <Label className="text-xs">{t('calendar.sidebarDayDialog.personRequired')}</Label>
                 <Select
                   value={quickAddData.personId}
                   onValueChange={(v) => {
@@ -471,7 +466,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
                   }}
                 >
                   <SelectTrigger className="h-9 mt-1">
-                    <SelectValue placeholder="Person wählen" />
+                    <SelectValue placeholder={t('calendar.sidebarDayDialog.selectPerson')} />
                   </SelectTrigger>
                   <SelectContent>
                     {householdPeople.map(p => (
@@ -481,21 +476,21 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
                 </Select>
               </div>
               <p className="text-xs text-muted-foreground">
-                Urlaub für {date ? formatDate(date) : ''} eintragen
+                {t('calendar.sidebarDayDialog.vacationFor', { date: date ? formatDate(date) : '' })}
               </p>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => setShowQuickAdd(null)} className="flex-1">
-                  Abbrechen
+                  {t('common.cancel')}
                 </Button>
                 <Button size="sm" onClick={handleSaveVacation} className="flex-1">
                   <Sun className="w-4 h-4 mr-1" />
-                  Eintragen
+                  {t('calendar.sidebarDayDialog.enter')}
                 </Button>
               </div>
             </div>
           ) : (
             <>
-              <p className="text-xs font-medium text-muted-foreground mb-3">Schnellzugriff</p>
+              <p className="text-xs font-medium text-muted-foreground mb-3">{t('calendar.sidebarDayDialog.quickAccess')}</p>
               <div className="grid grid-cols-3 gap-2 mb-3">
                 <Button 
                   variant="outline" 
@@ -504,7 +499,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
                   onClick={() => handleQuickAction('appointment')}
                 >
                   <Calendar className="w-4 h-4 text-orange-500" />
-                  <span className="text-xs">Termin</span>
+                  <span className="text-xs">{t('calendar.sidebarDayDialog.appointment')}</span>
                 </Button>
                 <Button 
                   variant="outline" 
@@ -513,7 +508,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
                   onClick={() => handleQuickAction('work')}
                 >
                   <Briefcase className="w-4 h-4 text-slate-500" />
-                  <span className="text-xs">Arbeit</span>
+                  <span className="text-xs">{t('calendar.sidebarDayDialog.work')}</span>
                 </Button>
                 <Button 
                   variant="outline" 
@@ -522,7 +517,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
                   onClick={() => handleQuickAction('vacation')}
                 >
                   <Sun className="w-4 h-4 text-cyan-500" />
-                  <span className="text-xs">Urlaub</span>
+                  <span className="text-xs">{t('calendar.sidebarDayDialog.vacation')}</span>
                 </Button>
               </div>
               <div className="grid grid-cols-3 gap-2">
@@ -533,7 +528,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
                   onClick={() => handleQuickAction('invoice')}
                 >
                   <Users className="w-4 h-4 text-red-500" />
-                  <span className="text-xs">Rechnung</span>
+                  <span className="text-xs">{t('calendar.sidebarDayDialog.invoice')}</span>
                 </Button>
                 <Button 
                   variant="outline" 
@@ -542,7 +537,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
                   onClick={() => handleQuickAction('expense')}
                 >
                   <Wallet className="w-4 h-4 text-green-500" />
-                  <span className="text-xs">Ausgabe</span>
+                  <span className="text-xs">{t('calendar.sidebarDayDialog.expense')}</span>
                 </Button>
                 <Button 
                   variant="outline" 
@@ -551,7 +546,7 @@ export default function SidebarCalendarDayDialog({ date, open, onOpenChange }: S
                   onClick={() => handleQuickAction('reminder')}
                 >
                   <Bell className="w-4 h-4 text-blue-500" />
-                  <span className="text-xs">Erinnerung</span>
+                  <span className="text-xs">{t('calendar.sidebarDayDialog.reminder')}</span>
                 </Button>
               </div>
             </>

@@ -3,10 +3,13 @@ import { useLocation } from 'wouter';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { validateEmail, validatePassword } from '@/lib/validation';
+import { useTranslation } from 'react-i18next';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 export default function MobileRegister() {
   const [, setLocation] = useLocation();
   const { signUp, signInWithGoogle } = useAuth();
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,26 +20,26 @@ export default function MobileRegister() {
     e.preventDefault();
     
     if (!name.trim()) {
-      toast.error('Bitte geben Sie Ihren Namen ein');
+      toast.error(t('auth.register.validation.nameRequired'));
       return;
     }
 
     // Validate email
     const emailValidation = validateEmail(email);
     if (!emailValidation.valid) {
-      toast.error(emailValidation.error || 'Ungültige E-Mail-Adresse');
+      toast.error(emailValidation.error || t('auth.register.validation.emailInvalid'));
       return;
     }
 
     // Validate password
     const passwordValidation = validatePassword(password);
     if (!passwordValidation.valid) {
-      toast.error(passwordValidation.error || 'Ungültiges Passwort');
+      toast.error(passwordValidation.error || t('auth.register.validation.passwordInvalid'));
       return;
     }
 
     if (password !== confirmPassword) {
-      toast.error('Passwörter stimmen nicht überein');
+      toast.error(t('auth.register.validation.passwordsNotMatch'));
       return;
     }
 
@@ -45,10 +48,10 @@ export default function MobileRegister() {
     setIsLoading(true);
     try {
       await signUp(email, password, name.trim());
-      toast.success('Konto erfolgreich erstellt');
+      toast.success(t('auth.register.success'));
       setLocation('/onboarding');
     } catch (error: any) {
-      toast.error(error.message || 'Registrierung fehlgeschlagen');
+      toast.error(error.message || t('auth.register.error', { message: '' }));
     } finally {
       setIsLoading(false);
     }
@@ -60,10 +63,11 @@ export default function MobileRegister() {
     setIsLoading(true);
     try {
       await signInWithGoogle();
-      toast.success('Erfolgreich mit Google registriert');
+      toast.success(t('auth.register.googleSuccess'));
       setLocation('/onboarding');
     } catch (error: any) {
-      toast.error(error.message || 'Google-Registrierung fehlgeschlagen');
+      const errorMessage = error.message || t('aiChat.unknownError', 'Ein unbekannter Fehler ist aufgetreten');
+      toast.error(t('auth.register.googleError', { message: errorMessage }));
     } finally {
       setIsLoading(false);
     }
@@ -71,14 +75,19 @@ export default function MobileRegister() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
+      {/* Language Switcher - Top */}
+      <div className="w-full max-w-md flex justify-end mb-4">
+        <LanguageSwitcher />
+      </div>
+      
       {/* Logo */}
       <div className="w-20 h-20 rounded-2xl bg-primary flex items-center justify-center mb-6">
         <span className="text-3xl font-bold text-primary-foreground">N</span>
       </div>
       
-      <h1 className="text-2xl font-bold mb-2">Registrieren</h1>
+      <h1 className="text-2xl font-bold mb-2">{t('auth.register.title')}</h1>
       <p className="text-muted-foreground mb-8 text-center">
-        Erstellen Sie ein neues Nexo-Konto
+        {t('auth.register.description')}
       </p>
 
       {/* Google Sign Up */}
@@ -106,12 +115,12 @@ export default function MobileRegister() {
             d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
           />
         </svg>
-        {isLoading ? 'Laden...' : 'Mit Google registrieren'}
+        {isLoading ? t('common.loading') : t('auth.register.googleButton')}
       </button>
 
       <div className="flex items-center gap-4 w-full mb-4">
         <div className="flex-1 h-px bg-border" />
-        <span className="text-xs text-muted-foreground">oder</span>
+        <span className="text-xs text-muted-foreground">{t('auth.register.or')}</span>
         <div className="flex-1 h-px bg-border" />
       </div>
 
@@ -119,7 +128,7 @@ export default function MobileRegister() {
       <form onSubmit={handleSubmit} className="w-full space-y-3">
         <input
           type="text"
-          placeholder="Name"
+          placeholder={t('auth.register.name')}
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="w-full h-12 px-4 rounded-lg text-base bg-background border border-border outline-none focus:border-primary"
@@ -127,7 +136,7 @@ export default function MobileRegister() {
         />
         <input
           type="email"
-          placeholder="E-Mail"
+          placeholder={t('auth.register.email')}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="w-full h-12 px-4 rounded-lg text-base bg-background border border-border outline-none focus:border-primary"
@@ -135,7 +144,7 @@ export default function MobileRegister() {
         />
         <input
           type="password"
-          placeholder="Passwort"
+          placeholder={t('auth.register.password')}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="w-full h-12 px-4 rounded-lg text-base bg-background border border-border outline-none focus:border-primary"
@@ -143,7 +152,7 @@ export default function MobileRegister() {
         />
         <input
           type="password"
-          placeholder="Passwort bestätigen"
+          placeholder={t('auth.register.confirmPassword')}
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           className="w-full h-12 px-4 rounded-lg text-base bg-background border border-border outline-none focus:border-primary"
@@ -154,26 +163,26 @@ export default function MobileRegister() {
           disabled={isLoading}
           className="w-full h-12 px-6 rounded-lg font-medium text-base bg-primary text-primary-foreground active:opacity-80 disabled:opacity-50"
         >
-          {isLoading ? 'Wird erstellt...' : 'Konto erstellen'}
+          {isLoading ? t('auth.register.submitting') : t('auth.register.submit')}
         </button>
       </form>
 
       {/* Link to Login */}
       <p className="text-sm text-muted-foreground mt-6 text-center">
-        Bereits ein Konto?{' '}
+        {t('auth.register.hasAccount')}{' '}
         <button
           type="button"
           onClick={() => setLocation('/login')}
           className="text-primary underline font-medium"
         >
-          Jetzt anmelden
+          {t('auth.register.loginLink')}
         </button>
       </p>
 
       {/* Switch to Desktop */}
       <p className="text-xs text-muted-foreground mt-4 text-center">
         <a href="https://nexo-jtsky100.web.app" className="text-primary underline">
-          Desktop-Version öffnen
+          {t('auth.register.desktopLink')}
         </a>
       </p>
     </div>

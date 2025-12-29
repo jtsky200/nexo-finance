@@ -16,7 +16,9 @@ import {
   Download
 } from 'lucide-react';
 import MobileLayout from '@/components/MobileLayout';
-import { useFinanceEntries, createFinanceEntry, updateFinanceEntry } from '@/lib/firebaseHooks';
+import { useFinanceEntries, createFinanceEntry, updateFinanceEntry, deleteFinanceEntry } from '@/lib/firebaseHooks';
+import ContextMenu from '@/components/ContextMenu';
+import { Edit2, Copy, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,14 +33,32 @@ import { formatDateLocal, formatDateGerman, parseDateGerman } from '@/lib/dateTi
 
 type TabType = 'all' | 'income' | 'expenses';
 
-const categories = {
-  income: ['Gehalt', 'Freelance', 'Investitionen', 'Geschenk', 'Sonstiges'],
-  expense: ['Lebensmittel', 'Transport', 'Wohnen', 'Unterhaltung', 'Gesundheit', 'Kleidung', 'Bildung', 'Rechnung', 'Sonstiges']
-};
+// Categories will be loaded from i18n
+const getCategories = (t: any) => ({
+  income: [
+    t('finance.categories.income.salary'),
+    t('finance.categories.income.freelance'),
+    t('finance.categories.income.investment'),
+    t('finance.categories.income.gift'),
+    t('finance.categories.income.other'),
+  ],
+  expense: [
+    t('finance.categories.expense.food'),
+    t('finance.categories.expense.transport'),
+    t('finance.categories.expense.housing'),
+    t('finance.categories.expense.entertainment'),
+    t('finance.categories.expense.health'),
+    t('finance.categories.expense.clothing'),
+    t('finance.categories.expense.education'),
+    t('finance.categories.expense.bill'),
+    t('finance.categories.expense.other'),
+  ],
+});
 
 export default function MobileFinance() {
   const { t } = useTranslation();
   const { data: allEntries = [], isLoading, refetch } = useFinanceEntries();
+  const categories = getCategories(t);
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [entryType, setEntryType] = useState<'einnahme' | 'ausgabe'>('ausgabe');
@@ -60,7 +80,7 @@ export default function MobileFinance() {
     amount: '',
     date: formatDateLocal(new Date()), // Internal format: YYYY-MM-DD
     notes: '',
-    paymentMethod: 'Karte',
+    paymentMethod: t('finance.paymentMethods.card'),
     isRecurring: false,
     recurrenceRule: 'monthly' as 'daily' | 'weekly' | 'monthly' | 'yearly'
   });
@@ -239,16 +259,16 @@ export default function MobileFinance() {
   const handleStatusChange = async (entryId: string, newStatus: string) => {
     try {
       await updateFinanceEntry(entryId, { status: newStatus } as any);
-      toast.success(newStatus === 'paid' ? 'Als bezahlt markiert' : 'Status geändert');
+      toast.success(newStatus === 'paid' ? t('finance.markedAsPaid') : t('finance.statusChanged'));
       await refetch();
     } catch (error) {
-      toast.error('Fehler: ' + (error as any).message);
+      toast.error(t('finance.error') + (error as any).message);
     }
   };
 
   const handleAddEntry = async () => {
     if (!newEntry.category || !newEntry.amount) {
-      toast.error('Bitte Kategorie und Betrag eingeben');
+      toast.error(t('finance.categoryAndAmountRequired'));
       return;
     }
 
@@ -274,7 +294,7 @@ export default function MobileFinance() {
         amount: '',
         date: formatDateLocal(new Date()),
         notes: '',
-        paymentMethod: 'Karte',
+        paymentMethod: t('finance.paymentMethods.card'),
         isRecurring: false,
         recurrenceRule: 'monthly'
       });
@@ -292,7 +312,7 @@ export default function MobileFinance() {
         amount: '',
         date: formatDateLocal(new Date()),
         notes: '',
-        paymentMethod: 'Karte',
+        paymentMethod: t('finance.paymentMethods.card'),
         isRecurring: false,
         recurrenceRule: 'monthly'
       });
@@ -318,7 +338,7 @@ export default function MobileFinance() {
               }}
             />
             <span className="text-sm font-medium">
-              {isRefreshing ? 'Aktualisiere...' : pullProgress >= 1 ? 'Loslassen zum Aktualisieren' : 'Ziehen zum Aktualisieren'}
+              {isRefreshing ? t('finance.refreshing') : pullProgress >= 1 ? t('finance.releaseToRefresh') : t('finance.pullToRefresh')}
             </span>
           </div>
         </div>
@@ -357,7 +377,7 @@ export default function MobileFinance() {
           className="flex-1 mobile-card flex items-center justify-center gap-2 py-4 border-l-2 border-l-green-600 active:opacity-80 transition-opacity min-h-[56px]"
         >
           <ArrowUp className="w-5 h-5 status-success" />
-          <span className="font-medium text-sm">Einnahme</span>
+          <span className="font-medium text-sm">{t('finance.addIncome')}</span>
         </button>
         <button
           onClick={() => {
@@ -367,7 +387,7 @@ export default function MobileFinance() {
           className="flex-1 mobile-card flex items-center justify-center gap-2 py-4 border-l-2 border-l-red-600 active:opacity-80 transition-opacity min-h-[56px]"
         >
           <ArrowDown className="w-5 h-5 status-error" />
-          <span className="font-medium text-sm">Ausgabe</span>
+          <span className="font-medium text-sm">{t('finance.addExpense')}</span>
         </button>
       </div>
 
@@ -378,7 +398,7 @@ export default function MobileFinance() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Suchen nach Kategorie, Notizen..."
+            placeholder={t('finance.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10 pr-10 mobile-input"
@@ -387,7 +407,7 @@ export default function MobileFinance() {
             <button
               onClick={() => setSearchQuery('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-muted transition-colors"
-              aria-label="Suche löschen"
+              aria-label={t('finance.clearSearch')}
             >
               <X className="w-4 h-4 text-muted-foreground" />
             </button>
@@ -668,13 +688,57 @@ export default function MobileFinance() {
             const isIncome = entry.type === 'einnahme';
             const isPaid = (entry as any).status === 'paid';
             
+            // Build context menu actions
+            const contextMenuActions = [
+              {
+                id: 'duplicate',
+                label: t('common.duplicate', 'Duplizieren'),
+                icon: <Copy className="w-4 h-4" />,
+                onClick: async () => {
+                  hapticSelection();
+                  try {
+                    await createFinanceEntry({
+                      ...entry,
+                      date: new Date(),
+                    } as any);
+                    toast.success(t('common.duplicated', 'Dupliziert'));
+                    hapticSuccess();
+                    await refetch();
+                  } catch (error) {
+                    toast.error(formatErrorForDisplay(error));
+                    hapticError();
+                  }
+                },
+              },
+              {
+                id: 'delete',
+                label: t('common.delete', 'Löschen'),
+                icon: <Trash2 className="w-4 h-4" />,
+                onClick: async () => {
+                  hapticSelection();
+                  if (confirm(t('common.confirmDelete', 'Möchten Sie wirklich löschen?'))) {
+                    try {
+                      await deleteFinanceEntry(entry.id);
+                      toast.success(t('common.deleted', 'Gelöscht'));
+                      hapticSuccess();
+                      await refetch();
+                    } catch (error) {
+                      toast.error(formatErrorForDisplay(error));
+                      hapticError();
+                    }
+                  }
+                },
+                variant: 'destructive' as const,
+              },
+            ];
+            
             return (
-              <div
-                key={entry.id}
-                className={`mobile-card flex items-center justify-between py-3 ${
-                  isIncome ? 'border-l-2 border-l-green-600' : 'border-l-2 border-l-red-600'
-                }`}
-              >
+              <ContextMenu key={entry.id} actions={contextMenuActions}>
+                <div
+                  className={`mobile-card flex items-center justify-between py-3 ${
+                    isIncome ? 'border-l-2 border-l-green-600' : 'border-l-2 border-l-red-600'
+                  }`}
+                >
                 <div className="flex items-center gap-4">
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
                     isIncome ? 'bg-status-success' : 'bg-status-error'
@@ -726,6 +790,7 @@ export default function MobileFinance() {
                   )}
                 </div>
               </div>
+              </ContextMenu>
             );
           })}
         </div>
@@ -810,10 +875,10 @@ export default function MobileFinance() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Karte">Karte</SelectItem>
-                    <SelectItem value="Bar">Bar</SelectItem>
-                    <SelectItem value="Überweisung">Überweisung</SelectItem>
-                    <SelectItem value="Twint">Twint</SelectItem>
+                    <SelectItem value={t('finance.paymentMethods.card')}>{t('finance.paymentMethods.card')}</SelectItem>
+                    <SelectItem value={t('finance.paymentMethods.cash')}>{t('finance.paymentMethods.cash')}</SelectItem>
+                    <SelectItem value={t('finance.paymentMethods.transfer')}>{t('finance.paymentMethods.transfer')}</SelectItem>
+                    <SelectItem value={t('finance.paymentMethods.twint')}>{t('finance.paymentMethods.twint')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ import { httpsCallable } from 'firebase/functions';
 import { toast } from 'sonner';
 import { format, differenceInDays } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { useTranslation } from 'react-i18next';
 
 interface SchoolHoliday {
   id: string;
@@ -28,30 +29,31 @@ interface SchoolHolidayDialogProps {
   onDataChanged?: () => void;
 }
 
-const HOLIDAY_TYPES = [
-  { value: 'herbst', label: 'Herbstferien' },
-  { value: 'winter', label: 'Winterferien' },
-  { value: 'sport', label: 'Sportferien' },
-  { value: 'fruehling', label: 'Frühlingsferien' },
-  { value: 'sommer', label: 'Sommerferien' },
-  { value: 'auffahrt', label: 'Auffahrt' },
-  { value: 'pfingsten', label: 'Pfingsten' },
-  { value: 'andere', label: 'Andere' },
-];
-
-const CANTONS = [
-  { value: 'zh', label: 'Zürich' },
-  { value: 'be', label: 'Bern' },
-  { value: 'bs', label: 'Basel-Stadt' },
-  { value: 'bl', label: 'Basel-Land' },
-  { value: 'ag', label: 'Aargau' },
-  { value: 'so', label: 'Solothurn' },
-  { value: 'lu', label: 'Luzern' },
-  { value: 'sg', label: 'St. Gallen' },
-  { value: 'andere', label: 'Andere' },
-];
-
 export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged }: SchoolHolidayDialogProps) {
+  const { t } = useTranslation();
+  
+  const HOLIDAY_TYPES = useMemo(() => [
+    { value: 'herbst', label: t('schoolHolidays.types.herbst') },
+    { value: 'winter', label: t('schoolHolidays.types.winter') },
+    { value: 'sport', label: t('schoolHolidays.types.sport') },
+    { value: 'fruehling', label: t('schoolHolidays.types.fruehling') },
+    { value: 'sommer', label: t('schoolHolidays.types.sommer') },
+    { value: 'auffahrt', label: t('schoolHolidays.types.auffahrt') },
+    { value: 'pfingsten', label: t('schoolHolidays.types.pfingsten') },
+    { value: 'andere', label: t('schoolHolidays.types.andere') },
+  ], [t]);
+
+  const CANTONS = useMemo(() => [
+    { value: 'zh', label: t('schoolHolidays.cantons.zh') },
+    { value: 'be', label: t('schoolHolidays.cantons.be') },
+    { value: 'bs', label: t('schoolHolidays.cantons.bs') },
+    { value: 'bl', label: t('schoolHolidays.cantons.bl') },
+    { value: 'ag', label: t('schoolHolidays.cantons.ag') },
+    { value: 'so', label: t('schoolHolidays.cantons.so') },
+    { value: 'lu', label: t('schoolHolidays.cantons.lu') },
+    { value: 'sg', label: t('schoolHolidays.cantons.sg') },
+    { value: 'andere', label: t('schoolHolidays.cantons.andere') },
+  ], [t]);
   const [holidays, setHolidays] = useState<SchoolHoliday[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -86,12 +88,12 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
 
   const handleAddHoliday = async () => {
     if (!formName || !formStartDate || !formEndDate) {
-      toast.error('Alle Felder sind erforderlich');
+      toast.error(t('schoolHolidays.allFieldsRequired'));
       return;
     }
 
     if (new Date(formEndDate) < new Date(formStartDate)) {
-      toast.error('Enddatum muss nach Startdatum sein');
+      toast.error(t('schoolHolidays.endDateAfterStartDate'));
       return;
     }
 
@@ -104,13 +106,13 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
         type: formType,
         canton: formCanton,
       });
-      toast.success('Ferien hinzugefügt');
+      toast.success(t('schoolHolidays.holidayAdded'));
       resetForm();
       setShowAddDialog(false);
       fetchHolidays();
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      toast.error('Fehler beim Erstellen');
+      toast.error(t('schoolHolidays.createError'));
     }
   };
 
@@ -118,11 +120,11 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
     try {
       const deleteHolidayFunc = httpsCallable(functions, 'deleteSchoolHoliday');
       await deleteHolidayFunc({ id });
-      toast.success('Ferien gelöscht');
+      toast.success(t('schoolHolidays.holidayDeleted'));
       fetchHolidays();
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      toast.error('Fehler beim Löschen');
+      toast.error(t('schoolHolidays.deleteError'));
     }
   };
 
@@ -161,7 +163,7 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
           <DialogHeader className="pb-4 border-b">
             <DialogTitle className="flex items-center gap-2 text-xl">
               <Sun className="w-5 h-5 text-amber-500" />
-              Schulferien
+              {t('schoolHolidays.title')}
             </DialogTitle>
           </DialogHeader>
 
@@ -181,17 +183,17 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
               <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2">
                   <CalendarIcon className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">{sortedHolidays.length} Ferien</span>
+                  <span className="text-muted-foreground">{t('schoolHolidays.holidayCount', { count: sortedHolidays.length })}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Sun className="w-4 h-4 text-amber-500" />
-                  <span className="font-medium">{totalDays} Tage frei</span>
+                  <span className="font-medium">{t('schoolHolidays.freeDays', { count: totalDays })}</span>
                 </div>
               </div>
 
               <Button onClick={() => setShowAddDialog(true)}>
                 <Plus className="w-4 h-4 mr-2" />
-                Ferien hinzufügen
+                {t('schoolHolidays.addHoliday')}
               </Button>
             </div>
 
@@ -203,10 +205,10 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
             ) : sortedHolidays.length === 0 ? (
               <div className="text-center py-12 bg-muted/20 rounded-lg">
                 <Sun className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                <p className="text-muted-foreground mb-4">Keine Ferien für {currentYear} eingetragen</p>
+                <p className="text-muted-foreground mb-4">{t('schoolHolidays.noHolidaysForYear', { year: currentYear })}</p>
                 <Button onClick={() => setShowAddDialog(true)}>
                   <Plus className="w-4 h-4 mr-2" />
-                  Erste Ferien hinzufügen
+                  {t('schoolHolidays.addFirstHoliday')}
                 </Button>
               </div>
             ) : (
@@ -229,7 +231,7 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
                               {format(new Date(holiday.startDate), 'dd. MMM', { locale: de })} - {format(new Date(holiday.endDate), 'dd. MMM yyyy', { locale: de })}
                             </span>
                             <span className="text-muted-foreground/60">•</span>
-                            <span>{days} {days === 1 ? 'Tag' : 'Tage'}</span>
+                            <span>{t('schoolHolidays.days', { count: days })}</span>
                             {holiday.canton && (
                               <>
                                 <span className="text-muted-foreground/60">•</span>
@@ -256,7 +258,7 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
             {/* Timeline Visualization */}
             {sortedHolidays.length > 0 && (
               <div className="mt-8 p-4 bg-muted/20 rounded-lg">
-                <h4 className="font-medium mb-4">Ferienübersicht {currentYear}</h4>
+                <h4 className="font-medium mb-4">{t('schoolHolidays.overview', { year: currentYear })}</h4>
                 <div className="relative h-12 bg-muted rounded overflow-hidden">
                   {sortedHolidays.map((holiday, idx) => {
                     const startOfYear = new Date(currentYear, 0, 1);
@@ -291,7 +293,20 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
                   })}
                 </div>
                 <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                  {['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'].map(m => (
+                  {[
+                    t('calendar.months.january').substring(0, 3),
+                    t('calendar.months.february').substring(0, 3),
+                    t('calendar.months.march').substring(0, 3),
+                    t('calendar.months.april').substring(0, 3),
+                    t('calendar.months.may').substring(0, 3),
+                    t('calendar.months.june').substring(0, 3),
+                    t('calendar.months.july').substring(0, 3),
+                    t('calendar.months.august').substring(0, 3),
+                    t('calendar.months.september').substring(0, 3),
+                    t('calendar.months.october').substring(0, 3),
+                    t('calendar.months.november').substring(0, 3),
+                    t('calendar.months.december').substring(0, 3)
+                  ].map(m => (
                     <span key={m}>{m}</span>
                   ))}
                 </div>
@@ -305,12 +320,12 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Schulferien hinzufügen</DialogTitle>
+            <DialogTitle>{t('schoolHolidays.addHoliday')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Ferientyp</Label>
+                <Label>{t('schoolHolidays.holidayType')}</Label>
                 <Select value={formType} onValueChange={handleTypeChange}>
                   <SelectTrigger className="mt-2">
                     <SelectValue />
@@ -323,7 +338,7 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
                 </Select>
               </div>
               <div>
-                <Label>Kanton (Optional)</Label>
+                <Label>{t('schoolHolidays.cantonOptional')}</Label>
                 <Select value={formCanton} onValueChange={setFormCanton}>
                   <SelectTrigger className="mt-2">
                     <SelectValue />
@@ -338,18 +353,18 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
             </div>
 
             <div>
-              <Label>Name</Label>
+              <Label>{t('common.name')}</Label>
               <Input
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
-                placeholder="z.B. Herbstferien"
+                placeholder={t('schoolHolidays.namePlaceholder')}
                 className="mt-2"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Von</Label>
+                <Label>{t('common.from')}</Label>
                 <Input
                   type="date"
                   value={formStartDate}
@@ -358,7 +373,7 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
                 />
               </div>
               <div>
-                <Label>Bis</Label>
+                <Label>{t('common.to')}</Label>
                 <Input
                   type="date"
                   value={formEndDate}
@@ -369,10 +384,10 @@ export default function SchoolHolidayDialog({ open, onOpenChange, onDataChanged 
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => { setShowAddDialog(false); resetForm(); }}>Abbrechen</Button>
+            <Button variant="outline" onClick={() => { setShowAddDialog(false); resetForm(); }}>{t('common.cancel')}</Button>
             <Button onClick={handleAddHoliday}>
               <Plus className="w-4 h-4 mr-2" />
-              Hinzufügen
+              {t('common.add')}
             </Button>
           </div>
         </DialogContent>

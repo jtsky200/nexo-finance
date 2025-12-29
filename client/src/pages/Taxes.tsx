@@ -77,15 +77,15 @@ export default function Taxes() {
     switch (status) {
       case 'unvollständig':
         return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-          {t('taxes.status.unvollständig', 'Unvollständig')}
+          {t('taxes.status.unvollständig')}
         </Badge>;
       case 'vollständig':
         return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-          {t('taxes.status.vollständig', 'Vollständig')}
+          {t('taxes.status.vollständig')}
         </Badge>;
       case 'eingereicht':
         return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-          {t('taxes.status.eingereicht', 'Eingereicht')}
+          {t('taxes.status.eingereicht')}
         </Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
@@ -249,9 +249,9 @@ export default function Taxes() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="unvollständig">{t('taxes.status.unvollständig', 'Unvollständig')}</SelectItem>
-                          <SelectItem value="vollständig">{t('taxes.status.vollständig', 'Vollständig')}</SelectItem>
-                          <SelectItem value="eingereicht">{t('taxes.status.eingereicht', 'Eingereicht')}</SelectItem>
+                          <SelectItem value="unvollständig">{t('taxes.status.unvollständig')}</SelectItem>
+                          <SelectItem value="vollständig">{t('taxes.status.vollständig')}</SelectItem>
+                          <SelectItem value="eingereicht">{t('taxes.status.eingereicht')}</SelectItem>
                         </SelectContent>
                       </Select>
                       <DropdownMenu>

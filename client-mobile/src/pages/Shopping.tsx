@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import MobileLayout from '@/components/MobileLayout';
 import { useShoppingList, useShoppingLists, createShoppingList, updateShoppingList, deleteShoppingList, createShoppingItem, markShoppingItemAsBought, deleteShoppingItem, createFinanceEntry, updateShoppingItem, type ShoppingItem } from '@/lib/firebaseHooks';
+import ContextMenu from '@/components/ContextMenu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -69,13 +70,14 @@ interface ReceiptData {
   confidence: number;
 }
 
-const categories = [
-  'Lebensmittel',
-  'Getränke',
-  'Haushalt',
-  'Hygiene',
-  'Tierbedarf',
-  'Sonstiges'
+// Categories will be translated in the component using t()
+const getCategories = (t: any) => [
+  t('shopping.categories.food'),
+  t('shopping.categories.drinks'),
+  t('shopping.categories.household'),
+  t('shopping.categories.hygiene'),
+  t('shopping.categories.pet'),
+  t('shopping.categories.other')
 ];
 
 export default function MobileShopping() {
@@ -135,7 +137,7 @@ export default function MobileShopping() {
   const [newItem, setNewItem] = useState({
     name: '',
     quantity: '1',
-    category: 'Lebensmittel',
+    category: t('shopping.categories.food'),
     store: ''
   });
   
@@ -209,7 +211,7 @@ export default function MobileShopping() {
 
   const handleAddItem = async () => {
     if (!newItem.name.trim()) {
-      toast.error('Bitte Artikelname eingeben');
+      toast.error(t('shopping.itemNameRequired'));
       return;
     }
 
@@ -224,13 +226,13 @@ export default function MobileShopping() {
         store: newItem.store || null
       });
       
-      toast.success('Artikel hinzugefügt');
+      toast.success(t('shopping.itemAdded'));
       hapticSuccess();
       setShowAddDialog(false);
-      setNewItem({ name: '', quantity: '1', category: 'Lebensmittel', store: '' });
+      setNewItem({ name: '', quantity: '1', category: t('shopping.categories.food'), store: '' });
       await refetch();
     } catch (error) {
-      toast.error('Fehler: ' + formatErrorForDisplay(error));
+      toast.error(t('shopping.error') + formatErrorForDisplay(error));
       hapticError();
     }
   };
@@ -260,7 +262,7 @@ export default function MobileShopping() {
       id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
       name: '',
       quantity: '1',
-      category: 'Lebensmittel',
+      category: t('shopping.categories.food'),
       price: '',
       articleNumber: '',
       productInfo: null,
@@ -488,13 +490,13 @@ export default function MobileShopping() {
         if ((result.data as any).articleNumber && !item.articleNumber) {
           updateItemInStoreGroup(groupIndex, itemId, 'articleNumber', (result.data as any).articleNumber);
         }
-        toast.success('Produktinformationen erkannt');
+        toast.success(t('shopping.productInfoRecognized'));
         hapticSuccess();
       } else {
-        toast.info('Keine Produktinformationen erkannt');
+        toast.info(t('shopping.noProductInfo'));
       }
     } catch (error) {
-      toast.error('Fehler bei Analyse: ' + formatErrorForDisplay(error));
+      toast.error(t('shopping.analysisError') + formatErrorForDisplay(error));
       hapticError();
     }
   };
@@ -512,12 +514,12 @@ export default function MobileShopping() {
       let totalItems = 0;
       for (const group of storeGroups) {
         if (!group.store) {
-          toast.error('Bitte Laden für alle Gruppen angeben');
+          toast.error(t('shopping.storeRequired'));
           return;
         }
         for (const item of group.items) {
           if (!item.name.trim()) {
-            toast.error('Bitte Artikelname für alle Artikel eingeben');
+            toast.error(t('shopping.itemNameRequiredForAll'));
             return;
           }
           
@@ -537,13 +539,13 @@ export default function MobileShopping() {
         }
       }
       
-      toast.success(`${totalItems} Artikel hinzugefügt`);
+      toast.success(t('shopping.itemsAdded', { count: totalItems }));
       hapticSuccess();
       setShowMultiAddDialog(false);
       setStoreGroups([]);
       await refetch();
     } catch (error) {
-      toast.error('Fehler: ' + formatErrorForDisplay(error));
+      toast.error(t('shopping.error') + formatErrorForDisplay(error));
       hapticError();
     }
   };
@@ -551,37 +553,37 @@ export default function MobileShopping() {
   // List Management Handlers
   const handleCreateList = async () => {
     if (!newListName.trim()) {
-      toast.error('Bitte Listenname eingeben');
+      toast.error(t('shopping.listNameRequired'));
       return;
     }
     try {
       const result = await createShoppingList(newListName.trim(), lists.length === 0);
-      toast.success('Liste erstellt');
+      toast.success(t('shopping.listCreated'));
       hapticSuccess();
       setShowCreateListDialog(false);
       setNewListName('');
       setSelectedListId((result as any).id);
     } catch (error) {
-      toast.error('Fehler: ' + formatErrorForDisplay(error));
+      toast.error(t('shopping.error') + formatErrorForDisplay(error));
       hapticError();
     }
   };
 
   const handleDeleteList = async (listId: string) => {
     if (lists.length <= 1) {
-      toast.error('Mindestens eine Liste muss vorhanden sein');
+      toast.error(t('shopping.atLeastOneListRequired'));
       return;
     }
     try {
       await deleteShoppingList(listId);
-      toast.success('Liste gelöscht');
+      toast.success(t('shopping.listDeleted'));
       hapticSuccess();
       if (selectedListId === listId) {
         const remainingList = lists.find(l => l.id !== listId);
         setSelectedListId(remainingList?.id || null);
       }
     } catch (error) {
-      toast.error('Fehler: ' + formatErrorForDisplay(error));
+      toast.error(t('shopping.error') + formatErrorForDisplay(error));
       hapticError();
     }
   };
@@ -589,11 +591,11 @@ export default function MobileShopping() {
   const handleUpdateList = async (listId: string, name: string, isDefault?: boolean) => {
     try {
       await updateShoppingList(listId, { name, isDefault });
-      toast.success('Liste aktualisiert');
+      toast.success(t('shopping.listUpdated'));
       hapticSuccess();
       setEditingListId(null);
     } catch (error) {
-      toast.error('Fehler: ' + formatErrorForDisplay(error));
+      toast.error(t('shopping.error') + formatErrorForDisplay(error));
       hapticError();
     }
   };
@@ -651,7 +653,7 @@ export default function MobileShopping() {
 
   const handleDeleteMultipleItems = useCallback(async () => {
     if (selectedItemIds.size === 0) {
-      toast.error('Bitte wählen Sie mindestens einen Artikel aus');
+      toast.error(t('shopping.pleaseSelectAtLeastOne'));
       return;
     }
 
@@ -674,7 +676,7 @@ export default function MobileShopping() {
       // Delete in background
       const deletePromises = idsToDelete.map(id => deleteShoppingItem(id));
       await Promise.all(deletePromises);
-      toast.success(`${idsToDelete.length} Artikel gelöscht`);
+      toast.success(t('shopping.itemsDeleted', { count: idsToDelete.length }));
       // Refetch in background
       setTimeout(() => refetch(), 100);
     } catch (error) {
@@ -735,7 +737,7 @@ export default function MobileShopping() {
       // Delete in parallel for better performance
       const deletePromises = boughtItemIds.map(id => deleteShoppingItem(id));
       await Promise.all(deletePromises);
-      toast.success('Eingekaufte Artikel gelöscht');
+      toast.success(t('shopping.boughtItemsDeleted'));
       // Refetch in background
       setTimeout(() => refetch(), 100);
     } catch (error) {
@@ -918,19 +920,19 @@ export default function MobileShopping() {
       }
       
       const err = error as any;
-      let errorMessage = 'Kamera-Fehler';
+      let errorMessage = t('shopping.cameraError');
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        errorMessage = 'Kamera-Berechtigung verweigert. Bitte in den Browser-Einstellungen erlauben.';
+        errorMessage = t('shopping.cameraPermissionDenied');
       } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        errorMessage = 'Keine Kamera gefunden';
+        errorMessage = t('shopping.noCameraFound');
       } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-        errorMessage = 'Kamera wird bereits verwendet';
+        errorMessage = t('shopping.cameraInUse');
       } else if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
-        errorMessage = 'Kamera-Unterstützung nicht verfügbar';
+        errorMessage = t('shopping.cameraNotSupported');
       } else if (err.message === 'Video-Timeout') {
-        errorMessage = 'Kamera-Initialisierung zu langsam';
+        errorMessage = t('shopping.cameraInitSlow');
       } else {
-        errorMessage = `Kamera-Fehler: ${err.message || err.name}`;
+        errorMessage = `${t('shopping.cameraError')}: ${err.message || err.name}`;
       }
       
       toast.error(errorMessage);
@@ -1179,23 +1181,20 @@ export default function MobileShopping() {
             });
             // Mark all items as selected
             setScannedItems(data.items.map((item: ReceiptItem) => ({ ...item, selected: true })));
-            toast.success(`${data.items.length} Artikel erkannt!`);
+            toast.success(t('shopping.itemsRecognized', { count: data.items.length }));
           } else {
             // Better error messages
             if (data.error?.includes('Vision API') || data.error?.includes('PERMISSION_DENIED')) {
-              toast.error(
-                'OCR nicht verfügbar. Google Cloud Vision API muss aktiviert werden.',
-                { duration: 5000 }
-              );
+              toast.error(t('shopping.ocrNotAvailable'), { duration: 5000 });
             } else if (data.error?.includes('billing')) {
-              toast.error('Google Cloud Billing erforderlich', { duration: 5000 });
+              toast.error(t('shopping.googleBillingRequired'), { duration: 5000 });
             } else if (data.rawText) {
-              toast.error(`Text erkannt aber keine Artikel gefunden. Versuche bessere Bildqualität.`, { duration: 4000 });
+              toast.error(t('shopping.textRecognizedNoItems'), { duration: 4000 });
               if (process.env.NODE_ENV === 'development') {
                 console.log('Raw text:', data.rawText);
               }
           } else {
-            toast.error(data.error || 'Keine Artikel erkannt. Bitte bessere Bildqualität verwenden.', { duration: 4000 });
+            toast.error(data.error || t('shopping.noItemsRecognizedBetterQuality'), { duration: 4000 });
             }
           }
         } catch (innerError) {
@@ -1409,7 +1408,7 @@ export default function MobileShopping() {
                       setLiveTotal(newTotal);
                       
                       if (addedCount > 0) {
-                        toast.success(`${addedCount} neue Artikel erkannt!`, { duration: 1500 });
+                        toast.success(t('shopping.newItemsRecognized', { count: addedCount }), { duration: 1500 });
                         
                         // Vibration feedback
                         if (navigator.vibrate) {
@@ -1418,7 +1417,7 @@ export default function MobileShopping() {
                       } else if (newItemsToAdd.length > 0) {
                         // Items were found but all are duplicates
                         if (!autoScanEnabled) {
-                          toast.info('Alle Artikel bereits in Liste', { duration: 1000 });
+                          toast.info(t('shopping.allItemsAlreadyInList'), { duration: 1000 });
                         }
                       }
                       
@@ -1427,13 +1426,13 @@ export default function MobileShopping() {
                   } else {
                     // All items already scanned
                     if (!autoScanEnabled) {
-                      toast.info('Alle Artikel bereits erkannt', { duration: 1000 });
+                      toast.info(t('shopping.allItemsAlreadyRecognized'), { duration: 1000 });
                     }
                   }
                 } else {
                   // No items found - don't show error if auto-scan (it's normal)
                   if (!autoScanEnabled) {
-                    setScanError('Keine Artikel erkannt');
+                    setScanError(t('shopping.noItemsRecognized'));
                   }
                 }
               } catch (innerError) {
@@ -1553,7 +1552,7 @@ export default function MobileShopping() {
                   
                   hapticSuccess();
                 } else {
-                  const errorMsg = data.error || 'Artikel nicht erkannt';
+                  const errorMsg = data.error || t('shopping.itemNotRecognized');
                   setScanError(errorMsg);
                   toast.error(errorMsg, { duration: 2000 });
                   hapticError();
@@ -1641,7 +1640,7 @@ export default function MobileShopping() {
   // NEW: Add all live scanned items to shopping list
   const addLiveItemsToList = async () => {
     if (liveScannedItems.length === 0) {
-      toast.error('Keine Artikel gescannt');
+      toast.error(t('shopping.noItemsScanned'));
       return;
     }
 
@@ -1658,20 +1657,20 @@ export default function MobileShopping() {
         });
       }
       
-      toast.success(`${liveScannedItems.length} Artikel hinzugefügt!`);
+      toast.success(t('shopping.itemsAdded', { count: liveScannedItems.length }));
       setLiveScannedItems([]);
       setLiveTotal(0);
       closeScanner();
       await refetch();
     } catch (error) {
-      toast.error('Fehler: ' + (error as any).message);
+      toast.error(t('shopping.error') + (error as any).message);
     }
   };
 
   const handleAddScannedItems = async () => {
     const selected = scannedItems.filter(i => i.selected);
     if (selected.length === 0) {
-      toast.error('Bitte mindestens einen Artikel auswählen');
+      toast.error(t('shopping.pleaseSelectAtLeastOne'));
       return;
     }
 
@@ -1688,11 +1687,11 @@ export default function MobileShopping() {
         });
       }
       
-      toast.success(`${selected.length} Artikel hinzugefügt!`);
+      toast.success(t('shopping.itemsAdded', { count: selected.length }));
       closeScanner();
       await refetch();
     } catch (error) {
-      toast.error('Fehler: ' + (error as any).message);
+      toast.error(t('shopping.error') + (error as any).message);
     }
   };
 
@@ -1707,9 +1706,9 @@ export default function MobileShopping() {
         receiptData,
       });
 
-      toast.success('Quittung gespeichert!');
+      toast.success(t('shopping.receiptSaved'));
     } catch (error) {
-      toast.error('Fehler: ' + (error as any).message);
+      toast.error(t('shopping.error') + (error as any).message);
     }
   };
 
@@ -1721,15 +1720,15 @@ export default function MobileShopping() {
       await createFinanceEntry({
         type: 'ausgabe',
         amount: receiptData.totals.total * 100, // Convert to cents
-        category: 'Lebensmittel',
-        notes: `Einkauf bei ${receiptData.store.name}`,
+        category: t('shopping.categories.food'),
+        notes: `${t('shopping.purchaseAt')} ${receiptData.store.name}`,
         date: receiptData.purchase.date || new Date().toISOString().split('T')[0],
         paymentMethod: receiptData.purchase.paymentMethod || 'Karte',
         currency: 'CHF',
         isRecurring: false,
       });
 
-      toast.success('Zu Finanzen hinzugefügt!');
+      toast.success(t('shopping.addedToFinance'));
       hapticSuccess();
       closeScanner();
     } catch (error) {
@@ -1755,7 +1754,7 @@ export default function MobileShopping() {
         return category;
       }
     }
-    return 'Lebensmittel';
+    return t('shopping.categories.food');
   };
 
   const openScanner = () => {
@@ -1802,7 +1801,7 @@ export default function MobileShopping() {
               <SelectContent>
                 {lists.map((list) => (
                   <SelectItem key={list.id} value={list.id}>
-                    {list.name} {list.isDefault && '(Standard)'}
+                    {list.name} {list.isDefault && t('shopping.standard')}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1833,10 +1832,10 @@ export default function MobileShopping() {
                 onClick={toggleSelectAll}
                 className="h-11"
               >
-                {selectedItemIds.size === openItems.length + boughtItems.length ? 'Alle abwählen' : 'Alle auswählen'}
+                {selectedItemIds.size === openItems.length + boughtItems.length ? t('shopping.deselectAll') : t('shopping.selectAll')}
               </Button>
               <span className="text-sm text-muted-foreground">
-                {selectedItemIds.size} ausgewählt
+                {selectedItemIds.size} {t('shopping.selected')}
               </span>
             </div>
             <Button
@@ -1871,7 +1870,7 @@ export default function MobileShopping() {
         </div>
         <p className="text-3xl font-semibold mb-2">{openItems.length}</p>
         <p className="text-sm opacity-60">
-          {t('shopping.itemsOpen', 'Artikel offen')}
+          {t('shopping.itemsOpen')}
         </p>
       </div>
 
@@ -1883,16 +1882,34 @@ export default function MobileShopping() {
       ) : openItems.length === 0 ? (
         <div className="mobile-card text-center py-8">
           <Check className="w-10 h-10 mx-auto status-success mb-2" />
-          <p className="text-muted-foreground">{t('shopping.empty', 'Liste ist leer')}</p>
+          <p className="text-muted-foreground">{t('shopping.empty')}</p>
         </div>
       ) : (
         <div className="space-y-3 mb-4">
-          {openItems.map((item) => (
-            <div
-              key={item.id}
-              className={`mobile-card flex items-center gap-4 py-3 ${selectionMode && selectedItemIds.has(item.id) ? 'ring-2 ring-primary' : ''}`}
-              onClick={selectionMode ? () => toggleItemSelection(item.id) : undefined}
-            >
+          {openItems.map((item) => {
+            // Build context menu actions
+            const contextMenuActions = [
+              {
+                id: 'mark-bought',
+                label: t('shopping.markAsBought', 'Als gekauft markieren'),
+                icon: <Check className="w-4 h-4" />,
+                onClick: () => handleToggleBought(item.id, item.status),
+              },
+              {
+                id: 'delete',
+                label: t('common.delete', 'Löschen'),
+                icon: <Trash2 className="w-4 h-4" />,
+                onClick: () => handleDeleteItem(item.id),
+                variant: 'destructive' as const,
+              },
+            ];
+
+            return (
+              <ContextMenu key={item.id} actions={contextMenuActions} disabled={selectionMode}>
+                <div
+                  className={`mobile-card flex items-center gap-4 py-3 ${selectionMode && selectedItemIds.has(item.id) ? 'ring-2 ring-primary' : ''}`}
+                  onClick={selectionMode ? () => toggleItemSelection(item.id) : undefined}
+                >
               {selectionMode ? (
                 <div className="w-6 h-6 rounded border-2 border-border flex items-center justify-center shrink-0">
                   {selectedItemIds.has(item.id) && (
@@ -1924,7 +1941,9 @@ export default function MobileShopping() {
                 </button>
               )}
             </div>
-          ))}
+            </ContextMenu>
+            );
+          })}
         </div>
       )}
 
@@ -2017,7 +2036,7 @@ export default function MobileShopping() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {categories.map((cat) => (
+                      {getCategories(t).map((cat) => (
                         <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                       ))}
                     </SelectContent>
@@ -2137,7 +2156,7 @@ export default function MobileShopping() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                {categories.map((cat) => (
+                                {getCategories(t).map((cat) => (
                                   <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                                 ))}
                               </SelectContent>

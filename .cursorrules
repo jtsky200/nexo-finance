@@ -2,34 +2,48 @@
 
 ## Build and Deployment Rules
 
-### CRITICAL: DO NOT BUILD OR DEPLOY WITHOUT USER CONFIRMATION
+### ⚠️ CRITICAL: DO NOT BUILD OR DEPLOY WITHOUT USER CONFIRMATION ⚠️
 
-**ABSOLUTE PROHIBITION:**
+**ABSOLUTE PROHIBITION - THESE RULES ARE NON-NEGOTIABLE:**
 
-- **FORBIDDEN: NEVER run `npm run build:mobile` or `npm run build` without explicit user confirmation**
-- **FORBIDDEN: NEVER run `firebase deploy` or any deployment commands without explicit user confirmation**
-- **FORBIDDEN: NEVER assume the user wants to build/deploy even if they said "ja" to something else**
-- **FORBIDDEN: NEVER build/deploy "just to test" or "to see if it works"**
-- **FORBIDDEN: NEVER build/deploy because "the code is ready"**
+- **🚫 FORBIDDEN: NEVER run `npm run build:mobile` or `npm run build` without explicit user confirmation**
+- **🚫 FORBIDDEN: NEVER run `firebase deploy` or any deployment commands without explicit user confirmation**
+- **🚫 FORBIDDEN: NEVER assume the user wants to build/deploy even if they said "ja" to something else**
+- **🚫 FORBIDDEN: NEVER build/deploy "just to test" or "to see if it works"**
+- **🚫 FORBIDDEN: NEVER build/deploy because "the code is ready"**
+- **🚫 FORBIDDEN: NEVER build/deploy when user says "build and deploy" - you MUST ask separately for EACH action**
+- **🚫 FORBIDDEN: NEVER combine build and deploy in one step without separate confirmations**
+- **🚫 FORBIDDEN: NEVER proceed with build/deploy if user hasn't explicitly confirmed with "ja", "yes", "build", "deploy", "bauen", or "deployen"**
 
-**MANDATORY WORKFLOW - YOU MUST FOLLOW THIS EXACT SEQUENCE:**
+**MANDATORY WORKFLOW - YOU MUST FOLLOW THIS EXACT SEQUENCE - NO EXCEPTIONS:**
 
-1. **BEFORE ANY BUILD:**
-   - Stop and ask: "Soll ich die Änderungen jetzt bauen?" or "Should I build the changes now?"
-   - Wait for explicit user confirmation
-   - Only proceed if user says "ja", "yes", "build", "bauen", or explicitly confirms
+1. **BEFORE ANY BUILD - MANDATORY STOP AND ASK:**
+   - **STOP IMMEDIATELY** - Do NOT run any build command
+   - **MUST ASK:** "Soll ich die Änderungen jetzt bauen?" or "Should I build the changes now?"
+   - **MUST WAIT** for explicit user confirmation
+   - **ONLY proceed** if user explicitly says "ja", "yes", "build", or "bauen" in response to YOUR build question
+   - **IF USER SAYS "ja" TO ANYTHING ELSE, YOU MUST ASK AGAIN SPECIFICALLY ABOUT BUILD**
 
-2. **BEFORE ANY DEPLOY:**
-   - Stop and ask: "Soll ich die Änderungen jetzt deployen?" or "Should I deploy the changes now?"
-   - Wait for explicit user confirmation
-   - Only proceed if user says "ja", "yes", "deploy", "deployen", or explicitly confirms
+2. **BEFORE ANY DEPLOY - MANDATORY STOP AND ASK:**
+   - **STOP IMMEDIATELY** - Do NOT run any deploy command
+   - **MUST ASK:** "Soll ich die Änderungen jetzt deployen?" or "Should I deploy the changes now?"
+   - **MUST WAIT** for explicit user confirmation
+   - **ONLY proceed** if user explicitly says "ja", "yes", "deploy", or "deployen" in response to YOUR deploy question
+   - **IF USER SAYS "ja" TO ANYTHING ELSE, YOU MUST ASK AGAIN SPECIFICALLY ABOUT DEPLOY**
 
-3. **EXPLICIT CONFIRMATION REQUIRED:**
-   - User must explicitly say "ja", "yes", "build", "deploy", "bauen", "deployen"
-   - "ja" alone is NOT confirmation for build/deploy unless the question was specifically about build/deploy
+3. **EXPLICIT CONFIRMATION REQUIRED - NO ASSUMPTIONS:**
+   - User MUST explicitly say "ja", "yes", "build", "deploy", "bauen", or "deployen" in response to YOUR specific question
+   - "ja" alone is NOT confirmation for build/deploy unless YOUR question was specifically about build/deploy
    - If user says "ja" to a different question, you MUST ask again specifically about build/deploy
+   - If user says "build and deploy", you MUST ask separately: "Soll ich zuerst bauen?" then "Soll ich dann deployen?"
+   - **NEVER assume** - Always verify the confirmation is for the specific action you're about to take
 
-4. **AFTER DEPLOYMENT:**
+4. **SEPARATE CONFIRMATIONS REQUIRED:**
+   - Build and Deploy are TWO SEPARATE actions requiring TWO SEPARATE confirmations
+   - After build completes, you MUST ask again: "Soll ich jetzt deployen?"
+   - Do NOT deploy automatically after build, even if user said "build and deploy"
+
+5. **AFTER DEPLOYMENT:**
    - ALWAYS push changes to Git with an appropriate commit message
    - Use `git add .`, `git commit -m "message"`, and `git push` after deployment is confirmed successful
 
@@ -107,13 +121,14 @@ When creating or modifying dialogs (DialogContent components), ALWAYS use these 
    - Check for linter errors and fix them
    - Review the changes to ensure they address the issue
 
-3. **Request Build/Deploy Permission:**
-   - **ABSOLUTELY FORBIDDEN: NEVER build or deploy automatically**
-   - **STOP: Before running ANY build command, you MUST ask: "Soll ich die Änderungen jetzt bauen?"**
-   - **STOP: Before running ANY deploy command, you MUST ask: "Soll ich die Änderungen jetzt deployen?"**
-   - **WAIT: You MUST wait for explicit user confirmation ("ja", "yes", "build", "deploy", etc.)**
-   - **VERIFY: Make sure the user's "ja" or "yes" is specifically for build/deploy, not for something else**
-   - **IF IN DOUBT: Ask again specifically about build/deploy**
+3. **Request Build/Deploy Permission - MANDATORY:**
+   - **🚫 ABSOLUTELY FORBIDDEN: NEVER build or deploy automatically**
+   - **🛑 STOP: Before running ANY build command, you MUST ask: "Soll ich die Änderungen jetzt bauen?"**
+   - **🛑 STOP: Before running ANY deploy command, you MUST ask: "Soll ich die Änderungen jetzt deployen?"**
+   - **⏸️ WAIT: You MUST wait for explicit user confirmation ("ja", "yes", "build", "deploy", etc.)**
+   - **✅ VERIFY: Make sure the user's "ja" or "yes" is specifically for build/deploy, not for something else**
+   - **❓ IF IN DOUBT: Ask again specifically about build/deploy**
+   - **🔄 SEPARATE: Build and Deploy require SEPARATE confirmations - ask for each one individually**
 
 4. **Build and Deploy (after user confirmation):**
    - Run `npm run build` (or `npm run build:mobile` if needed)

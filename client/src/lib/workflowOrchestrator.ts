@@ -12,6 +12,8 @@ import { useChatReminders, markChatReminderAsRead, type ChatReminder } from './f
 class WorkflowOrchestrator {
   private chatReminderProcessor: (() => Promise<void>) | null = null;
   private processedReminders: Set<string> = new Set();
+  private initializedAt: number = Date.now();
+  private readonly STARTUP_GRACE_PERIOD = 2 * 60 * 1000; // 2 minutes grace period for startup
 
   constructor() {
     this.setupEventListeners();
@@ -170,9 +172,25 @@ class WorkflowOrchestrator {
    */
   private async performHealthCheck(): Promise<void> {
     try {
+      const now = Date.now();
+      
+      // Don't check for failed tasks during startup grace period
+      if (now - this.initializedAt < this.STARTUP_GRACE_PERIOD) {
+        return;
+      }
+      
       // Check if background tasks are running
       const tasks = backgroundTaskManager.getAllTasksStatus();
-      const failedTasks = tasks.filter(t => t.enabled && !t.lastRun && Date.now() > (t.nextRun || 0) + 60000);
+      
+      // Only flag tasks as failed if:
+      // 1. Task is enabled
+      // 2. Task has run at least once before (has lastRun)
+      // 3. Task missed its next scheduled run by more than 60 seconds
+      const failedTasks = tasks.filter(t => {
+        if (!t.enabled) return false;
+        if (!t.lastRun || !t.nextRun) return false; // Task hasn't run yet, still starting up
+        return now > t.nextRun + 60000; // More than 60 seconds overdue
+      });
       
       if (failedTasks.length > 0) {
         console.warn('[WorkflowOrchestrator] Some background tasks may have failed:', failedTasks);
@@ -192,6 +210,9 @@ class WorkflowOrchestrator {
    * Initialize workflow orchestrator
    */
   initialize(): void {
+    // Reset initialization time when actually initialized
+    this.initializedAt = Date.now();
+    
     console.log('[WorkflowOrchestrator] Initialized');
     
     // Setup background sync for critical functions

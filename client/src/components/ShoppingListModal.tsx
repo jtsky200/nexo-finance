@@ -26,17 +26,24 @@ export default function ShoppingListModal({ open, onClose }: ShoppingListModalPr
     currency: 'CHF',
   });
 
-  const categories = ['Lebensmittel', 'Haushalt', 'Hygiene', 'Elektronik', 'Kleidung', 'Sonstiges'];
+  const categories = [
+    t('shopping.categories.groceries', 'Lebensmittel'),
+    t('shopping.categories.household', 'Haushalt'),
+    t('shopping.categories.hygiene', 'Hygiene'),
+    t('shopping.categories.electronics', 'Elektronik'),
+    t('shopping.categories.clothing', 'Kleidung'),
+    t('shopping.categories.other', 'Sonstiges')
+  ];
 
   const handleAddItem = async () => {
     if (!newItem.item) {
-      toast.error('Bitte Artikel eingeben');
+      toast.error(t('shopping.enterItem', 'Bitte Artikel eingeben'));
       return;
     }
 
     try {
       await createShoppingItem(newItem);
-      toast.success('Artikel hinzugefügt');
+      toast.success(t('shopping.itemAdded', 'Artikel hinzugefügt'));
       setNewItem({
         item: '',
         quantity: 1,
@@ -45,25 +52,25 @@ export default function ShoppingListModal({ open, onClose }: ShoppingListModalPr
         currency: 'CHF',
       });
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('common.error', 'Fehler') + ': ' + error.message);
     }
   };
 
   const handleMarkAsBought = async (itemId: string, estimatedPrice: number) => {
     try {
       await markShoppingItemAsBought(itemId, estimatedPrice, true);
-      toast.success('Als eingekauft markiert und Ausgabe erstellt');
+      toast.success(t('shopping.markedAsBought', 'Als eingekauft markiert und Ausgabe erstellt'));
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('common.error', 'Fehler') + ': ' + error.message);
     }
   };
 
   const handleDelete = async (itemId: string) => {
     try {
       await deleteShoppingItem(itemId);
-      toast.success('Artikel gelöscht');
+      toast.success(t('shopping.itemDeleted', 'Artikel gelöscht'));
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('common.error', 'Fehler') + ': ' + error.message);
     }
   };
 
@@ -107,7 +114,7 @@ export default function ShoppingListModal({ open, onClose }: ShoppingListModalPr
               <Input
                 value={newItem.item}
                 onChange={(e) => setNewItem({ ...newItem, item: e.target.value })}
-                placeholder="z.B. Milch"
+                placeholder={t('shopping.itemPlaceholder', 'z.B. Milch')}
               />
             </div>
             <div>
@@ -175,7 +182,7 @@ export default function ShoppingListModal({ open, onClose }: ShoppingListModalPr
                       onClick={() => handleMarkAsBought(item.id, item.estimatedPrice)}
                     >
                       <Check className="h-4 w-4 mr-1" />
-                      Eingekauft
+                      {t('shopping.bought', 'Eingekauft')}
                     </Button>
                     <Button
                       size="sm"

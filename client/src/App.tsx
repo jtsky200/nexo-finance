@@ -16,10 +16,13 @@ import Taxes from "./pages/Taxes";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ResetPassword from "./pages/ResetPassword";
 import Onboarding from "./pages/Onboarding";
 import Calendar from "./pages/Calendar";
 import Documents from "./pages/Documents";
 import AIChat from "./pages/AIChat";
+import Help from "./pages/Help";
+import FAQ from "./pages/FAQ";
 
 function Router() {
   return (
@@ -27,6 +30,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/reset-password" component={ResetPassword} />
       <Route path="/onboarding" component={Onboarding} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/reminders" component={Reminders} />
@@ -39,6 +43,8 @@ function Router() {
       <Route path="/calendar" component={Calendar} />
       <Route path="/settings" component={Settings} />
       <Route path="/ai-chat" component={AIChat} />
+      <Route path="/help" component={Help} />
+      <Route path="/faq" component={FAQ} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

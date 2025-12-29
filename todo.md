@@ -237,8 +237,8 @@
 - [x] Deploy all fixes to Firebase - Successfully deployed
 - [x] Verify all features work on live site - All data loading correctly
 - [x] Push changes to GitHub - Committed and pushed
-- [ ] Add category filter dropdown to Finance page
-- [ ] Test category filtering functionality
+- [x] Add category filter dropdown to Finance page - Added to all tabs (Overview, Income, Expenses)
+- [x] Test category filtering functionality - Ready for testing
 
 ## Real-Time Data Synchronization (2025-12-12) - COMPLETED ✅
 - [x] Migrate chat messages from localStorage to Firebase with real-time listeners

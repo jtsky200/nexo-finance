@@ -1,6 +1,61 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Fix for AIChatDialog header background to match dialog body */
+[data-ai-chat-dialog] {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+}
+
+[data-ai-chat-dialog-header] {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  background-image: none !important;
+  /* Ensure no parent element affects it */
+  isolation: isolate !important;
+  /* Force the same background as the main content area */
+  background-clip: border-box !important;
+  background-origin: padding-box !important;
+  /* Remove any filters or effects */
+  filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  opacity: 1 !important;
+  /* Ensure no box-shadow on header */
+  box-shadow: none !important;
+  -webkit-box-shadow: none !important;
+  /* Remove border completely */
+  border: none !important;
+  border-bottom: none !important;
+  /* Ensure no transform or other visual effects */
+  transform: none !important;
+  will-change: auto !important;
+  /* Override any CSS variables */
+  --background: #ffffff !important;
+  --card: #ffffff !important;
+  --muted: #ffffff !important;
+  /* Force white on all possible background properties */
+  background-color: rgb(255, 255, 255) !important;
+  background: rgb(255, 255, 255) !important;
+}
+
+/* Ensure the main content area and header have identical backgrounds */
+[data-ai-chat-dialog] > [data-ai-chat-dialog-header],
+[data-ai-chat-dialog] > [class*="flex-1"] {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  background-image: none !important;
+}
+
+/* Override any Tailwind background classes */
+[data-ai-chat-dialog].bg-background,
+[data-ai-chat-dialog] .bg-background,
+[data-ai-chat-dialog] .bg-muted,
+[data-ai-chat-dialog] .bg-card {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -123,6 +178,28 @@
     @apply bg-background text-foreground;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
+  
+  /* Consistent number styling across the entire app */
+  /* Uses tabular (monospaced) numbers with proper zero styling */
+  input[type="text"],
+  input[type="number"],
+  input[inputmode="numeric"],
+  .font-mono,
+  [class*="tracking-"],
+  td,
+  th,
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+  
+  /* All numeric displays use system font for clean zeros */
+  input[inputmode="numeric"],
+  input[type="number"],
+  .numeric-input {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
   [type="button"]:not(:disabled),

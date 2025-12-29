@@ -18,6 +18,7 @@ import { usePeople, createPerson, deletePerson, updatePerson } from '@/lib/fireb
 // Note: PersonInvoicesDialog needs to be created or imported from shared location
 // For now, we'll comment it out and show a placeholder
 import { toast } from 'sonner';
+import ContextMenu from '@/components/ContextMenu';
 
 export default function MobilePeople() {
   const { t } = useTranslation();
@@ -103,7 +104,7 @@ export default function MobilePeople() {
     // Validate name
     const nameValidation = validateRequired(newPerson.name, 'Name');
     if (!nameValidation.valid) {
-      toast.error(nameValidation.error || 'Bitte geben Sie einen Namen ein');
+      toast.error(nameValidation.error || t('people.errors.nameRequired', 'Bitte geben Sie einen Namen ein'));
       return;
     }
 
@@ -111,7 +112,7 @@ export default function MobilePeople() {
     if (newPerson.email && newPerson.email.trim() !== '') {
       const emailValidation = validateEmail(newPerson.email);
       if (!emailValidation.valid) {
-        toast.error(emailValidation.error || 'Ungültige E-Mail-Adresse');
+        toast.error(emailValidation.error || t('people.errors.invalidEmail', 'Ungültige E-Mail-Adresse'));
         return;
       }
     }
@@ -120,7 +121,7 @@ export default function MobilePeople() {
     if (newPerson.phone && newPerson.phone.trim() !== '') {
       const phoneValidation = validatePhone(newPerson.phone);
       if (!phoneValidation.valid) {
-        toast.error(phoneValidation.error || 'Ungültige Telefonnummer');
+        toast.error(phoneValidation.error || t('people.errors.invalidPhone', 'Ungültige Telefonnummer'));
         return;
       }
     }
@@ -148,7 +149,7 @@ export default function MobilePeople() {
       }
 
       await createPerson(personData);
-      toast.success('Person hinzugefügt');
+      toast.success(t('people.personAdded', 'Person hinzugefügt'));
       setShowAddDialog(false);
       setNewPerson({
         name: '',
@@ -164,13 +165,13 @@ export default function MobilePeople() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Error adding person:', error);
       }
-      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+      toast.error(t('common.error', 'Fehler') + ': ' + (error.message || t('common.unknownError', 'Unbekannter Fehler')));
     }
   };
 
   const handleEditPerson = async () => {
     if (!selectedPerson || !newPerson.name) {
-      toast.error('Bitte geben Sie einen Namen ein');
+      toast.error(t('people.errors.nameRequired', 'Bitte geben Sie einen Namen ein'));
       return;
     }
 
@@ -197,7 +198,7 @@ export default function MobilePeople() {
       }
 
       await updatePerson(selectedPerson.id, personData);
-      toast.success('Person aktualisiert');
+      toast.success(t('people.personUpdated', 'Person aktualisiert'));
       setShowEditDialog(false);
       setSelectedPerson(null);
       await refetch();
@@ -205,7 +206,7 @@ export default function MobilePeople() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Error updating person:', error);
       }
-      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+      toast.error(t('common.error', 'Fehler') + ': ' + (error.message || t('common.unknownError', 'Unbekannter Fehler')));
     }
   };
 
@@ -214,14 +215,14 @@ export default function MobilePeople() {
 
     try {
       await deletePerson(deletePersonId);
-      toast.success('Person gelöscht');
+      toast.success(t('people.personDeleted', 'Person gelöscht'));
       setDeletePersonId(null);
       // No need to call refetch() - real-time listener (onSnapshot) will automatically update the UI
     } catch (error: any) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Error deleting person:', error);
       }
-      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+      toast.error(t('common.error', 'Fehler') + ': ' + (error.message || t('common.unknownError', 'Unbekannter Fehler')));
     }
   };
 
@@ -246,8 +247,36 @@ export default function MobilePeople() {
   const renderPersonCard = (person: any) => {
     const isChild = person.type === 'child';
     
+    // Build context menu actions
+    const contextMenuActions = [
+      {
+        id: 'view',
+        label: t('people.invoices', 'Rechnungen'),
+        icon: <Eye className="w-4 h-4" />,
+        onClick: () => {
+          setSelectedPerson(person);
+          setShowInvoicesDialog(true);
+        },
+        disabled: person.invoiceCount === 0,
+      },
+      {
+        id: 'edit',
+        label: t('common.edit', 'Bearbeiten'),
+        icon: <Edit2 className="w-4 h-4" />,
+        onClick: () => openEditDialog(person),
+      },
+      {
+        id: 'delete',
+        label: t('common.delete', 'Löschen'),
+        icon: <Trash2 className="w-4 h-4" />,
+        onClick: () => setDeletePersonId(person.id),
+        variant: 'destructive' as const,
+      },
+    ];
+    
     return (
-      <Card key={person.id} className="mobile-card">
+      <ContextMenu key={person.id} actions={contextMenuActions}>
+        <Card className="mobile-card">
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -259,7 +288,7 @@ export default function MobilePeople() {
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2 mb-2">
                 <h3 className="font-semibold text-sm">{person.name}</h3>
-                {isChild && <Badge variant="outline" className="text-xs">Kind</Badge>}
+                {isChild && <Badge variant="outline" className="text-xs">{t('people.child', 'Kind')}</Badge>}
               </div>
               
               {!isChild && (
@@ -283,12 +312,12 @@ export default function MobilePeople() {
                 <div className="mt-2 space-y-1">
                   {person.incomingOpen > 0 && (
                     <p className="text-xs text-green-600">
-                      Forderungen: {formatAmount(person.incomingOpen)}
+                      {t('people.claims', 'Forderungen')}: {formatAmount(person.incomingOpen)}
                     </p>
                   )}
                   {person.outgoingOpen > 0 && (
                     <p className="text-xs text-red-600">
-                      Verbindlichkeiten: {formatAmount(person.outgoingOpen)}
+                      {t('people.liabilities', 'Verbindlichkeiten')}: {formatAmount(person.outgoingOpen)}
                     </p>
                   )}
                 </div>
@@ -296,7 +325,7 @@ export default function MobilePeople() {
               
               {person.invoiceCount > 0 && (
                 <p className="text-xs text-muted-foreground mt-1">
-                  {person.invoiceCount} Rechnung(en)
+                  {person.invoiceCount} {t('people.invoices', 'Rechnung(en)')}
                 </p>
               )}
               
@@ -312,7 +341,7 @@ export default function MobilePeople() {
                     className="h-8 min-h-[44px] flex-1"
                   >
                     <Eye className="w-4 h-4 mr-1" />
-                    Rechnungen
+                    {t('people.invoices', 'Rechnungen')}
                   </Button>
                 )}
                 
@@ -338,17 +367,18 @@ export default function MobilePeople() {
           </div>
         </CardContent>
       </Card>
+      </ContextMenu>
     );
   };
 
   return (
-    <MobileLayout title="Personen & Schulden" showSidebar={true}>
+    <MobileLayout title={t('people.title', 'Personen & Schulden')} showSidebar={true}>
       {/* Search */}
       <div className="mobile-card mb-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Suchen..."
+            placeholder={t('common.search', 'Suchen...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10 h-10 min-h-[44px]"
@@ -373,7 +403,7 @@ export default function MobilePeople() {
         className="w-full mb-4 h-12 min-h-[44px]"
       >
         <Plus className="w-5 h-5 mr-2" />
-        Person hinzufügen
+        {t('people.addPerson', 'Person hinzufügen')}
       </Button>
 
       {/* Tabs */}
@@ -381,20 +411,20 @@ export default function MobilePeople() {
         <TabsList className="grid w-full grid-cols-2 h-12 min-h-[44px]">
           <TabsTrigger value="household" className="h-10 min-h-[44px]">
             <Home className="w-4 h-4 mr-2" />
-            Haushalt
+            {t('people.household', 'Haushalt')}
           </TabsTrigger>
           <TabsTrigger value="external" className="h-10 min-h-[44px]">
             <Users className="w-4 h-4 mr-2" />
-            Externe
+            {t('people.external', 'Externe')}
           </TabsTrigger>
         </TabsList>
         
         <TabsContent value="household" className="mt-4">
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">Lädt...</div>
+            <div className="text-center py-8 text-muted-foreground">{t('common.loading', 'Lädt...')}</div>
           ) : filteredHousehold.length === 0 ? (
             <div className="mobile-card text-center py-8">
-              <p className="text-muted-foreground">Keine Personen gefunden</p>
+              <p className="text-muted-foreground">{t('people.noPeopleFound', 'Keine Personen gefunden')}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -405,10 +435,10 @@ export default function MobilePeople() {
         
         <TabsContent value="external" className="mt-4">
           {isLoading ? (
-            <div className="text-center py-8 text-muted-foreground">Lädt...</div>
+            <div className="text-center py-8 text-muted-foreground">{t('common.loading', 'Lädt...')}</div>
           ) : filteredExternal.length === 0 ? (
             <div className="mobile-card text-center py-8">
-              <p className="text-muted-foreground">Keine Personen gefunden</p>
+              <p className="text-muted-foreground">{t('people.noPeopleFound', 'Keine Personen gefunden')}</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -422,25 +452,25 @@ export default function MobilePeople() {
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3">
-            <DialogTitle className="text-lg font-semibold">Person hinzufügen</DialogTitle>
+            <DialogTitle className="text-lg font-semibold">{t('people.addPerson', 'Person hinzufügen')}</DialogTitle>
             <DialogDescription className="sr-only">
-              Erstellen Sie eine neue Person mit Name, E-Mail, Telefonnummer und optionalen Notizen
+              {t('people.addPersonDescription', 'Erstellen Sie eine neue Person mit Name, E-Mail, Telefonnummer und optionalen Notizen')}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-3 px-5 pb-2">
             <div>
-              <Label>Name *</Label>
+              <Label>{t('people.name', 'Name')} *</Label>
               <Input
                 value={newPerson.name}
                 onChange={(e) => setNewPerson({ ...newPerson, name: e.target.value })}
-                placeholder="Name"
+                placeholder={t('people.name', 'Name')}
                 className="h-10 min-h-[44px] mt-1"
               />
             </div>
             
             <div>
-              <Label>Typ *</Label>
+              <Label>{t('people.type', 'Typ')} *</Label>
               <Select
                 value={newPerson.type}
                 onValueChange={(value: 'household' | 'external' | 'child') => 
@@ -451,9 +481,9 @@ export default function MobilePeople() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="household">Haushalt</SelectItem>
-                  <SelectItem value="external">Externe Person</SelectItem>
-                  <SelectItem value="child">Kind</SelectItem>
+                  <SelectItem value="household">{t('people.types.household', 'Haushalt')}</SelectItem>
+                  <SelectItem value="external">{t('people.types.external', 'Externe Person')}</SelectItem>
+                  <SelectItem value="child">{t('people.types.child', 'Kind')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -461,7 +491,7 @@ export default function MobilePeople() {
             {newPerson.type !== 'child' && (
               <>
                 <div>
-                  <Label>E-Mail</Label>
+                  <Label>{t('people.email', 'E-Mail')}</Label>
                   <Input
                     type="email"
                     value={newPerson.email}
@@ -472,7 +502,7 @@ export default function MobilePeople() {
                 </div>
                 
                 <div>
-                  <Label>Telefon</Label>
+                  <Label>{t('people.phone', 'Telefon')}</Label>
                   <Input
                     type="tel"
                     value={newPerson.phone}
@@ -486,7 +516,7 @@ export default function MobilePeople() {
             
             {newPerson.type === 'external' && (
               <div>
-                <Label>Beziehung</Label>
+                <Label>{t('people.relationship', 'Beziehung')}</Label>
                 <Select
                   value={newPerson.relationship}
                   onValueChange={(value: 'creditor' | 'debtor' | 'both') => 
@@ -497,16 +527,16 @@ export default function MobilePeople() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="both">Beides</SelectItem>
-                    <SelectItem value="creditor">Gläubiger</SelectItem>
-                    <SelectItem value="debtor">Schuldner</SelectItem>
+                    <SelectItem value="both">{t('people.relationships.both', 'Beides')}</SelectItem>
+                    <SelectItem value="creditor">{t('people.relationships.creditor', 'Gläubiger')}</SelectItem>
+                    <SelectItem value="debtor">{t('people.relationships.debtor', 'Schuldner')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             )}
             
             <div>
-              <Label>Währung</Label>
+              <Label>{t('people.currency', 'Währung')}</Label>
               <Select
                 value={newPerson.currency}
                 onValueChange={(value) => setNewPerson({ ...newPerson, currency: value })}
@@ -523,11 +553,11 @@ export default function MobilePeople() {
             </div>
             
             <div>
-              <Label>Notizen</Label>
+              <Label>{t('people.notes', 'Notizen')}</Label>
               <Textarea
                 value={newPerson.notes}
                 onChange={(e) => setNewPerson({ ...newPerson, notes: e.target.value })}
-                placeholder="Notizen..."
+                placeholder={t('people.notesPlaceholder', 'Notizen...')}
                 className="mt-1 min-h-[100px]"
               />
             </div>
@@ -535,10 +565,10 @@ export default function MobilePeople() {
           
           <DialogFooter className="px-5 pb-3 pt-2 gap-2.5">
             <Button variant="outline" onClick={() => setShowAddDialog(false)} className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium">
-              Abbrechen
+              {t('common.cancel', 'Abbrechen')}
             </Button>
             <Button onClick={handleAddPerson} className="h-10 min-h-[44px]">
-              Hinzufügen
+              {t('common.add', 'Hinzufügen')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -548,25 +578,25 @@ export default function MobilePeople() {
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3">
-            <DialogTitle className="text-lg font-semibold">Person bearbeiten</DialogTitle>
+            <DialogTitle className="text-lg font-semibold">{t('people.editPerson', 'Person bearbeiten')}</DialogTitle>
             <DialogDescription className="sr-only">
-              Bearbeiten Sie die Informationen der ausgewählten Person
+              {t('people.editPersonDescription', 'Bearbeiten Sie die Informationen der ausgewählten Person')}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-3 px-5 pb-2">
             <div>
-              <Label>Name *</Label>
+              <Label>{t('people.name', 'Name')} *</Label>
               <Input
                 value={newPerson.name}
                 onChange={(e) => setNewPerson({ ...newPerson, name: e.target.value })}
-                placeholder="Name"
+                placeholder={t('people.name', 'Name')}
                 className="h-10 min-h-[44px] mt-1"
               />
             </div>
             
             <div>
-              <Label>Typ *</Label>
+              <Label>{t('people.type', 'Typ')} *</Label>
               <Select
                 value={newPerson.type}
                 onValueChange={(value: 'household' | 'external' | 'child') => 
@@ -577,9 +607,9 @@ export default function MobilePeople() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="household">Haushalt</SelectItem>
-                  <SelectItem value="external">Externe Person</SelectItem>
-                  <SelectItem value="child">Kind</SelectItem>
+                  <SelectItem value="household">{t('people.types.household', 'Haushalt')}</SelectItem>
+                  <SelectItem value="external">{t('people.types.external', 'Externe Person')}</SelectItem>
+                  <SelectItem value="child">{t('people.types.child', 'Kind')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -587,7 +617,7 @@ export default function MobilePeople() {
             {newPerson.type !== 'child' && (
               <>
                 <div>
-                  <Label>E-Mail</Label>
+                  <Label>{t('people.email', 'E-Mail')}</Label>
                   <Input
                     type="email"
                     value={newPerson.email}
@@ -598,7 +628,7 @@ export default function MobilePeople() {
                 </div>
                 
                 <div>
-                  <Label>Telefon</Label>
+                  <Label>{t('people.phone', 'Telefon')}</Label>
                   <Input
                     type="tel"
                     value={newPerson.phone}
@@ -612,7 +642,7 @@ export default function MobilePeople() {
             
             {newPerson.type === 'external' && (
               <div>
-                <Label>Beziehung</Label>
+                <Label>{t('people.relationship', 'Beziehung')}</Label>
                 <Select
                   value={newPerson.relationship}
                   onValueChange={(value: 'creditor' | 'debtor' | 'both') => 
@@ -623,16 +653,16 @@ export default function MobilePeople() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="both">Beides</SelectItem>
-                    <SelectItem value="creditor">Gläubiger</SelectItem>
-                    <SelectItem value="debtor">Schuldner</SelectItem>
+                    <SelectItem value="both">{t('people.relationships.both', 'Beides')}</SelectItem>
+                    <SelectItem value="creditor">{t('people.relationships.creditor', 'Gläubiger')}</SelectItem>
+                    <SelectItem value="debtor">{t('people.relationships.debtor', 'Schuldner')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             )}
             
             <div>
-              <Label>Währung</Label>
+              <Label>{t('people.currency', 'Währung')}</Label>
               <Select
                 value={newPerson.currency}
                 onValueChange={(value) => setNewPerson({ ...newPerson, currency: value })}
@@ -649,11 +679,11 @@ export default function MobilePeople() {
             </div>
             
             <div>
-              <Label>Notizen</Label>
+              <Label>{t('people.notes', 'Notizen')}</Label>
               <Textarea
                 value={newPerson.notes}
                 onChange={(e) => setNewPerson({ ...newPerson, notes: e.target.value })}
-                placeholder="Notizen..."
+                placeholder={t('people.notesPlaceholder', 'Notizen...')}
                 className="mt-1 min-h-[100px]"
               />
             </div>
@@ -661,10 +691,10 @@ export default function MobilePeople() {
           
           <DialogFooter className="px-5 pb-3 pt-2 gap-2.5">
             <Button variant="outline" onClick={() => setShowEditDialog(false)} className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium">
-              Abbrechen
+              {t('common.cancel', 'Abbrechen')}
             </Button>
             <Button onClick={handleEditPerson} className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium">
-              Aktualisieren
+              {t('common.update', 'Aktualisieren')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -675,13 +705,13 @@ export default function MobilePeople() {
         <Dialog open={!!deletePersonId} onOpenChange={() => setDeletePersonId(null)}>
           <DialogContent className="max-w-sm">
             <DialogHeader>
-              <DialogTitle>Person löschen?</DialogTitle>
+              <DialogTitle>{t('people.confirmDelete', 'Person löschen?')}</DialogTitle>
               <DialogDescription className="sr-only">
-                Bestätigen Sie das Löschen dieser Person. Diese Aktion kann nicht rückgängig gemacht werden.
+                {t('people.confirmDeleteDescription', 'Möchten Sie diese Person wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')}
               </DialogDescription>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
-              Möchten Sie diese Person wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+              {t('people.confirmDeleteDescription', 'Möchten Sie diese Person wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.')}
             </p>
             <DialogFooter className="px-5 pb-3 pt-2 gap-2.5">
               <Button 
@@ -689,14 +719,14 @@ export default function MobilePeople() {
                 onClick={() => setDeletePersonId(null)}
                 className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium"
               >
-                Abbrechen
+                {t('common.cancel', 'Abbrechen')}
               </Button>
               <Button 
                 variant="destructive" 
                 onClick={handleDeletePerson}
                 className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium"
               >
-                Löschen
+                {t('common.delete', 'Löschen')}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -709,19 +739,19 @@ export default function MobilePeople() {
         <Dialog open={showInvoicesDialog} onOpenChange={setShowInvoicesDialog}>
           <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
             <DialogHeader className="px-5 pt-5 pb-3">
-              <DialogTitle className="text-lg font-semibold">Rechnungen - {selectedPerson.name}</DialogTitle>
+              <DialogTitle className="text-lg font-semibold">{t('people.invoices', 'Rechnungen')} - {selectedPerson.name}</DialogTitle>
               <DialogDescription className="sr-only">
-                Verwalten Sie Rechnungen für diese Person
+                {t('people.invoicesDescription', 'Verwalten Sie Rechnungen für diese Person')}
               </DialogDescription>
             </DialogHeader>
             <div className="px-5 pb-2">
               <p className="text-sm text-muted-foreground">
-                Die Rechnungsverwaltung wird in einer zukünftigen Version verfügbar sein.
+                {t('people.invoicesComingSoon', 'Die Rechnungsverwaltung wird in einer zukünftigen Version verfügbar sein.')}
               </p>
             </div>
             <DialogFooter className="px-5 pb-3 pt-2">
               <Button variant="outline" onClick={() => setShowInvoicesDialog(false)} className="h-11 min-h-[44px] w-full rounded-xl text-sm font-medium">
-                Schliessen
+                {t('common.close', 'Schliessen')}
               </Button>
             </DialogFooter>
           </DialogContent>

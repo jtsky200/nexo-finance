@@ -22,6 +22,8 @@ import { hapticSuccess, hapticError, hapticSelection } from '@/lib/hapticFeedbac
 import { Skeleton } from '@/components/ui/skeleton';
 import { exportRemindersToCSV } from '@/lib/exportUtils';
 import { Download } from 'lucide-react';
+import ContextMenu from '@/components/ContextMenu';
+import { RefreshCw } from 'lucide-react';
 
 export default function MobileReminders() {
   const { t } = useTranslation();
@@ -62,9 +64,9 @@ export default function MobileReminders() {
 
   const getTypeLabel = (type: string) => {
     switch (type) {
-      case 'termin': return 'Termin';
-      case 'zahlung': return 'Zahlung';
-      case 'aufgabe': return 'Aufgabe';
+      case 'termin': return t('reminders.types.termin');
+      case 'zahlung': return t('reminders.types.zahlung');
+      case 'aufgabe': return t('reminders.types.aufgabe');
       default: return type;
     }
   };
@@ -74,14 +76,14 @@ export default function MobileReminders() {
     const due = dueDate instanceof Date ? dueDate : new Date(dueDate);
     
     if (status === 'erledigt') {
-      return <Badge className="bg-green-500 text-white">Erledigt</Badge>;
+      return <Badge className="bg-green-500 text-white">{t('reminders.status.done')}</Badge>;
     }
     
     if (due < now) {
-      return <Badge className="bg-red-500 text-white">Überfällig</Badge>;
+      return <Badge className="bg-red-500 text-white">{t('reminders.status.overdue')}</Badge>;
     }
     
-    return <Badge className="bg-blue-500 text-white">Offen</Badge>;
+    return <Badge className="bg-blue-500 text-white">{t('reminders.status.open')}</Badge>;
   };
 
   const filteredReminders = useMemo(() => {
@@ -177,7 +179,7 @@ export default function MobileReminders() {
 
   const handleSubmit = async () => {
     if (!formData.title || !formData.dueDate) {
-      toast.error('Bitte füllen Sie alle Pflichtfelder aus.');
+      toast.error(t('reminders.errors.required'));
       return;
     }
 
@@ -199,10 +201,10 @@ export default function MobileReminders() {
 
       if (editingReminder) {
         await updateReminder(editingReminder.id, reminderData);
-        toast.success('Erinnerung aktualisiert');
+        toast.success(t('reminders.updated'));
       } else {
         await createReminder(reminderData);
-        toast.success('Erinnerung erstellt');
+        toast.success(t('reminders.created'));
       }
       
       await refetch();
@@ -222,7 +224,7 @@ export default function MobileReminders() {
   const handleDelete = async (id: string) => {
     try {
       await deleteReminder(id);
-      toast.success('Erinnerung gelöscht');
+      toast.success(t('reminders.deleted'));
       hapticSuccess();
       await refetch();
       setDeleteConfirmId(null);
@@ -239,7 +241,7 @@ export default function MobileReminders() {
     try {
       const newStatus = reminder.status === 'erledigt' ? 'offen' : 'erledigt';
       await updateReminder(reminder.id, { status: newStatus } as any);
-      toast.success(newStatus === 'erledigt' ? 'Als erledigt markiert' : 'Wieder geöffnet');
+      toast.success(newStatus === 'erledigt' ? t('reminders.markedAsDone') : t('reminders.reopened'));
       hapticSuccess();
       await refetch();
     } catch (error) {
@@ -264,23 +266,23 @@ export default function MobileReminders() {
   }, [reminders]);
 
   return (
-    <MobileLayout title="Erinnerungen" showSidebar={true}>
+    <MobileLayout title={t('reminders.title')} showSidebar={true}>
       {/* Stats Cards */}
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="mobile-card">
-          <p className="text-xs text-muted-foreground mb-1">Gesamt</p>
+          <p className="text-xs text-muted-foreground mb-1">{t('reminders.stats.total')}</p>
           <p className="text-xl font-semibold">{stats.total}</p>
         </div>
         <div className="mobile-card">
-          <p className="text-xs text-muted-foreground mb-1">Offen</p>
+          <p className="text-xs text-muted-foreground mb-1">{t('reminders.stats.open')}</p>
           <p className="text-xl font-semibold">{stats.open}</p>
         </div>
         <div className="mobile-card">
-          <p className="text-xs text-muted-foreground mb-1">Erledigt</p>
+          <p className="text-xs text-muted-foreground mb-1">{t('reminders.stats.done')}</p>
           <p className="text-xl font-semibold">{stats.done}</p>
         </div>
         <div className="mobile-card">
-          <p className="text-xs text-muted-foreground mb-1">Überfällig</p>
+          <p className="text-xs text-muted-foreground mb-1">{t('reminders.stats.overdue')}</p>
           <p className="text-xl font-semibold text-red-500">{stats.overdue}</p>
         </div>
       </div>
@@ -289,11 +291,11 @@ export default function MobileReminders() {
       <div className="mobile-card mb-4">
         <div className="space-y-3">
           <div>
-            <Label className="text-xs text-muted-foreground mb-2 block">Suche</Label>
+            <Label className="text-xs text-muted-foreground mb-2 block">{t('reminders.search')}</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Suchen..."
+                placeholder={t('reminders.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 h-10 min-h-[44px]"
@@ -303,30 +305,30 @@ export default function MobileReminders() {
           
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs text-muted-foreground mb-2 block">Typ</Label>
+              <Label className="text-xs text-muted-foreground mb-2 block">{t('reminders.type')}</Label>
               <Select value={filterType} onValueChange={setFilterType}>
                 <SelectTrigger className="h-10 min-h-[44px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Alle</SelectItem>
-                  <SelectItem value="termin">Termine</SelectItem>
-                  <SelectItem value="zahlung">Zahlungen</SelectItem>
-                  <SelectItem value="aufgabe">Aufgaben</SelectItem>
+                  <SelectItem value="all">{t('reminders.filterAll')}</SelectItem>
+                  <SelectItem value="termin">{t('reminders.types.termin')}</SelectItem>
+                  <SelectItem value="zahlung">{t('reminders.types.zahlung')}</SelectItem>
+                  <SelectItem value="aufgabe">{t('reminders.types.aufgabe')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             
             <div>
-              <Label className="text-xs text-muted-foreground mb-2 block">Status</Label>
+              <Label className="text-xs text-muted-foreground mb-2 block">{t('reminders.status.label')}</Label>
               <Select value={filterStatus} onValueChange={setFilterStatus}>
                 <SelectTrigger className="h-10 min-h-[44px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Alle</SelectItem>
-                  <SelectItem value="offen">Offen</SelectItem>
-                  <SelectItem value="erledigt">Erledigt</SelectItem>
+                  <SelectItem value="all">{t('reminders.filterAll')}</SelectItem>
+                  <SelectItem value="offen">{t('reminders.status.open')}</SelectItem>
+                  <SelectItem value="erledigt">{t('reminders.status.done')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -344,7 +346,7 @@ export default function MobileReminders() {
           className="w-auto mx-auto h-12 min-h-[44px]"
         >
           <Plus className="w-5 h-5 mr-2" />
-          Erinnerung hinzufügen
+          {t('reminders.add')}
         </Button>
         {filteredReminders.length > 0 && (
           <button
@@ -354,7 +356,7 @@ export default function MobileReminders() {
               hapticSuccess();
             }}
             className="px-4 rounded-lg bg-muted hover:bg-muted/80 transition-colors flex items-center justify-center min-h-[48px]"
-            aria-label="Als CSV exportieren"
+            aria-label={t('reminders.exportCSV')}
           >
             <Download className="w-5 h-5" />
           </button>
@@ -384,7 +386,7 @@ export default function MobileReminders() {
         </div>
       ) : filteredReminders.length === 0 ? (
         <div className="mobile-card text-center py-8">
-          <p className="text-muted-foreground">Keine Erinnerungen gefunden</p>
+          <p className="text-muted-foreground">{t('reminders.noRemindersFound')}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -393,9 +395,56 @@ export default function MobileReminders() {
               ? reminder.dueDate 
               : new Date(reminder.dueDate);
             
+            // Build context menu actions
+            const contextMenuActions = [];
+            
+            if (reminder.status === 'offen') {
+              contextMenuActions.push({
+                id: 'complete',
+                label: t('reminders.markAsDone', 'Als erledigt markieren'),
+                icon: <CheckCircle2 className="w-4 h-4" />,
+                onClick: () => {
+                  hapticSelection();
+                  handleStatusToggle(reminder);
+                },
+              });
+            } else {
+              contextMenuActions.push({
+                id: 'reopen',
+                label: t('reminders.reopen', 'Wieder öffnen'),
+                icon: <RefreshCw className="w-4 h-4" />,
+                onClick: () => {
+                  hapticSelection();
+                  handleStatusToggle(reminder);
+                },
+              });
+            }
+            
+            contextMenuActions.push({
+              id: 'edit',
+              label: t('common.edit', 'Bearbeiten'),
+              icon: <Edit2 className="w-4 h-4" />,
+              onClick: () => {
+                hapticSelection();
+                openDialog(reminder);
+              },
+            });
+            
+            contextMenuActions.push({
+              id: 'delete',
+              label: t('common.delete', 'Löschen'),
+              icon: <Trash2 className="w-4 h-4" />,
+              onClick: () => {
+                hapticSelection();
+                setDeleteConfirmId(reminder.id);
+              },
+              variant: 'destructive' as const,
+            });
+
             return (
-              <Card key={reminder.id} className="mobile-card">
-                <CardContent className="p-4">
+              <ContextMenu key={reminder.id} actions={contextMenuActions}>
+                <Card className="mobile-card">
+                  <CardContent className="p-4">
                   <div className="flex items-start gap-3">
                     <div className="mt-1">
                       {getTypeIcon(reminder.type)}
@@ -446,12 +495,12 @@ export default function MobileReminders() {
                           {reminder.status === 'erledigt' ? (
                             <>
                               <CheckCircle2 className="w-4 h-4 mr-1" />
-                              Wieder öffnen
+                              {t('reminders.reopen')}
                             </>
                           ) : (
                             <>
                               <CheckCircle2 className="w-4 h-4 mr-1" />
-                              Als erledigt markieren
+                              {t('reminders.markAsDone')}
                             </>
                           )}
                         </Button>
@@ -480,13 +529,14 @@ export default function MobileReminders() {
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
-                    </div>
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                </div>
+              </CardContent>
+            </Card>
+            </ContextMenu>
+          );
+        })}
+      </div>
       )}
 
       {/* Add/Edit Dialog */}
@@ -494,26 +544,26 @@ export default function MobileReminders() {
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3">
             <DialogTitle className="text-lg font-semibold">
-              {editingReminder ? 'Erinnerung bearbeiten' : 'Erinnerung hinzufügen'}
+              {editingReminder ? t('reminders.edit') : t('reminders.add')}
             </DialogTitle>
             <DialogDescription className="sr-only">
-              {editingReminder ? 'Bearbeiten Sie die Details der Erinnerung' : 'Erstellen Sie eine neue Erinnerung mit Titel, Typ, Datum und optionalen Notizen'}
+              {editingReminder ? t('reminders.dialogDescription') : t('reminders.dialogDescription')}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-3 px-5 pb-2">
             <div>
-              <Label>Titel *</Label>
+              <Label>{t('reminders.reminderTitle')} *</Label>
               <Input
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                placeholder="Titel"
+                placeholder={t('reminders.titlePlaceholder')}
                 className="h-10 min-h-[44px] mt-1"
               />
             </div>
             
             <div>
-              <Label>Typ *</Label>
+              <Label>{t('reminders.type')} *</Label>
               <Select
                 value={formData.type}
                 onValueChange={(value: 'termin' | 'zahlung' | 'aufgabe') => 
@@ -524,15 +574,15 @@ export default function MobileReminders() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="termin">Termin</SelectItem>
-                  <SelectItem value="zahlung">Zahlung</SelectItem>
-                  <SelectItem value="aufgabe">Aufgabe</SelectItem>
+                  <SelectItem value="termin">{t('reminders.types.termin')}</SelectItem>
+                  <SelectItem value="zahlung">{t('reminders.types.zahlung')}</SelectItem>
+                  <SelectItem value="aufgabe">{t('reminders.types.aufgabe')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             
             <div>
-              <Label>Datum & Uhrzeit *</Label>
+              <Label>{t('reminders.dueDate')} *</Label>
               <Input
                 type="text"
                 placeholder="DD.MM.YYYY HH:mm"
@@ -567,13 +617,13 @@ export default function MobileReminders() {
                 checked={formData.isAllDay}
                 onCheckedChange={(checked) => setFormData({ ...formData, isAllDay: checked })}
               />
-              <Label>Ganztägig</Label>
+              <Label>{t('reminders.allDay')}</Label>
             </div>
             
             {formData.type === 'zahlung' && (
               <>
                 <div>
-                  <Label>Betrag</Label>
+                  <Label>{t('reminders.amount')}</Label>
                   <Input
                     type="number"
                     step="0.01"
@@ -585,7 +635,7 @@ export default function MobileReminders() {
                 </div>
                 
                 <div>
-                  <Label>Währung</Label>
+                  <Label>{t('reminders.currency')}</Label>
                   <Select
                     value={formData.currency}
                     onValueChange={(value) => setFormData({ ...formData, currency: value })}
@@ -604,11 +654,11 @@ export default function MobileReminders() {
             )}
             
             <div>
-              <Label>Notizen</Label>
+              <Label>{t('reminders.notes')}</Label>
               <Textarea
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Notizen..."
+                placeholder={t('reminders.notesPlaceholder')}
                 className="mt-1 min-h-[100px]"
               />
             </div>
@@ -616,14 +666,14 @@ export default function MobileReminders() {
           
           <DialogFooter className="px-5 pb-3 pt-2 gap-2.5">
             <Button variant="outline" onClick={closeDialog} className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium">
-              Abbrechen
+              {t('common.cancel')}
             </Button>
             <Button 
               onClick={handleSubmit} 
               disabled={isSubmitting}
               className="h-11 min-h-[44px] flex-1 rounded-xl text-sm font-medium"
             >
-              {isSubmitting ? 'Speichert...' : editingReminder ? 'Aktualisieren' : 'Erstellen'}
+              {isSubmitting ? t('common.saving') : editingReminder ? t('common.update') : t('common.create')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -643,13 +693,13 @@ export default function MobileReminders() {
             showCloseButton={false}
           >
             <DialogHeader className="text-center">
-              <DialogTitle className="text-lg font-semibold">Erinnerung löschen?</DialogTitle>
+              <DialogTitle className="text-lg font-semibold">{t('reminders.confirmDelete')}</DialogTitle>
               <DialogDescription className="sr-only">
-                Bestätigen Sie das Löschen dieser Erinnerung. Diese Aktion kann nicht rückgängig gemacht werden.
+                {t('reminders.confirmDeleteDescription')}
               </DialogDescription>
             </DialogHeader>
             <p className="text-sm text-muted-foreground text-center leading-relaxed">
-              Möchten Sie diese Erinnerung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+              {t('reminders.confirmDeleteDescription')}
             </p>
             <DialogFooter className="flex-row gap-3 pt-2">
               <Button 
@@ -657,14 +707,14 @@ export default function MobileReminders() {
                 onClick={() => setDeleteConfirmId(null)}
                 className="h-10 min-h-[44px] flex-1 text-sm font-medium"
               >
-                Abbrechen
+                {t('common.cancel')}
               </Button>
               <Button 
                 variant="destructive" 
                 onClick={() => handleDelete(deleteConfirmId)}
                 className="h-10 min-h-[44px] flex-1 text-sm font-medium"
               >
-                Löschen
+                {t('common.delete')}
               </Button>
             </DialogFooter>
           </DialogContent>

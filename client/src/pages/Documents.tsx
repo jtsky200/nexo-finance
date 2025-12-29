@@ -18,8 +18,9 @@ import { usePeople } from '@/lib/firebaseHooks';
 import { 
   FileText, Search, Filter, Upload, FolderOpen, 
   User, Clock, Eye, Trash2, RefreshCw,
-  ScanLine, FileImage, File, AlertCircle, Check, X, Loader2
+  ScanLine, FileImage, File, AlertCircle, Check, X, Loader2, Download
 } from 'lucide-react';
+import ContextMenu from '@/components/ContextMenu';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 
@@ -75,7 +76,7 @@ export default function Documents() {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [tempDocumentData, setTempDocumentData] = useState<string | null>(null); // base64 data
   const [assignPersonId, setAssignPersonId] = useState<string>('');
-  const [assignFolder, setAssignFolder] = useState<string>('Sonstiges');
+  const [assignFolder, setAssignFolder] = useState<string>(t('documents.folders.other', 'Sonstiges'));
   const [isSaving, setIsSaving] = useState(false);
   
   // Preview state
@@ -83,18 +84,18 @@ export default function Documents() {
   const [showPreview, setShowPreview] = useState(false);
 
   const folders = [
-    { value: 'all', label: 'Alle Ordner' },
-    { value: 'Rechnungen', label: 'Rechnungen' },
-    { value: 'Termine', label: 'Termine' },
-    { value: 'Verträge', label: 'Verträge' },
-    { value: 'Sonstiges', label: 'Sonstiges' },
+    { value: 'all', label: t('documents.allFolders', 'Alle Ordner') },
+    { value: 'Rechnungen', label: t('documents.folders.invoices', 'Rechnungen') },
+    { value: 'Termine', label: t('documents.folders.appointments', 'Termine') },
+    { value: 'Verträge', label: t('documents.folders.contracts', 'Verträge') },
+    { value: 'Sonstiges', label: t('documents.folders.other', 'Sonstiges') },
   ];
 
   const documentFolders = [
-    { value: 'Rechnungen', label: 'Rechnungen' },
-    { value: 'Termine', label: 'Termine' },
-    { value: 'Verträge', label: 'Verträge' },
-    { value: 'Sonstiges', label: 'Sonstiges' },
+    { value: 'Rechnungen', label: t('documents.folders.invoices', 'Rechnungen') },
+    { value: 'Termine', label: t('documents.folders.appointments', 'Termine') },
+    { value: 'Verträge', label: t('documents.folders.contracts', 'Verträge') },
+    { value: 'Sonstiges', label: t('documents.folders.other', 'Sonstiges') },
   ];
 
   const fetchDocuments = useCallback(async () => {
@@ -106,7 +107,7 @@ export default function Documents() {
       setDocuments(data.documents || []);
     } catch (error) {
       // Error fetching documents - silently fail
-      toast.error('Fehler beim Laden der Dokumente');
+      toast.error(t('documents.errors.loadError', 'Fehler beim Laden der Dokumente'));
     } finally {
       setLoading(false);
     }
@@ -132,13 +133,13 @@ export default function Documents() {
     const validExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt'];
     
     if (!validTypes.includes(file.type) && !validExts.includes(fileExt || '')) {
-      toast.error('Ungültiges Dateiformat. Unterstützt: JPG, PNG, PDF, DOCX, XLSX, CSV, TXT');
+      toast.error(t('documents.invalidFileFormat', 'Ungültiges Dateiformat. Unterstützt: JPG, PNG, PDF, DOCX, XLSX, CSV, TXT'));
       return;
     }
     
     // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
-      toast.error('Datei ist zu gross (max. 10MB)');
+      toast.error(t('documents.fileTooLarge', 'Datei ist zu gross (max. 10MB)'));
       return;
     }
     
@@ -171,7 +172,7 @@ export default function Documents() {
       setUploadProgress(50);
       
       // Analyze document - send filename for extension detection
-      toast.info('Dokument wird analysiert...');
+      toast.info(t('documents.analyzing', 'Dokument wird analysiert...'));
       const analyzeDocumentFunc = httpsCallable(functions, 'analyzeDocument');
       const result = await analyzeDocumentFunc({ 
         fileData: base64,
@@ -185,20 +186,20 @@ export default function Documents() {
       
       // Set default folder based on analysis
       if (analysisData.type === 'rechnung') {
-        setAssignFolder('Rechnungen');
+        setAssignFolder(t('documents.folders.invoices', 'Rechnungen'));
       } else if (analysisData.type === 'termin') {
-        setAssignFolder('Termine');
+        setAssignFolder(t('documents.folders.appointments', 'Termine'));
       } else if (analysisData.type === 'vertrag') {
-        setAssignFolder('Verträge');
+        setAssignFolder(t('documents.folders.contracts', 'Verträge'));
       } else {
-        setAssignFolder('Sonstiges');
+        setAssignFolder(t('documents.folders.other', 'Sonstiges'));
       }
       
       setUploadProgress(100);
       setShowAssignDialog(true);
       
     } catch (error: any) {
-      toast.error('Fehler bei der Analyse: ' + (error.message || 'Unbekannter Fehler'));
+      toast.error(t('documents.errors.analysisError', 'Fehler bei der Analyse') + ': ' + (error.message || t('common.unknownError', 'Unbekannter Fehler')));
       // Still show dialog to assign manually
       setShowAssignDialog(true);
     } finally {
@@ -209,12 +210,12 @@ export default function Documents() {
   // Save document to selected person
   const handleSaveDocument = async () => {
     if (!assignPersonId) {
-      toast.error('Bitte wähle eine Person aus');
+      toast.error(t('documents.selectPersonFirst', 'Bitte wähle eine Person aus'));
       return;
     }
     
     if (!tempDocumentData || !uploadedFile) {
-      toast.error('Keine Datei zum Speichern');
+      toast.error(t('documents.noFileToSave', 'Keine Datei zum Speichern'));
       return;
     }
     
@@ -231,13 +232,13 @@ export default function Documents() {
         analyzedData: analysisResult?.extractedData || null
       });
       
-      toast.success('Dokument gespeichert!');
+      toast.success(t('documents.saved', 'Dokument gespeichert') + '!');
       setShowAssignDialog(false);
       resetUploadState();
       fetchDocuments();
       
     } catch (error: any) {
-      toast.error('Fehler beim Speichern: ' + (error.message || 'Unbekannter Fehler'));
+      toast.error(t('documents.errors.saveError', 'Fehler beim Speichern') + ': ' + (error.message || t('common.unknownError', 'Unbekannter Fehler')));
     } finally {
       setIsSaving(false);
     }
@@ -249,7 +250,7 @@ export default function Documents() {
     setTempDocumentData(null);
     setAnalysisResult(null);
     setAssignPersonId('');
-    setAssignFolder('Sonstiges');
+    setAssignFolder(t('documents.folders.other', 'Sonstiges'));
     setUploadProgress(0);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -268,11 +269,11 @@ export default function Documents() {
     try {
       const deleteDocument = httpsCallable(functions, 'deleteDocument');
       await deleteDocument({ personId: deleteDocumentConfirm.personId, documentId: deleteDocumentConfirm.documentId });
-      toast.success('Dokument gelöscht');
+      toast.success(t('documents.deleted', 'Dokument gelöscht'));
       fetchDocuments();
       setDeleteDocumentConfirm(null);
     } catch (error) {
-      toast.error('Fehler beim Löschen');
+      toast.error(t('documents.errors.deleteError', 'Fehler beim Löschen'));
       setDeleteDocumentConfirm(null);
     }
   };
@@ -317,28 +318,28 @@ export default function Documents() {
 
   const getTypeLabel = (type: string) => {
     switch (type) {
-      case 'rechnung': return 'Rechnung';
-      case 'termin': return 'Termin';
-      case 'vertrag': return 'Vertrag';
-      default: return 'Sonstiges';
+      case 'rechnung': return t('documents.types.rechnung', 'Rechnung');
+      case 'termin': return t('documents.types.termin', 'Termin');
+      case 'vertrag': return t('documents.types.vertrag', 'Vertrag');
+      default: return t('documents.types.other', 'Sonstiges');
     }
   };
 
   return (
-    <Layout title="Dokumente">
+    <Layout title={t('documents.title', 'Dokumente')}>
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <ScanLine className="w-7 h-7" />
-            Dokumente
+            {t('documents.title', 'Dokumente')}
           </h1>
-          <p className="text-muted-foreground">Dokumente hochladen, scannen und verwalten</p>
+          <p className="text-muted-foreground">{t('documents.description', 'Dokumente hochladen, scannen und verwalten')}</p>
         </div>
         <Button variant="outline" onClick={fetchDocuments} disabled={loading}>
           <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Aktualisieren
+          {t('common.update', 'Aktualisieren')}
         </Button>
       </div>
 
@@ -347,31 +348,31 @@ export default function Documents() {
         <Card className="bg-slate-50">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold">{stats.total}</div>
-            <div className="text-sm text-muted-foreground">Gesamt</div>
+            <div className="text-sm text-muted-foreground">{t('documents.stats.total', 'Gesamt')}</div>
           </CardContent>
         </Card>
         <Card className="bg-orange-50">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-orange-600">{stats.rechnungen}</div>
-            <div className="text-sm text-muted-foreground">Rechnungen</div>
+            <div className="text-sm text-muted-foreground">{t('documents.folders.invoices', 'Rechnungen')}</div>
           </CardContent>
         </Card>
         <Card className="bg-green-50">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-green-600">{stats.termine}</div>
-            <div className="text-sm text-muted-foreground">Termine</div>
+            <div className="text-sm text-muted-foreground">{t('documents.folders.appointments', 'Termine')}</div>
           </CardContent>
         </Card>
         <Card className="bg-blue-50">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-blue-600">{stats.vertraege}</div>
-            <div className="text-sm text-muted-foreground">Verträge</div>
+            <div className="text-sm text-muted-foreground">{t('documents.folders.contracts', 'Verträge')}</div>
           </CardContent>
         </Card>
         <Card className="bg-gray-50">
           <CardContent className="p-4 text-center">
             <div className="text-2xl font-bold text-gray-600">{stats.sonstiges}</div>
-            <div className="text-sm text-muted-foreground">Sonstiges</div>
+            <div className="text-sm text-muted-foreground">{t('documents.folders.other', 'Sonstiges')}</div>
           </CardContent>
         </Card>
       </div>
@@ -382,7 +383,7 @@ export default function Documents() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <Upload className="w-5 h-5" />
-              Dokument hochladen
+              {t('documents.upload', 'Dokument hochladen')}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -409,7 +410,7 @@ export default function Documents() {
               }}
               tabIndex={0}
               role="button"
-              aria-label="Datei hochladen"
+              aria-label={t('documents.upload', 'Datei hochladen')}
               onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
               onDrop={(e) => {
                 e.preventDefault();
@@ -421,18 +422,18 @@ export default function Documents() {
               {isUploading ? (
                 <div className="space-y-3">
                   <Loader2 className="w-10 h-10 mx-auto text-primary animate-spin" />
-                  <p className="text-sm font-medium">Wird hochgeladen & analysiert...</p>
+                  <p className="text-sm font-medium">{t('documents.uploadingAnalyzing', 'Wird hochgeladen & analysiert...')}</p>
                   <Progress value={uploadProgress} className="w-full" />
                 </div>
               ) : (
                 <>
                   <Upload className="w-10 h-10 mx-auto text-gray-400 mb-2" />
-                  <p className="font-medium">Datei hochladen</p>
+                  <p className="font-medium">{t('documents.uploadFile', 'Datei hochladen')}</p>
                   <p className="text-sm text-muted-foreground">
-                    Klicke oder ziehe eine Datei hierher
+                    {t('documents.uploadHint', 'Klicke oder ziehe eine Datei hierher')}
                   </p>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Die Person wird nach der Analyse zugeordnet
+                    {t('documents.personAssignedAfterAnalysis', 'Die Person wird nach der Analyse zugeordnet')}
                   </p>
                 </>
               )}
@@ -440,7 +441,7 @@ export default function Documents() {
 
             {/* Quick Tips */}
             <div className="bg-slate-50 rounded-lg p-3 text-sm">
-              <p className="font-medium mb-2">Unterstützte Formate:</p>
+              <p className="font-medium mb-2">{t('documents.supportedFormats', 'Unterstützte Formate')}:</p>
               <div className="flex flex-wrap gap-1.5">
                 <Badge variant="outline" className="text-xs">JPG</Badge>
                 <Badge variant="outline" className="text-xs">PNG</Badge>
@@ -460,7 +461,7 @@ export default function Documents() {
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <FolderOpen className="w-5 h-5" />
-                Alle Dokumente
+                {t('documents.allDocuments', 'Alle Dokumente')}
               </CardTitle>
               <Badge variant="secondary">{filteredDocuments.length}</Badge>
             </div>
@@ -470,7 +471,7 @@ export default function Documents() {
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Suchen..."
+                  placeholder={t('common.search', 'Suchen...')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9"
@@ -482,7 +483,7 @@ export default function Documents() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Alle Personen</SelectItem>
+                  <SelectItem value="all">{t('documents.allPeople', 'Alle Personen')}</SelectItem>
                   {(people || []).map(person => (
                     <SelectItem key={person.id} value={person.id}>{person.name}</SelectItem>
                   ))}
@@ -510,15 +511,44 @@ export default function Documents() {
               ) : filteredDocuments.length === 0 ? (
                 <div className="text-center py-12">
                   <FileText className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                  <p className="text-muted-foreground">Keine Dokumente gefunden</p>
+                  <p className="text-muted-foreground">{t('documents.noDocuments', 'Keine Dokumente gefunden')}</p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {filteredDocuments.map(doc => (
-                    <div
-                      key={doc.id}
-                      className="flex items-center gap-3 p-3 rounded-lg border hover:bg-slate-50 transition-colors group"
-                    >
+                  {filteredDocuments.map(doc => {
+                    // Build context menu actions
+                    const contextMenuActions = [
+                      {
+                        id: 'view',
+                        label: t('common.view', 'Anzeigen'),
+                        icon: <Eye className="w-4 h-4" />,
+                        onClick: () => {
+                          setPreviewUrl(doc.fileUrl);
+                          setShowPreview(true);
+                        },
+                      },
+                      {
+                        id: 'download',
+                        label: t('common.download', 'Herunterladen'),
+                        icon: <Download className="w-4 h-4" />,
+                        onClick: () => {
+                          window.open(doc.fileUrl, '_blank');
+                        },
+                      },
+                      {
+                        id: 'delete',
+                        label: t('common.delete', 'Löschen'),
+                        icon: <Trash2 className="w-4 h-4" />,
+                        onClick: () => handleDeleteDocument(doc.personId, doc.id),
+                        variant: 'destructive' as const,
+                      },
+                    ];
+
+                    return (
+                      <ContextMenu key={doc.id} actions={contextMenuActions}>
+                        <div
+                          className="flex items-center gap-3 p-3 rounded-lg border hover:bg-slate-50 transition-colors group"
+                        >
                       {/* File Icon */}
                       <div className="flex-shrink-0">
                         {getFileIcon(doc.fileType)}
@@ -568,7 +598,9 @@ export default function Documents() {
                         </Button>
                       </div>
                     </div>
-                  ))}
+                    </ContextMenu>
+                    );
+                  })}
                 </div>
               )}
             </ScrollArea>
@@ -587,10 +619,10 @@ export default function Documents() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5" />
-              Dokument zuordnen
+              {t('documents.assign', 'Dokument zuordnen')}
             </DialogTitle>
             <DialogDescription>
-              Wähle eine Person und einen Ordner für das Dokument
+              {t('documents.assignDescriptionShort', 'Wähle eine Person und einen Ordner für das Dokument')}
             </DialogDescription>
           </DialogHeader>
 
@@ -599,7 +631,7 @@ export default function Documents() {
             {uploadedFile && (
               <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                 {filePreview ? (
-                  <img src={filePreview} alt="Preview" className="w-16 h-16 object-cover rounded" />
+                  <img src={filePreview} alt={t('documents.previewAlt', 'Vorschau')} className="w-16 h-16 object-cover rounded" />
                 ) : (
                   <div className="w-16 h-16 bg-slate-200 rounded flex items-center justify-center">
                     <FileText className="w-8 h-8 text-slate-400" />
@@ -620,20 +652,20 @@ export default function Documents() {
                 <div className="flex items-center gap-2 mb-2">
                   <Check className="w-4 h-4 text-green-600" />
                   <span className="font-medium text-green-700">
-                    Erkannt als: {getTypeLabel(analysisResult.type)}
+                    {t('documents.recognizedAs', 'Erkannt als')}: {getTypeLabel(analysisResult.type)}
                   </span>
                   <Badge variant="secondary" className="ml-auto">
-                    {analysisResult.confidence}% Sicherheit
+                    {analysisResult.confidence}% {t('documents.confidence', 'Sicherheit')}
                   </Badge>
                 </div>
                 {analysisResult.extractedData?.amount && (
                   <p className="text-sm text-green-700">
-                    Betrag: CHF {(analysisResult.extractedData.amount / 100).toFixed(2)}
+                    {t('documents.amount', 'Betrag')}: CHF {(analysisResult.extractedData.amount / 100).toFixed(2)}
                   </p>
                 )}
                 {analysisResult.extractedData?.dueDate && (
                   <p className="text-sm text-green-700">
-                    Fällig: {analysisResult.extractedData.dueDate}
+                    {t('documents.due', 'Fällig')}: {analysisResult.extractedData.dueDate}
                   </p>
                 )}
               </div>
@@ -641,19 +673,19 @@ export default function Documents() {
 
             {/* Person Selection */}
             <div className="space-y-2">
-              <Label>Person zuordnen *</Label>
+              <Label>{t('documents.assignPerson', 'Person zuordnen')} *</Label>
               <Select value={assignPersonId} onValueChange={setAssignPersonId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Person auswählen..." />
+                  <SelectValue placeholder={t('documents.selectPerson', 'Person auswählen...')} />
                 </SelectTrigger>
                 <SelectContent>
                   {peopleLoading ? (
-                    <div className="p-2 text-center text-muted-foreground">Laden...</div>
+                    <div className="p-2 text-center text-muted-foreground">{t('common.loading', 'Laden...')}</div>
                   ) : (people || []).length === 0 ? (
                     <div className="p-2 text-center text-muted-foreground">
-                      Keine Personen vorhanden.
+                      {t('documents.noPeopleAvailable', 'Keine Personen vorhanden.')}
                       <br />
-                      <span className="text-xs">Erstelle zuerst eine Person unter "Personen"</span>
+                      <span className="text-xs">{t('documents.createPersonFirst', 'Erstelle zuerst eine Person unter "Personen"')}</span>
                     </div>
                   ) : (
                     (people || []).map(person => (
@@ -671,7 +703,7 @@ export default function Documents() {
 
             {/* Folder Selection */}
             <div className="space-y-2">
-              <Label>Ordner</Label>
+              <Label>{t('documents.folder', 'Ordner')}</Label>
               <Select value={assignFolder} onValueChange={setAssignFolder}>
                 <SelectTrigger>
                   <SelectValue />
@@ -697,7 +729,7 @@ export default function Documents() {
               disabled={isSaving}
             >
               <X className="w-4 h-4 mr-2" />
-              Abbrechen
+              {t('common.cancel', 'Abbrechen')}
             </Button>
             <Button 
               onClick={handleSaveDocument} 
@@ -706,12 +738,12 @@ export default function Documents() {
               {isSaving ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Speichern...
+                  {t('common.saving', 'Speichern...')}
                 </>
               ) : (
                 <>
                   <Check className="w-4 h-4 mr-2" />
-                  Speichern
+                  {t('common.save', 'Speichern')}
                 </>
               )}
             </Button>
@@ -723,7 +755,7 @@ export default function Documents() {
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
-            <DialogTitle>Dokument-Vorschau</DialogTitle>
+            <DialogTitle>{t('documents.preview', 'Dokument-Vorschau')}</DialogTitle>
           </DialogHeader>
           <div className="flex items-center justify-center bg-slate-100 rounded-lg overflow-hidden">
             {previewUrl && (
@@ -731,12 +763,12 @@ export default function Documents() {
                 <iframe
                   src={previewUrl}
                   className="w-full h-[70vh]"
-                  title="PDF Preview"
+                  title={t('documents.preview', 'Dokument-Vorschau')}
                 />
               ) : (
                 <img
                   src={previewUrl}
-                  alt="Document Preview"
+                  alt={t('documents.preview', 'Dokument-Vorschau')}
                   className="max-w-full max-h-[70vh] object-contain"
                 />
               )
@@ -749,15 +781,15 @@ export default function Documents() {
       <AlertDialog open={!!deleteDocumentConfirm} onOpenChange={(open) => !open && setDeleteDocumentConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Dokument löschen?</AlertDialogTitle>
+            <AlertDialogTitle>{t('documents.confirmDelete', 'Dokument löschen?')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Das Dokument wird unwiderruflich gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.
+              {t('documents.confirmDeleteDescription', 'Das Dokument wird unwiderruflich gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel', 'Abbrechen')}</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDeleteDocument} className="bg-red-600 hover:bg-red-700">
-              Löschen
+              {t('common.delete', 'Löschen')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

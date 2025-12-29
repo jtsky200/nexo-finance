@@ -3,7 +3,6 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig } from "vite";
 
-
 const plugins = [react(), tailwindcss()];
 
 export default defineConfig({
@@ -13,6 +12,26 @@ export default defineConfig({
       "@": path.resolve(import.meta.dirname, "client", "src"),
       "@shared": path.resolve(import.meta.dirname, "shared"),
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+      "crypto": "crypto-browserify",
+      "stream": "stream-browserify",
+      "vm": "vm-browserify",
+      "process": "process/browser",
+      "buffer": "buffer",
+    },
+  },
+  define: {
+    global: 'globalThis',
+    process: {},
+    'process.env': '{}',
+    'process.browser': 'true',
+  },
+  optimizeDeps: {
+    include: ['otplib'],
+    esbuildOptions: {
+      define: {
+        global: 'globalThis',
+      },
+      target: 'es2020',
     },
   },
   envDir: path.resolve(import.meta.dirname),
@@ -31,6 +50,14 @@ export default defineConfig({
           'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore', 'firebase/functions'],
           'vendor-utils': ['date-fns', 'clsx', 'tailwind-merge', 'zod'],
         },
+        intro: `
+          if (typeof exports === 'undefined') {
+            var exports = {};
+          }
+          if (typeof module === 'undefined') {
+            var module = { exports: {} };
+          }
+        `,
       },
     },
   },

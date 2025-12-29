@@ -7,6 +7,7 @@ import {
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithRedirect,
+  signInWithPopup,
   getRedirectResult,
   updateProfile
 } from 'firebase/auth';
@@ -43,9 +44,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(result.user);
         }
       })
-      .catch((err) => {
+      .catch((err: any) => {
         if (process.env.NODE_ENV === 'development') {
           console.error('Redirect result error:', err);
+          console.error('Error code:', err.code);
+          console.error('Error message:', err.message);
+        }
+        // Only set error if it's a real error (not just no redirect pending)
+        if (err.code && err.code !== 'auth/no-auth-event') {
+          let errorMessage = 'Ein Fehler ist aufgetreten';
+          
+          switch (err.code) {
+            case 'auth/internal-error':
+              errorMessage = 'Ein interner Fehler ist aufgetreten. Bitte versuchen Sie es erneut oder verwenden Sie die E-Mail-Anmeldung.';
+              break;
+            case 'auth/unauthorized-domain':
+              errorMessage = 'Diese Domain ist nicht autorisiert. Bitte kontaktieren Sie den Administrator.';
+              break;
+            case 'auth/operation-not-allowed':
+              errorMessage = 'Google Sign-In ist nicht aktiviert.';
+              break;
+            case 'auth/network-request-failed':
+              errorMessage = 'Netzwerkfehler. Bitte überprüfen Sie Ihre Internetverbindung.';
+              break;
+            default:
+              errorMessage = err.message || 'Ein unbekannter Fehler ist aufgetreten';
+          }
+          
+          setError(errorMessage);
         }
       });
 
@@ -140,7 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setError(null);
       if (process.env.NODE_ENV === 'development') {
-        console.log('Attempting Google sign-in with redirect...');
+        console.log('Attempting Google sign-in...');
       }
       
       const provider = new GoogleAuthProvider();
@@ -150,8 +176,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         prompt: 'select_account'
       });
       
-      // Use redirect directly for mobile - more reliable
-      await signInWithRedirect(auth, provider);
+      // Try popup first (more reliable), fallback to redirect if popup is blocked
+      try {
+        await signInWithPopup(auth, provider);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Google sign-in with popup successful');
+        }
+      } catch (popupError: any) {
+        // If popup is blocked, try redirect
+        if (popupError.code === 'auth/popup-blocked' || popupError.code === 'auth/popup-closed-by-user') {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Popup blocked/closed, trying redirect...');
+          }
+          await signInWithRedirect(auth, provider);
+        } else {
+          throw popupError;
+        }
+      }
     } catch (err: any) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Google Sign-In Error:', err);
@@ -162,6 +203,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let errorMessage = 'Ein Fehler ist aufgetreten';
       
       switch (err.code) {
+        case 'auth/internal-error':
+          errorMessage = 'Ein interner Fehler ist aufgetreten. Bitte versuchen Sie es erneut oder verwenden Sie die E-Mail-Anmeldung.';
+          break;
+        case 'auth/popup-blocked':
+          errorMessage = 'Popup wurde blockiert. Bitte erlauben Sie Popups für diese Seite.';
+          break;
+        case 'auth/popup-closed-by-user':
+          errorMessage = 'Anmeldung abgebrochen.';
+          break;
         case 'auth/unauthorized-domain':
           errorMessage = 'Diese Domain ist nicht autorisiert. Bitte kontaktieren Sie den Administrator.';
           break;
@@ -170,6 +220,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           break;
         case 'auth/network-request-failed':
           errorMessage = 'Netzwerkfehler. Bitte überprüfen Sie Ihre Internetverbindung.';
+          break;
+        case 'auth/cancelled-popup-request':
+          errorMessage = 'Nur ein Popup kann gleichzeitig geöffnet sein.';
           break;
         default:
           errorMessage = err.message || 'Ein unbekannter Fehler ist aufgetreten';

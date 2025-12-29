@@ -6,21 +6,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import { functions } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
-import { usePeople } from '@/lib/firebaseHooks';
+import { usePeople, type Person } from '@/lib/firebaseHooks';
 import { 
   FileText, Search, Upload, FolderOpen, 
-  User, Clock, Eye, Trash2, RefreshCw,
-  ScanLine, FileImage, File, AlertCircle, Check, X, Loader2
+  User, Clock, Eye, Trash2,
+  FileImage, File, Loader2, Download
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import ContextMenu from '@/components/ContextMenu';
 
 interface Document {
   id: string;
@@ -31,7 +31,7 @@ interface Document {
   fileUrl: string;
   folder: string;
   status: string;
-  analyzedData?: any;
+  analyzedData?: unknown;
   createdAt: string | null;
   updatedAt: string | null;
 }
@@ -52,9 +52,23 @@ interface AnalysisResult {
   rawText?: string;
 }
 
+interface DocumentData {
+  id?: string;
+  personId?: string;
+  personName?: string;
+  fileName?: string;
+  fileType?: string;
+  fileUrl?: string;
+  folder?: string;
+  status?: string;
+  analyzedData?: unknown;
+  createdAt?: string | Date | { toDate?: () => Date };
+  updatedAt?: string | Date | { toDate?: () => Date };
+}
+
 export default function MobileDocuments() {
   const { t } = useTranslation();
-  let peopleData: any[] = [];
+  let peopleData: Person[] = [];
   let peopleLoading = false;
   let peopleError: Error | null = null;
   
@@ -67,7 +81,7 @@ export default function MobileDocuments() {
     console.error('[Documents] Error in usePeople hook:', error);
     peopleData = [];
     peopleLoading = false;
-    peopleError = error as Error;
+    peopleError = error instanceof Error ? error : new Error(String(error));
   }
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -94,25 +108,25 @@ export default function MobileDocuments() {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [tempDocumentData, setTempDocumentData] = useState<string | null>(null);
   const [assignPersonId, setAssignPersonId] = useState<string>('');
-  const [assignFolder, setAssignFolder] = useState<string>('Sonstiges');
+  const [assignFolder, setAssignFolder] = useState<string>(t('documents.folders.other', 'Sonstiges'));
   const [isSaving, setIsSaving] = useState(false);
   
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
 
   const folders = [
-    { value: 'all', label: 'Alle Ordner' },
-    { value: 'Rechnungen', label: 'Rechnungen' },
-    { value: 'Termine', label: 'Termine' },
-    { value: 'Verträge', label: 'Verträge' },
-    { value: 'Sonstiges', label: 'Sonstiges' },
+    { value: 'all', label: t('documents.allFolders', 'Alle Ordner') },
+    { value: 'Rechnungen', label: t('documents.folders.invoices', 'Rechnungen') },
+    { value: 'Termine', label: t('documents.folders.appointments', 'Termine') },
+    { value: 'Verträge', label: t('documents.folders.contracts', 'Verträge') },
+    { value: 'Sonstiges', label: t('documents.folders.other', 'Sonstiges') },
   ];
 
   const documentFolders = [
-    { value: 'Rechnungen', label: 'Rechnungen' },
-    { value: 'Termine', label: 'Termine' },
-    { value: 'Verträge', label: 'Verträge' },
-    { value: 'Sonstiges', label: 'Sonstiges' },
+    { value: 'Rechnungen', label: t('documents.folders.invoices', 'Rechnungen') },
+    { value: 'Termine', label: t('documents.folders.appointments', 'Termine') },
+    { value: 'Verträge', label: t('documents.folders.contracts', 'Verträge') },
+    { value: 'Sonstiges', label: t('documents.folders.other', 'Sonstiges') },
   ];
 
   const fetchDocuments = useCallback(async () => {
@@ -135,7 +149,7 @@ export default function MobileDocuments() {
         return;
       }
       
-      const data = result.data as { documents?: any[], total?: number };
+      const data = result.data as { documents?: DocumentData[], total?: number };
       console.log('[Documents] Data received:', { 
         hasDocuments: !!data.documents, 
         count: data.documents?.length || 0,
@@ -145,7 +159,7 @@ export default function MobileDocuments() {
       const documentsArray = Array.isArray(data.documents) ? data.documents : [];
       console.log('[Documents] Processing', documentsArray.length, 'documents');
       
-      const mappedDocs = documentsArray.map((doc: any, index: number) => {
+      const mappedDocs = documentsArray.map((doc: DocumentData, index: number) => {
         try {
           if (!doc || typeof doc !== 'object') {
             console.warn(`[Documents] Invalid document at index ${index}:`, doc);
@@ -156,14 +170,26 @@ export default function MobileDocuments() {
             ...doc,
             id: doc.id || `doc-${index}`,
             personId: doc.personId || '',
-            personName: doc.personName || 'Unbekannt',
-            fileName: doc.fileName || 'Unbenannt',
+            personName: doc.personName || t('documents.unknown', 'Unbekannt'),
+            fileName: doc.fileName || t('common.unnamed', 'Unbenannt'),
             fileType: doc.fileType || '',
             fileUrl: doc.fileUrl || '',
-            folder: doc.folder || 'Sonstiges',
+            folder: doc.folder || t('documents.folders.other', 'Sonstiges'),
             status: doc.status || 'uploaded',
-            createdAt: doc.createdAt ? (typeof doc.createdAt === 'string' ? doc.createdAt : new Date(doc.createdAt).toISOString()) : null,
-            updatedAt: doc.updatedAt ? (typeof doc.updatedAt === 'string' ? doc.updatedAt : new Date(doc.updatedAt).toISOString()) : null,
+            createdAt: doc.createdAt 
+              ? (typeof doc.createdAt === 'string' 
+                  ? doc.createdAt 
+                  : doc.createdAt instanceof Date 
+                    ? doc.createdAt.toISOString()
+                    : (doc.createdAt as { toDate?: () => Date })?.toDate?.()?.toISOString() || new Date(doc.createdAt as string | number).toISOString())
+              : null,
+            updatedAt: doc.updatedAt 
+              ? (typeof doc.updatedAt === 'string' 
+                  ? doc.updatedAt 
+                  : doc.updatedAt instanceof Date 
+                    ? doc.updatedAt.toISOString()
+                    : (doc.updatedAt as { toDate?: () => Date })?.toDate?.()?.toISOString() || new Date(doc.updatedAt as string | number).toISOString())
+              : null,
           };
           
           return mapped;
@@ -175,22 +201,23 @@ export default function MobileDocuments() {
       
       console.log('[Documents] Successfully mapped', mappedDocs.length, 'documents');
       setDocuments(mappedDocs);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[Documents] Error in fetchDocuments:', error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
       console.error('[Documents] Error details:', {
-        message: error?.message,
-        code: error?.code,
-        details: error?.details,
-        stack: error?.stack
+        message: errorObj.message,
+        code: (errorObj as { code?: string }).code,
+        details: (errorObj as { details?: unknown }).details,
+        stack: errorObj.stack
       });
       
-      const errorMessage = error?.message || error?.code || 'Unbekannter Fehler';
-      toast.error('Fehler beim Laden der Dokumente: ' + errorMessage);
+      const errorMessage = errorObj.message || (errorObj as { code?: string }).code || 'Unbekannter Fehler';
+      toast.error(t('documents.errors.loadError', 'Fehler beim Laden der Dokumente') + ': ' + errorMessage);
       setDocuments([]); // Set empty array to prevent rendering errors
     } finally {
       setLoading(false);
     }
-  }, [selectedFolder]);
+  }, [selectedFolder, t]);
 
   useEffect(() => {
     let mounted = true;
@@ -258,12 +285,12 @@ export default function MobileDocuments() {
     }
   }, [documents, selectedPerson, selectedFolder, searchQuery]);
 
-  const handleFileSelect = async (file: File) => {
+  const handleFileSelect = useCallback(async (file: File) => {
     if (!file) return;
     
     const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
     if (file.size > MAX_FILE_SIZE) {
-      toast.error('Datei ist zu gross. Maximal 10MB erlaubt.');
+      toast.error(t('documents.errors.fileTooLarge', 'Datei ist zu gross. Maximal 10MB erlaubt.'));
       return;
     }
 
@@ -289,17 +316,18 @@ export default function MobileDocuments() {
           setAnalysisResult(analysis);
           setShowAssignDialog(true);
           setUploadProgress(100);
-        } catch (error: any) {
+        } catch (error: unknown) {
           if (process.env.NODE_ENV === 'development') {
             console.error('Error analyzing document:', error);
           }
-          toast.error('Fehler bei der Analyse: ' + (error.message || 'Unbekannter Fehler'));
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          toast.error(t('documents.errors.analysisError', 'Fehler bei der Analyse') + ': ' + (errorMessage || t('common.unknownError', 'Unbekannter Fehler')));
           setIsUploading(false);
         }
       };
       
       reader.onerror = () => {
-        toast.error('Fehler beim Lesen der Datei');
+        toast.error(t('documents.errors.readError', 'Fehler beim Lesen der Datei'));
         setIsUploading(false);
       };
       
@@ -316,18 +344,19 @@ export default function MobileDocuments() {
         });
       }, 200);
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Error selecting file:', error);
       }
-      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      toast.error(t('common.error', 'Fehler') + ': ' + (errorMessage || t('common.unknownError', 'Unbekannter Fehler')));
       setIsUploading(false);
     }
-  };
+  }, [t]);
 
-  const handleSaveDocument = async () => {
+  const handleSaveDocument = useCallback(async () => {
     if (!tempDocumentData || !assignPersonId || !uploadedFile) {
-      toast.error('Bitte füllen Sie alle Felder aus');
+      toast.error(t('documents.errors.fillAllFields', 'Bitte füllen Sie alle Felder aus'));
       return;
     }
 
@@ -343,44 +372,46 @@ export default function MobileDocuments() {
         folder: assignFolder,
       });
       
-      toast.success('Dokument gespeichert');
+      toast.success(t('documents.saved', 'Dokument gespeichert'));
       setShowAssignDialog(false);
       setUploadedFile(null);
       setTempDocumentData(null);
       setAnalysisResult(null);
       setAssignPersonId('');
-      setAssignFolder('Sonstiges');
+      setAssignFolder(t('documents.folders.other', 'Sonstiges'));
       setIsUploading(false);
       setUploadProgress(0);
       await fetchDocuments();
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Error saving document:', error);
       }
-      toast.error('Fehler beim Speichern: ' + (error.message || 'Unbekannter Fehler'));
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      toast.error(t('documents.errors.saveError', 'Fehler beim Speichern') + ': ' + (errorMessage || t('common.unknownError', 'Unbekannter Fehler')));
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [tempDocumentData, assignPersonId, uploadedFile, assignFolder, t, fetchDocuments]);
 
-  const handleDeleteDocument = async (docId: string) => {
+  const handleDeleteDocument = useCallback(async (docId: string) => {
     try {
       const deleteDocumentFunc = httpsCallable(functions, 'deleteDocument');
       await deleteDocumentFunc({ documentId: docId });
-      toast.success('Dokument gelöscht');
+      toast.success(t('documents.deleted', 'Dokument gelöscht'));
       await fetchDocuments();
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Error deleting document:', error);
       }
-      toast.error('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      toast.error(t('common.error', 'Fehler') + ': ' + (errorMessage || t('common.unknownError', 'Unbekannter Fehler')));
     }
-  };
+  }, [t, fetchDocuments]);
 
-  const handlePreview = (doc: Document) => {
+  const handlePreview = useCallback((doc: Document) => {
     setPreviewUrl(doc.fileUrl);
     setShowPreview(true);
-  };
+  }, []);
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return 'N/A';
@@ -401,16 +432,16 @@ export default function MobileDocuments() {
   // filteredDocuments already has all safety checks
 
   return (
-    <MobileLayout title="Dokumente" showSidebar={true}>
+    <MobileLayout title={t('documents.title', 'Dokumente')} showSidebar={true}>
       {/* Filters */}
       <div className="mobile-card mb-4">
         <div className="space-y-3">
           <div>
-            <Label className="text-xs text-muted-foreground mb-2 block">Suche</Label>
+            <Label className="text-xs text-muted-foreground mb-2 block">{t('common.search', 'Suche')}</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Suchen..."
+                placeholder={t('common.search', 'Suchen...')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 h-10 min-h-[44px]"
@@ -420,18 +451,18 @@ export default function MobileDocuments() {
           
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs text-muted-foreground mb-2 block">Person</Label>
+              <Label className="text-xs text-muted-foreground mb-2 block">{t('people.name', 'Person')}</Label>
               <Select value={selectedPerson} onValueChange={setSelectedPerson}>
                 <SelectTrigger className="h-10 min-h-[44px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Alle</SelectItem>
+                  <SelectItem value="all">{t('common.all', 'Alle')}</SelectItem>
                   {Array.isArray(peopleData) && peopleData.map((person) => {
                     if (!person || !person.id) return null;
                     return (
                       <SelectItem key={person.id} value={person.id}>
-                        {person.name || 'Unbekannt'}
+                        {person.name || t('documents.unknown', 'Unbekannt')}
                       </SelectItem>
                     );
                   })}
@@ -440,7 +471,7 @@ export default function MobileDocuments() {
             </div>
             
             <div>
-              <Label className="text-xs text-muted-foreground mb-2 block">Ordner</Label>
+              <Label className="text-xs text-muted-foreground mb-2 block">{t('documents.folder', 'Ordner')}</Label>
               <Select value={selectedFolder} onValueChange={setSelectedFolder}>
                 <SelectTrigger className="h-10 min-h-[44px]">
                   <SelectValue />
@@ -467,12 +498,12 @@ export default function MobileDocuments() {
         {isUploading ? (
           <>
             <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-            Lädt...
+            {t('common.loading', 'Lädt...')}
           </>
         ) : (
           <>
             <Upload className="w-5 h-5 mr-2" />
-            Dokument hochladen
+            {t('documents.upload', 'Dokument hochladen')}
           </>
         )}
       </Button>
@@ -481,7 +512,7 @@ export default function MobileDocuments() {
         <div className="mobile-card mb-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between text-sm">
-              <span>Upload Fortschritt</span>
+              <span>{t('documents.uploadProgress', 'Upload Fortschritt')}</span>
               <span>{uploadProgress}%</span>
             </div>
             <Progress value={uploadProgress} />
@@ -520,7 +551,7 @@ export default function MobileDocuments() {
         </div>
       ) : filteredDocuments.length === 0 ? (
         <div className="mobile-card text-center py-8">
-          <p className="text-muted-foreground">Keine Dokumente gefunden</p>
+          <p className="text-muted-foreground">{t('documents.noDocuments', 'Keine Dokumente gefunden')}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -529,8 +560,34 @@ export default function MobileDocuments() {
               console.warn('[Documents] Skipping invalid document in render:', doc);
               return null;
             }
+            // Build context menu actions
+            const contextMenuActions = [
+              {
+                id: 'view',
+                label: t('documents.view', 'Ansehen'),
+                icon: <Eye className="w-4 h-4" />,
+                onClick: () => handlePreview(doc),
+              },
+              {
+                id: 'download',
+                label: t('common.download', 'Herunterladen'),
+                icon: <Download className="w-4 h-4" />,
+                onClick: () => {
+                  window.open(doc.fileUrl, '_blank');
+                },
+              },
+              {
+                id: 'delete',
+                label: t('common.delete', 'Löschen'),
+                icon: <Trash2 className="w-4 h-4" />,
+                onClick: () => handleDeleteDocument(doc.id),
+                variant: 'destructive' as const,
+              },
+            ];
+
             return (
-            <Card key={doc.id} className="mobile-card">
+              <ContextMenu key={doc.id} actions={contextMenuActions}>
+                <Card className="mobile-card">
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
                   <div className="mt-1">
@@ -565,10 +622,10 @@ export default function MobileDocuments() {
                         size="sm"
                         onClick={() => handlePreview(doc)}
                         className="h-8 min-h-[44px] flex-1"
-                        aria-label={`Dokument ${doc.fileName} ansehen`}
+                        aria-label={t('documents.viewDocument', 'Dokument {{fileName}} ansehen', { fileName: doc.fileName })}
                       >
                         <Eye className="w-4 h-4 mr-1" aria-hidden="true" />
-                        Ansehen
+                        {t('documents.view', 'Ansehen')}
                       </Button>
                       
                       <Button
@@ -576,7 +633,7 @@ export default function MobileDocuments() {
                         size="sm"
                         onClick={() => handleDeleteDocument(doc.id)}
                         className="h-8 min-h-[44px] text-red-500"
-                        aria-label={`Dokument ${doc.fileName} löschen`}
+                        aria-label={t('documents.deleteDocument', 'Dokument {{fileName}} löschen', { fileName: doc.fileName })}
                       >
                         <Trash2 className="w-4 h-4" aria-hidden="true" />
                       </Button>
@@ -585,6 +642,7 @@ export default function MobileDocuments() {
                 </div>
               </CardContent>
             </Card>
+            </ContextMenu>
             );
           })}
         </div>
@@ -594,9 +652,9 @@ export default function MobileDocuments() {
       <Dialog open={showAssignDialog} onOpenChange={setShowAssignDialog}>
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3">
-            <DialogTitle className="text-lg font-semibold">Dokument zuordnen</DialogTitle>
+            <DialogTitle className="text-lg font-semibold">{t('documents.assign', 'Dokument zuordnen')}</DialogTitle>
             <DialogDescription>
-              Wählen Sie eine Person und einen Ordner für dieses Dokument
+              {t('documents.assignDescription', 'Wählen Sie eine Person und einen Ordner für dieses Dokument')}
             </DialogDescription>
           </DialogHeader>
           
@@ -604,20 +662,20 @@ export default function MobileDocuments() {
             {analysisResult && (
               <div className="space-y-3 mb-4">
                 <div className="p-3 bg-muted rounded-lg">
-                  <p className="text-xs font-semibold mb-2">Analyse-Ergebnis</p>
+                  <p className="text-xs font-semibold mb-2">{t('documents.analysisResult', 'Analyse-Ergebnis')}</p>
                   {analysisResult.extractedData.amount && (
                     <p className="text-sm">
-                      Betrag: CHF {(analysisResult.extractedData.amount / 100).toFixed(2)}
+                      {t('documents.amount', 'Betrag')}: CHF {(analysisResult.extractedData.amount / 100).toFixed(2)}
                     </p>
                   )}
                   {analysisResult.extractedData.dueDate && (
                     <p className="text-sm">
-                      Fälligkeitsdatum: {formatDate(analysisResult.extractedData.dueDate)}
+                      {t('documents.dueDate', 'Fälligkeitsdatum')}: {formatDate(analysisResult.extractedData.dueDate)}
                     </p>
                   )}
                   {analysisResult.extractedData.description && (
                     <p className="text-sm">
-                      Beschreibung: {analysisResult.extractedData.description}
+                      {t('documents.description', 'Beschreibung')}: {analysisResult.extractedData.description}
                     </p>
                   )}
                 </div>
@@ -626,17 +684,17 @@ export default function MobileDocuments() {
             
             <div className="space-y-3">
             <div>
-              <Label>Person *</Label>
+              <Label>{t('people.name', 'Person')} *</Label>
               <Select value={assignPersonId} onValueChange={setAssignPersonId}>
                 <SelectTrigger className="h-10 min-h-[44px] mt-1">
-                  <SelectValue placeholder="Person auswählen" />
+                  <SelectValue placeholder={t('documents.selectPerson', 'Person auswählen')} />
                 </SelectTrigger>
                 <SelectContent>
                   {Array.isArray(peopleData) && peopleData.map((person) => {
                     if (!person || !person.id) return null;
                     return (
                       <SelectItem key={person.id} value={person.id}>
-                        {person.name || 'Unbekannt'}
+                        {person.name || t('documents.unknown', 'Unbekannt')}
                       </SelectItem>
                     );
                   })}
@@ -645,7 +703,7 @@ export default function MobileDocuments() {
             </div>
             
             <div>
-              <Label>Ordner *</Label>
+              <Label>{t('documents.folder', 'Ordner')} *</Label>
               <Select value={assignFolder} onValueChange={setAssignFolder}>
                 <SelectTrigger className="h-10 min-h-[44px] mt-1">
                   <SelectValue />
@@ -672,14 +730,14 @@ export default function MobileDocuments() {
               }}
               className="h-10 min-h-[44px]"
             >
-              Abbrechen
+              {t('common.cancel', 'Abbrechen')}
             </Button>
             <Button 
               onClick={handleSaveDocument} 
               disabled={isSaving || !assignPersonId}
               className="h-10 min-h-[44px]"
             >
-              {isSaving ? 'Speichert...' : 'Speichern'}
+              {isSaving ? t('common.saving', 'Speichert...') : t('common.save', 'Speichern')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -689,18 +747,18 @@ export default function MobileDocuments() {
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
         <DialogContent className="!fixed !top-[50%] !left-[50%] !right-auto !bottom-auto !translate-x-[-50%] !translate-y-[-50%] !w-[85vw] !max-w-sm !max-h-fit !rounded-3xl !m-0 !overflow-visible !shadow-2xl">
           <DialogHeader className="px-5 pt-5 pb-3">
-            <DialogTitle className="text-lg font-semibold">Dokument Vorschau</DialogTitle>
+            <DialogTitle className="text-lg font-semibold">{t('documents.preview', 'Dokument Vorschau')}</DialogTitle>
           </DialogHeader>
           
           {previewUrl && (
             <div className="w-full">
               {previewUrl.includes('image') ? (
-                <img src={previewUrl} alt="Preview" className="w-full h-auto rounded-lg" />
+                <img src={previewUrl} alt={t('documents.preview', 'Vorschau')} className="w-full h-auto rounded-lg" />
               ) : (
                 <iframe
                   src={previewUrl}
                   className="w-full h-[60vh] rounded-lg"
-                  title="Document Preview"
+                  title={t('documents.preview', 'Dokument Vorschau')}
                 />
               )}
             </div>
@@ -708,7 +766,7 @@ export default function MobileDocuments() {
           
           <DialogFooter className="px-5 pb-3 pt-2">
             <Button variant="outline" onClick={() => setShowPreview(false)} className="h-11 min-h-[44px] w-full rounded-xl text-sm font-medium">
-              Schliessen
+              {t('common.close', 'Schliessen')}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -21,6 +21,8 @@ import { formatErrorForDisplay } from '@/lib/errorHandler';
 import { hapticSuccess, hapticError, hapticSelection } from '@/lib/hapticFeedback';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDateLocal, formatDateGerman, parseDateGerman } from '@/lib/dateTimeUtils';
+import ContextMenu from '@/components/ContextMenu';
+import { CheckCircle2 } from 'lucide-react';
 
 export default function MobileBills() {
   const { t } = useTranslation();
@@ -92,7 +94,7 @@ export default function MobileBills() {
   // Add new bill
   const handleAddBill = async () => {
     if (!newBill.title || !newBill.amount) {
-      toast.error('Bitte Titel und Betrag eingeben');
+      toast.error(t('bills.titleAndAmountRequired'));
       hapticError();
       return;
     }
@@ -107,7 +109,7 @@ export default function MobileBills() {
         description: newBill.iban ? `IBAN: ${newBill.iban}` : '',
       } as any);
       
-      toast.success('Rechnung hinzugefügt');
+      toast.success(t('bills.created'));
       hapticSuccess();
       setShowAddDialog(false);
       setNewBill({ title: '', amount: '', dueDate: formatDateLocal(new Date()), iban: '', reference: '' });
@@ -209,7 +211,7 @@ export default function MobileBills() {
       if (process.env.NODE_ENV === 'development') {
         console.error('QR scan error:', error);
       }
-      toast.error('Fehler beim Scannen');
+      toast.error(t('bills.scanError'));
     } finally {
       setIsScanning(false);
     }
@@ -249,7 +251,7 @@ export default function MobileBills() {
         </div>
         <p className="text-3xl font-semibold mb-2">CHF {totalOpen.toFixed(2)}</p>
         <p className="text-sm opacity-60">
-          {openBills.length} {t('bills.bills', 'Rechnungen')}
+          {openBills.length} {t('bills.bills')}
         </p>
       </div>
 
@@ -261,10 +263,10 @@ export default function MobileBills() {
             setShowAddDialog(true);
           }}
           className="flex-1 mobile-card flex items-center justify-center gap-2 py-4 active:opacity-80 transition-opacity min-h-[56px]"
-          aria-label="Rechnung manuell hinzufügen"
+          aria-label={t('bills.addManually')}
         >
           <Plus className="w-5 h-5" />
-          <span className="font-medium text-sm">Manuell</span>
+          <span className="font-medium text-sm">{t('bills.manual')}</span>
         </button>
         <button
           onClick={() => {
@@ -272,10 +274,10 @@ export default function MobileBills() {
             startCamera();
           }}
           className="flex-1 mobile-card flex items-center justify-center gap-2 py-4 active:opacity-80 transition-opacity min-h-[56px]"
-          aria-label="QR-Code scannen"
+          aria-label={t('bills.scanQrCode')}
         >
           <Camera className="w-5 h-5" />
-          <span className="font-medium text-sm">Scannen</span>
+          <span className="font-medium text-sm">{t('bills.scanButton')}</span>
         </button>
         <button
           onClick={() => {
@@ -283,10 +285,10 @@ export default function MobileBills() {
             fileInputRef.current?.click();
           }}
           className="flex-1 mobile-card flex items-center justify-center gap-2 py-4 active:opacity-80 transition-opacity min-h-[56px]"
-          aria-label="Bild hochladen"
+          aria-label={t('bills.uploadImage')}
         >
           <Upload className="w-5 h-5" />
-          <span className="font-medium text-sm">Bild</span>
+          <span className="font-medium text-sm">{t('bills.image')}</span>
         </button>
         <input
           ref={fileInputRef}
@@ -322,13 +324,26 @@ export default function MobileBills() {
           {openBills.map((bill) => {
             const overdue = isOverdue(bill.dueDate);
             
+            // Build context menu actions
+            const contextMenuActions = [
+              {
+                id: 'mark-paid',
+                label: t('bills.markAsPaid', 'Als bezahlt markieren'),
+                icon: <CheckCircle2 className="w-4 h-4" />,
+                onClick: () => {
+                  hapticSelection();
+                  handleMarkAsPaid(bill.id);
+                },
+              },
+            ];
+
             return (
-              <div
-                key={bill.id}
-                className={`mobile-card flex items-center justify-between py-3 ${
-                  overdue ? 'border-l-2 border-l-red-500' : ''
-                }`}
-              >
+              <ContextMenu key={bill.id} actions={contextMenuActions}>
+                <div
+                  className={`mobile-card flex items-center justify-between py-3 ${
+                    overdue ? 'border-l-2 border-l-red-500' : ''
+                  }`}
+                >
                 <div className="flex items-center gap-4">
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
                     overdue ? 'bg-status-error' : 'bg-status-warning'
@@ -362,6 +377,7 @@ export default function MobileBills() {
                   </button>
                 </div>
               </div>
+              </ContextMenu>
             );
           })}
         </div>
@@ -371,7 +387,7 @@ export default function MobileBills() {
       {paidBills.length > 0 && (
         <>
           <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wider">
-            {t('bills.paid', 'Bezahlt')} ({paidBills.length})
+            {t('bills.paid')} ({paidBills.length})
           </p>
           <div className="space-y-3 opacity-60">
             {paidBills.slice(0, 5).map((bill) => (
@@ -482,7 +498,7 @@ export default function MobileBills() {
       {showCamera && (
         <div className="fixed inset-0 z-50 bg-black flex flex-col">
           <div className="flex items-center justify-between p-4">
-            <h2 className="text-white font-medium">QR-Code scannen</h2>
+            <h2 className="text-white font-medium">{t('bills.scanQrCode')}</h2>
             <button
               onClick={stopCamera}
               className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center"

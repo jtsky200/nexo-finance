@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { RotateCcw, History, X, UserPlus, Trash2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useChatHistory, getChatConversation, createNewChat, saveChatConversation, clearAllChatHistory } from '@/lib/chatHistory';
+import { useChatHistory, getChatConversation, createNewChat, saveChatConversation, clearAllChatHistory, deleteChatConversationById } from '@/lib/chatHistory';
 import { cn } from '@/lib/utils';
 import {
   AlertDialog,
@@ -19,36 +19,74 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-const SYSTEM_MESSAGE: Message = {
-  role: 'system',
-  content: 'Du bist ein hilfreicher Assistent für die Nexo-Anwendung. Du hilfst Benutzern bei Fragen zu Finanzen, Rechnungen, Terminen und anderen Funktionen der App. WICHTIG: Verwende IMMER "ss" statt "ß" in allen deutschen Texten (Schweizer Grammatik).',
-};
+// SYSTEM_MESSAGE wird jetzt innerhalb der Komponente erstellt, um t() verwenden zu können
 
 export default function AIChat() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
   const [showClearAllDialog, setShowClearAllDialog] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
-  const { data: chatHistory, refetch: refetchHistory } = useChatHistory();
+  const { data: chatHistory = [], refetch: refetchHistory } = useChatHistory();
   const chatHistoryRef = useRef<HTMLDivElement>(null);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const previousChatIdRef = useRef<string | null>(null);
+  
+  // SYSTEM_MESSAGE mit Übersetzung und Sprache
+  const getSystemMessage = useCallback((): Message => {
+    const language = i18n.language || 'de';
+    const languageName = language === 'de' ? t('common.german', 'Deutsch') : 
+                        language === 'en' ? t('common.english', 'English') :
+                        language === 'es' ? t('common.spanish', 'Español') :
+                        language === 'nl' ? t('common.dutch', 'Nederlands') :
+                        language === 'it' ? t('common.italian', 'Italiano') :
+                        language === 'fr' ? t('common.french', 'Français') : t('common.german', 'Deutsch');
+    
+    return {
+      role: 'system' as const,
+      content: `${t('aiChat.systemMessage')}\n\n${t('aiChat.languageInstruction', 'WICHTIG: Du musst IMMER in {{language}} antworten. Alle Antworten müssen in der Sprache {{language}} sein, die der Benutzer ausgewählt hat.', { language: languageName })}`,
+    };
+  }, [t, i18n.language]);
   
   // Initialize messages from Firebase Chat History only (no localStorage)
-  const [messages, setMessages] = useState<Message[]>([SYSTEM_MESSAGE]);
+  // Use a function to initialize to avoid issues with useMemo dependencies
+  const [messages, setMessages] = useState<Message[]>(() => [getSystemMessage()]);
 
-  // Load chat from Firebase when currentChatId changes
+  // Load chat from Firebase ONLY when currentChatId changes (not when chatHistory updates)
+  // This prevents race conditions where refetching chatHistory overwrites new messages
   useEffect(() => {
-    if (currentChatId && chatHistory.length > 0) {
+    // Only load if chatId actually changed, not just when chatHistory updates
+    if (currentChatId === previousChatIdRef.current) {
+      return; // Don't reload if it's the same chat
+    }
+    
+    previousChatIdRef.current = currentChatId;
+    
+    const systemMessage = getSystemMessage();
+    
+    // If no chatId, reset to system message only
+    if (!currentChatId) {
+      setMessages([systemMessage]);
+      return;
+    }
+    
+    // Try to load from chatHistory if available
+    if (chatHistory && chatHistory.length > 0) {
       const chat = getChatConversation(currentChatId, chatHistory);
       if (chat && chat.messages && chat.messages.length > 0) {
-        setMessages(chat.messages);
-      } else {
-        setMessages([SYSTEM_MESSAGE]);
+        // Replace system message with current language version
+        const updatedMessages = chat.messages.map((msg: Message) => 
+          msg.role === 'system' ? systemMessage : msg
+        );
+        setMessages(updatedMessages);
+        return;
       }
-    } else if (!currentChatId) {
-      setMessages([SYSTEM_MESSAGE]);
     }
-  }, [currentChatId, chatHistory]);
+    
+    // If chat not found in history yet, just set system message
+    // (messages will be added when user sends first message)
+    setMessages([systemMessage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentChatId, getSystemMessage]); // chatHistory intentionally excluded to prevent race conditions
 
   // Save messages to Firebase Chat History only (debounced to avoid too many writes)
   useEffect(() => {
@@ -65,7 +103,7 @@ export default function AIChat() {
             };
             // Update title from first user message if it's still the default
             const firstUserMessage = messages.find(m => m.role === 'user');
-            if (firstUserMessage && (chat.title === 'Neue Konversation' || !chat.title)) {
+            if (firstUserMessage && (chat.title === t('aiChat.newConversation') || !chat.title)) {
               updatedChat.title = firstUserMessage.content.substring(0, 50) + (firstUserMessage.content.length > 50 ? '...' : '');
             }
             await saveChatConversation(updatedChat);
@@ -74,7 +112,7 @@ export default function AIChat() {
             const newChat = {
               id: currentChatId,
               userId: '',
-              title: messages.find(m => m.role === 'user')?.content.substring(0, 50) + (messages.find(m => m.role === 'user')?.content.length && messages.find(m => m.role === 'user')!.content.length > 50 ? '...' : '') || 'Neue Konversation',
+              title: messages.find(m => m.role === 'user')?.content.substring(0, 50) + (messages.find(m => m.role === 'user')?.content.length && messages.find(m => m.role === 'user')!.content.length > 50 ? '...' : '') || t('aiChat.newConversation'),
               messages: messages,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
@@ -103,90 +141,128 @@ export default function AIChat() {
     try {
       await saveChatConversation(newChat);
       setCurrentChatId(newChat.id);
-      setMessages([SYSTEM_MESSAGE]);
+      setMessages([getSystemMessage()]);
       await refetchHistory();
-      toast.success('Neue Konversation gestartet');
+      toast.success(t('aiChat.newConversationStarted'));
     } catch (error) {
       console.error('Error creating new chat:', error);
-      toast.error('Fehler beim Erstellen der neuen Konversation');
+      toast.error(t('aiChat.errorCreatingConversation'));
     }
-  }, [refetchHistory]);
+  }, [refetchHistory, getSystemMessage, t]);
 
   const chatMutation = trpc.ai.chat.useMutation({
     onSuccess: (data) => {
-      const aiResponse: Message = {
-        role: 'assistant',
-        content: data.content,
-      };
-      setMessages((prev) => [...prev, aiResponse]);
+      try {
+        if (!data || !data.content) {
+          console.error('Invalid response from AI:', data);
+          throw new Error('Invalid response from AI');
+        }
+        
+        const aiResponse: Message = {
+          role: 'assistant',
+          content: data.content,
+        };
+        setMessages((prev) => {
+          const systemMessage = getSystemMessage();
+          if (!prev || prev.length === 0) {
+            return [systemMessage, aiResponse];
+          }
+          return [...prev, aiResponse];
+        });
+      } catch (error) {
+        console.error('Error processing AI response:', error);
+        toast.error(t('aiChat.errors.sendErrorRetry'));
+      }
     },
     onError: (error) => {
-      // Better error handling for different error types
-      let errorMessage = 'Ein unbekannter Fehler ist aufgetreten.';
-      
-      // Netzwerk-Fehler
-      if (error.message.includes('<!doctype') || error.message.includes('Unexpected token') || error.message.includes('Failed to fetch')) {
-        errorMessage = 'Der Server ist nicht erreichbar oder gibt eine ungültige Antwort zurück. Bitte stelle sicher, dass der Server läuft und du eine Internetverbindung hast.';
-      } else if (error.message.includes('Unable to transform') || error.message.includes('NetworkError')) {
-        errorMessage = 'Fehler bei der Datenübertragung. Bitte überprüfe deine Internetverbindung und versuche es erneut.';
-      } 
-      // Authentifizierungs-Fehler
-      else if (error.data?.code === 'UNAUTHORIZED' || error.message.includes('unauthenticated')) {
-        errorMessage = 'Du bist nicht angemeldet. Bitte melde dich an.';
-      } 
-      // Server-Fehler
-      else if (error.data?.code === 'INTERNAL_SERVER_ERROR' || error.message.includes('500')) {
-        errorMessage = 'Ein Serverfehler ist aufgetreten. Bitte versuche es später erneut.';
-      } 
-      // Timeout-Fehler
-      else if (error.message.includes('timeout') || error.message.includes('Timeout')) {
-        errorMessage = 'Die Anfrage hat zu lange gedauert. Bitte versuche es erneut.';
-      }
-      // Rate-Limiting
-      else if (error.message.includes('rate limit') || error.message.includes('429')) {
-        errorMessage = 'Zu viele Anfragen. Bitte warte einen Moment und versuche es erneut.';
-      }
-      // Andere Fehler
-      else {
-        errorMessage = error.message || 'Ein Fehler ist aufgetreten.';
-      }
-      
-      // Entferne die letzte User-Nachricht, da sie nicht erfolgreich verarbeitet wurde
-      setMessages((prev) => {
-        const filtered = prev.filter((msg, index) => {
-          // Behalte die letzte User-Nachricht, aber füge eine Fehlermeldung hinzu
-          return true;
+      try {
+        // Better error handling for different error types
+        let errorMessage = t('aiChat.errors.unknown');
+        
+        // Netzwerk-Fehler
+        if (error.message?.includes('<!doctype') || error.message?.includes('Unexpected token') || error.message?.includes('Failed to fetch')) {
+          errorMessage = t('aiChat.errors.serverUnreachable');
+        } else if (error.message?.includes('Unable to transform') || error.message?.includes('NetworkError')) {
+          errorMessage = t('aiChat.errors.dataTransfer');
+        } 
+        // Authentifizierungs-Fehler
+        else if (error.data?.code === 'UNAUTHORIZED' || error.message?.includes('unauthenticated')) {
+          errorMessage = t('aiChat.errors.unauthorized');
+        } 
+        // Server-Fehler
+        else if (error.data?.code === 'INTERNAL_SERVER_ERROR' || error.message?.includes('500')) {
+          errorMessage = t('aiChat.errors.serverError');
+        } 
+        // Timeout-Fehler
+        else if (error.message?.includes('timeout') || error.message?.includes('Timeout')) {
+          errorMessage = t('aiChat.errors.timeout');
+        }
+        // Rate-Limiting
+        else if (error.message?.includes('rate limit') || error.message?.includes('429')) {
+          errorMessage = t('aiChat.errors.rateLimit');
+        }
+        // Andere Fehler
+        else {
+          errorMessage = error.message || t('aiChat.errors.generic');
+        }
+        
+        // Entferne die letzte User-Nachricht nicht, sondern füge eine Fehlermeldung hinzu
+        const errorResponse: Message = {
+          role: 'assistant',
+          content: `**${t('aiChat.errors.occurred')}**\n\n${errorMessage}\n\n${t('aiChat.errors.tryAgain')}`,
+        };
+        
+        setMessages((prev) => {
+          const systemMessage = getSystemMessage();
+          if (!prev || prev.length === 0) {
+            return [systemMessage, errorResponse];
+          }
+          return [...prev, errorResponse];
         });
-        return filtered;
-      });
-      
-      const errorResponse: Message = {
-        role: 'assistant',
-        content: `**Fehler aufgetreten**\n\n${errorMessage}\n\nBitte versuche es erneut oder starte eine neue Konversation.`,
-      };
-      setMessages((prev) => [...prev, errorResponse]);
-      toast.error('Fehler beim Senden der Nachricht');
-      
-      // Log für Debugging
-      console.error('AI Chat Error:', {
-        message: error.message,
-        code: error.data?.code,
-        stack: error instanceof Error ? error.stack : undefined,
-      });
+        
+        toast.error(t('aiChat.errors.sendError'));
+        
+        // Log für Debugging
+        console.error('AI Chat Error:', {
+          message: error.message,
+          code: error.data?.code,
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      } catch (handlerError) {
+        console.error('Error in error handler:', handlerError);
+        toast.error(t('aiChat.errors.sendErrorRetry'));
+      }
     },
   });
+  
+  // Update system message when language changes
+  useEffect(() => {
+    const systemMessage = getSystemMessage();
+    setMessages((prev) => {
+      if (!prev || prev.length === 0) {
+        return [systemMessage];
+      }
+      // Replace system message if it exists
+      const hasSystemMessage = prev.some(m => m.role === 'system');
+      if (hasSystemMessage) {
+        return prev.map(msg => msg.role === 'system' ? systemMessage : msg);
+      }
+      // Add system message if it doesn't exist
+      return [systemMessage, ...prev];
+    });
+  }, [getSystemMessage]);
 
   const handleSendMessage = useCallback(async (content: string) => {
     // Validierung: Maximal 10000 Zeichen pro Nachricht
     if (content.length > 10000) {
-      toast.error('Nachricht ist zu lang. Bitte kürze sie auf maximal 10.000 Zeichen.');
+      toast.error(t('aiChat.messageTooLong'));
       return;
     }
     
     // Validierung: Maximal 50 Nachrichten in der Historie
     const userMessages = messages.filter(m => m.role === 'user');
     if (userMessages.length >= 50) {
-      toast.warning('Zu viele Nachrichten in dieser Konversation. Bitte starte eine neue Konversation.');
+      toast.warning(t('aiChat.tooManyMessages'));
       return;
     }
     
@@ -202,35 +278,60 @@ export default function AIChat() {
           await refetchHistory();
         } catch (error) {
           console.error('Error creating new chat:', error);
-          toast.error('Fehler beim Erstellen der Konversation');
+          toast.error(t('aiChat.errorCreatingConversation'));
           return; // Don't continue if chat creation failed
         }
       }
 
       // Add user message
       const userMessage: Message = { role: 'user', content };
-      const newMessages: Message[] = [...messages, userMessage];
+      
+      // Ensure messages array is valid and has system message
+      const systemMessage = getSystemMessage();
+      const currentMessages = messages && messages.length > 0 ? messages : [systemMessage];
+      const newMessages: Message[] = [...currentMessages, userMessage];
+      
+      // Ensure we have a system message at the beginning
+      if (!newMessages.some(m => m.role === 'system')) {
+        newMessages.unshift(systemMessage);
+      }
+      
+      // Validate messages before sending
+      if (!newMessages || newMessages.length === 0) {
+        console.error('Invalid messages array:', newMessages);
+        toast.error(t('aiChat.errors.sendErrorRetry'));
+        return;
+      }
+      
       setMessages(newMessages);
 
-      // Call tRPC mutation
-      chatMutation.mutate({
-        messages: newMessages,
-      });
+      // Call tRPC mutation with error handling
+      try {
+        chatMutation.mutate({
+          messages: newMessages,
+          language: i18n.language,
+        });
+      } catch (mutationError) {
+        console.error('Error in chatMutation.mutate:', mutationError);
+        toast.error(t('aiChat.errors.sendErrorRetry'));
+        // Revert messages on error
+        setMessages(currentMessages);
+      }
     } catch (error) {
       console.error('Error in handleSendMessage:', error);
-      toast.error('Fehler beim Senden der Nachricht. Bitte versuche es erneut.');
+      toast.error(t('aiChat.errors.sendErrorRetry'));
     }
-  }, [messages, chatMutation, currentChatId, refetchHistory]);
+  }, [messages, chatMutation, currentChatId, refetchHistory, t, getSystemMessage]);
 
   // Suggested prompts with context-appropriate icons
   const suggestedPrompts = useMemo(() => [
-    { text: 'Wie funktioniert die Rechnungsverwaltung?', icon: 'receipt' as const },
-    { text: 'Wie erstelle ich eine Erinnerung?', icon: 'bell' as const },
-    { text: 'Wie verwalte ich meine Finanzen?', icon: 'wallet' as const },
-    { text: 'Was kann ich mit der Einkaufsliste machen?', icon: 'shoppingCart' as const },
-    { text: 'Wie funktioniert das Raten-System?', icon: 'calendar' as const },
-    { text: 'Wie scanne ich eine Rechnung?', icon: 'scan' as const },
-  ], []);
+    { text: t('aiChat.suggestedPrompts.howInvoiceManagement'), icon: 'receipt' as const },
+    { text: t('aiChat.suggestedPrompts.howCreateReminder'), icon: 'bell' as const },
+    { text: t('aiChat.suggestedPrompts.howManageFinances'), icon: 'wallet' as const },
+    { text: t('aiChat.suggestedPrompts.whatCanShoppingList'), icon: 'shoppingCart' as const },
+    { text: t('aiChat.suggestedPrompts.howInstallmentSystem'), icon: 'calendar' as const },
+    { text: t('aiChat.suggestedPrompts.howScanBill'), icon: 'scan' as const },
+  ], [t]);
   
   // Prüfe ob bereits Nachrichten gesendet wurden (ausser System-Nachrichten)
   const hasUserMessages = messages.some(m => m.role === 'user');
@@ -262,19 +363,19 @@ export default function AIChat() {
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
     if (days === 0) {
-      return 'Heute';
+      return t('aiChat.dateToday');
     } else if (days === 1) {
-      return 'Gestern';
+      return t('aiChat.dateYesterday');
     } else if (days < 7) {
-      return `vor ${days} Tagen`;
+      return t('aiChat.dateDaysAgo', { days });
     } else {
-      return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+      return date.toLocaleDateString(i18n.language, { day: '2-digit', month: '2-digit' });
     }
   };
 
   const handleClearAllChats = async () => {
     if (chatHistory.length === 0) {
-      toast.info('Keine Chats zum Löschen vorhanden');
+      toast.info(t('aiChat.noChatsToDelete'));
       setShowClearAllDialog(false);
       return;
     }
@@ -282,7 +383,11 @@ export default function AIChat() {
     setIsClearing(true);
     try {
       const result = await clearAllChatHistory();
-      toast.success(`${result.deletedCount} Chat${result.deletedCount !== 1 ? 's' : ''} gelöscht`);
+      toast.success(
+        result.deletedCount !== 1 
+          ? t('aiChat.deleted', { count: result.deletedCount, plural: 's' })
+          : t('aiChat.deletedSingular', { count: result.deletedCount })
+      );
       setShowClearAllDialog(false);
       setChatHistoryOpen(false);
       await refetchHistory();
@@ -290,14 +395,14 @@ export default function AIChat() {
       handleNewConversation();
     } catch (error) {
       console.error('Fehler beim Löschen aller Chats:', error);
-      toast.error('Fehler beim Löschen der Chats');
+      toast.error(t('aiChat.deleteError'));
     } finally {
       setIsClearing(false);
     }
   };
 
   return (
-    <Layout title="Assistent">
+    <Layout title={t('aiChat.title')}>
       <div className="h-[calc(100vh-140px)] flex flex-col bg-background">
         {/* Header with New Chat and History Buttons - Always visible */}
         <div className="flex items-center justify-end gap-2 py-2 px-4 max-w-4xl mx-auto w-full">
@@ -309,7 +414,7 @@ export default function AIChat() {
             disabled={!hasUserMessages}
           >
             <UserPlus className="size-4" />
-            <span className="hidden sm:inline">Neue Konversation</span>
+            <span className="hidden sm:inline">{t('aiChat.newConversation')}</span>
           </Button>
           
           {/* Chat History Button */}
@@ -326,14 +431,14 @@ export default function AIChat() {
               className="flex items-center gap-2"
             >
               <History className="size-4" />
-              <span className="hidden sm:inline">Verlauf</span>
+              <span className="hidden sm:inline">{t('aiChat.history')}</span>
             </Button>
 
             {/* Chat History Dropdown */}
             {chatHistoryOpen && (
               <div className="absolute top-full right-0 mt-2 w-72 bg-background border border-border rounded-lg shadow-lg z-50 overflow-hidden max-h-[60vh] flex flex-col">
                 <div className="p-3 border-b border-border flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Chat-Verlauf</h3>
+                  <h3 className="text-sm font-semibold">{t('aiChat.chatHistory')}</h3>
                   <button
                     onClick={() => setChatHistoryOpen(false)}
                     className="p-1 hover:bg-muted rounded transition-colors"
@@ -344,38 +449,67 @@ export default function AIChat() {
                 <div className="overflow-y-auto">
                   {chatHistory.length === 0 ? (
                     <p className="text-sm text-muted-foreground py-4 px-3 text-center">
-                      Noch keine Konversationen
+                      {t('aiChat.noConversations')}
                     </p>
                   ) : (
-                    <div className="p-2">
+                    <div className="p-2 space-y-1">
                       {chatHistory.map((chat) => {
                         const isActive = currentChatId === chat.id;
                         return (
-                          <button
+                          <div
                             key={chat.id}
-                            onClick={() => {
-                              setCurrentChatId(chat.id);
-                              setChatHistoryOpen(false);
-                            }}
                             className={cn(
-                              "w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg transition-colors text-left",
+                              "group w-full flex items-start gap-2 px-3 py-2 rounded-lg transition-colors",
                               isActive
-                                ? "bg-primary/10 text-primary"
+                                ? "bg-primary/10"
                                 : "hover:bg-muted"
                             )}
                           >
-                            <div className="flex-1 min-w-0">
+                            <button
+                              onClick={() => {
+                                setCurrentChatId(chat.id);
+                                setChatHistoryOpen(false);
+                              }}
+                              className="flex-1 min-w-0 text-left"
+                            >
                               <p className={cn(
-                                "text-sm truncate",
-                                isActive && "font-medium"
-                              )}>
+                                "text-sm leading-snug break-words",
+                                isActive ? "font-medium text-primary" : "text-foreground"
+                              )}
+                              style={{ 
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden'
+                              }}
+                              >
                                 {chat.title}
                               </p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
+                              <p className="text-xs text-muted-foreground mt-1">
                                 {formatDate(chat.updatedAt)}
                               </p>
-                            </div>
-                          </button>
+                            </button>
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  await deleteChatConversationById(chat.id);
+                                  if (currentChatId === chat.id) {
+                                    setCurrentChatId(null);
+                                    setMessages([getSystemMessage()]);
+                                  }
+                                  await refetchHistory();
+                                  toast.success(t('aiChat.chatDeleted'));
+                                } catch (error) {
+                                  toast.error(t('aiChat.errorDeletingChat'));
+                                }
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-destructive/10 rounded transition-all flex-shrink-0"
+                              title={t('common.delete')}
+                            >
+                              <X className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                            </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -391,7 +525,7 @@ export default function AIChat() {
                       disabled={isClearing}
                     >
                       <Trash2 className="w-4 h-4" />
-                      <span>Alle löschen</span>
+                      <span>{t('aiChat.clearAll')}</span>
                     </Button>
                   </div>
                 )}
@@ -408,7 +542,7 @@ export default function AIChat() {
             isLoading={chatMutation.isPending}
             placeholder={t('common.typeMessage', 'Nachricht eingeben...')}
             height="100%"
-            emptyStateMessage="Wähle eine Frage oder stelle deine eigene"
+            emptyStateMessage={t('aiChat.emptyStateMessage')}
             suggestedPrompts={hasUserMessages ? [] : suggestedPrompts}
           />
         </div>
@@ -420,20 +554,23 @@ export default function AIChat() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-destructive" />
-              Alle Chats löschen?
+              {t('aiChat.clearAllConfirm')}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Diese Aktion kann nicht rückgängig gemacht werden. Alle {chatHistory.length} Chat{chatHistory.length !== 1 ? 's' : ''} werden permanent gelöscht.
+              {chatHistory.length !== 1 
+                ? t('aiChat.clearAllDescription', { count: chatHistory.length, plural: 's' })
+                : t('aiChat.clearAllDescriptionSingular', { count: chatHistory.length })
+              }
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isClearing}>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel disabled={isClearing}>{t('aiChat.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleClearAllChats}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={isClearing}
             >
-              {isClearing ? 'Löschen...' : 'Ja, alle löschen'}
+              {isClearing ? t('aiChat.deleting') : t('aiChat.confirmDelete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

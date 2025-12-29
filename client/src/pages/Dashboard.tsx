@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -94,7 +95,7 @@ export default function Dashboard() {
     openBills.forEach(bill => {
       if (!bill.dueDate && !dismissedWarnings.has(bill.id)) {
         // Show a subtle toast that auto-dismisses
-        toast.info(`"${bill.title}" hat kein Fälligkeitsdatum`, {
+        toast.info(t('dashboard.billNoDueDate', { title: bill.title }), {
           duration: 4000,
           id: `no-date-${bill.id}`,
         });
@@ -152,7 +153,8 @@ export default function Dashboard() {
     try {
       const d = date?.toDate ? date.toDate() : new Date(date);
       if (isNaN(d.getTime())) return 'N/A';
-      return d.toLocaleDateString('de-CH', {
+      const locale = i18n.language === 'de' ? 'de-CH' : i18n.language === 'en' ? 'en-GB' : i18n.language === 'es' ? 'es-ES' : i18n.language === 'nl' ? 'nl-NL' : i18n.language === 'it' ? 'it-IT' : i18n.language === 'fr' ? 'fr-FR' : 'de-CH';
+      return d.toLocaleDateString(locale, {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -193,7 +195,7 @@ export default function Dashboard() {
 
   return (
     <Layout title={t('dashboard.title')}>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-tutorial="dashboard">
         
         {/* Upcoming Appointments Widget */}
         <Card className="col-span-1">
@@ -232,7 +234,7 @@ export default function Dashboard() {
                       }}
                       tabIndex={0}
                       role="button"
-                      aria-label={`${item.type === 'termin' ? 'Termin' : 'Erinnerung'}: ${item.title}`}
+                      aria-label={`${item.type === 'termin' ? t('reminders.types.termin') : t('reminders.types.aufgabe')}: ${item.title || ''}`}
                     >
                       <div className={`p-1.5 rounded ${item.type === 'termin' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
                         {getTypeIcon(item.type)}
@@ -275,7 +277,7 @@ export default function Dashboard() {
               </div>
               {overdueCount > 0 && (
                 <Badge variant="destructive" className="text-xs">
-                  {overdueCount} überfällig
+                  {t('dashboard.overdueCount', { count: overdueCount })}
                 </Badge>
               )}
             </div>
@@ -315,7 +317,7 @@ export default function Dashboard() {
                       }}
                       tabIndex={0}
                       role="button"
-                      aria-label={`Rechnung: ${bill.description || 'Unbenannt'}`}
+                      aria-label={t('dashboard.billAriaLabel', { description: bill.description || t('common.unnamed') })}
                     >
                       <div className="p-1.5 rounded bg-muted">
                         <ClipboardList className="w-4 h-4" />
@@ -329,16 +331,16 @@ export default function Dashboard() {
                           {hasDueDate ? (
                             <span className={isOverdue ? 'text-red-600' : isDueSoon ? 'text-orange-600' : ''}>
                               {isOverdue 
-                                ? `${Math.abs(daysUntil!)} Tage überfällig` 
+                                ? t('dashboard.daysOverdue', { days: Math.abs(daysUntil!) })
                                 : daysUntil === 0 
-                                  ? 'Heute fällig'
-                                  : `Fällig in ${daysUntil} Tagen`
+                                  ? t('dashboard.dueToday')
+                                  : t('dashboard.dueInDays', { days: daysUntil })
                               }
                             </span>
                           ) : (
                             <span className="text-amber-600 flex items-center gap-1">
                               <Clock className="w-3 h-3" />
-                              Kein Datum
+                              {t('dashboard.noDate')}
                             </span>
                           )}
                         </div>
@@ -399,7 +401,11 @@ export default function Dashboard() {
           <CardHeader>
             <CardTitle>{t('dashboard.financeOverview')}</CardTitle>
             <CardDescription>
-              {new Date().toLocaleDateString('de-CH', { month: 'long', year: 'numeric' })}
+              {(() => {
+                const date = new Date();
+                const monthKey = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'][date.getMonth()];
+                return `${t(`calendar.months.${monthKey}`)} ${date.getFullYear()}`;
+              })()}
             </CardDescription>
           </CardHeader>
           <CardContent>

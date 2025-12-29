@@ -13,12 +13,17 @@ export default function LanguageSwitcher() {
   const { i18n } = useTranslation();
 
   const languages = [
-    { code: 'de', label: 'Deutsch', flag: '🇩🇪' },
+    { code: 'de', label: 'Deutsch', flag: '🇨🇭' }, // Schweiz für Deutsch
     { code: 'en', label: 'English', flag: '🇬🇧' },
+    { code: 'es', label: 'Español', flag: '🇪🇸' },
+    { code: 'nl', label: 'Nederlands', flag: '🇳🇱' },
+    { code: 'it', label: 'Italiano', flag: '🇮🇹' },
+    { code: 'fr', label: 'Français', flag: '🇫🇷' },
   ];
 
   const handleLanguageChange = (langCode: string) => {
     i18n.changeLanguage(langCode);
+    // Language is automatically saved to localStorage by i18n.on('languageChanged')
   };
 
   const currentLanguage = languages.find(lang => lang.code === i18n.language) || languages[0];
@@ -32,8 +37,7 @@ export default function LanguageSwitcher() {
             className="inline-flex items-center justify-center gap-2 rounded-md text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-9 px-3"
             style={{ pointerEvents: 'auto', position: 'relative', zIndex: 10004 }}
           >
-            <Globe className="w-4 h-4" />
-            {currentLanguage.code.toUpperCase()}
+            <span className="text-lg">{currentLanguage.flag}</span>
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48" style={{ zIndex: 10004, pointerEvents: 'auto' }}>

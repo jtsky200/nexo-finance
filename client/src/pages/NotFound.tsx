@@ -2,9 +2,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, Home } from "lucide-react";
 import { useLocation } from "wouter";
+import { useTranslation } from "react-i18next";
 
 export default function NotFound() {
   const [, setLocation] = useLocation();
+  const { t } = useTranslation();
 
   const handleGoHome = () => {
     setLocation("/");
@@ -23,13 +25,13 @@ export default function NotFound() {
           <h1 className="text-4xl font-bold mb-2">404</h1>
 
           <h2 className="text-xl font-semibold text-muted-foreground mb-4">
-            Seite nicht gefunden
+            {t('notFound.title', 'Seite nicht gefunden')}
           </h2>
 
           <p className="text-muted-foreground mb-8 leading-relaxed">
-            Die gesuchte Seite existiert nicht.
+            {t('notFound.description', 'Die gesuchte Seite existiert nicht.')}
             <br />
-            Sie wurde möglicherweise verschoben oder gelöscht.
+            {t('notFound.subDescription', 'Sie wurde möglicherweise verschoben oder gelöscht.')}
           </p>
 
           <Button
@@ -37,7 +39,7 @@ export default function NotFound() {
             className="px-6"
           >
             <Home className="w-4 h-4 mr-2" />
-            Zur Startseite
+            {t('notFound.goHome', 'Zur Startseite')}
           </Button>
         </CardContent>
       </Card>

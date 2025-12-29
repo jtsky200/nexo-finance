@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,7 +22,8 @@ import {
   RotateCcw, ListChecks, Tag, Banknote, ScanLine,
   Apple, Home as HomeIcon, Shirt, Cpu, Heart, MoreHorizontal, ChevronRight
 } from 'lucide-react';
-import { useShoppingList, createShoppingItem, deleteShoppingItem, markShoppingItemAsBought, createFinanceEntry, useStores, useStoreItems, useReceipts, useUserSettings, type QuickAddTemplate, type ShoppingBudget } from '@/lib/firebaseHooks';
+import ContextMenu from '@/components/ContextMenu';
+import { useShoppingList, createShoppingItem, deleteShoppingItem, markShoppingItemAsBought, createFinanceEntry, useStores, useStoreItems, useReceipts, useUserSettings, type QuickAddTemplate, type ShoppingBudget, type ShoppingItem } from '@/lib/firebaseHooks';
 import { toast } from 'sonner';
 import { functions } from '@/lib/firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -61,61 +63,90 @@ interface ReceiptData {
   confidence: number;
 }
 
-// Swiss stores
-const stores = [
-  { id: 'migros', name: 'Migros', color: 'bg-orange-500' },
-  { id: 'coop', name: 'Coop', color: 'bg-orange-600' },
-  { id: 'aldi', name: 'Aldi', color: 'bg-blue-600' },
-  { id: 'lidl', name: 'Lidl', color: 'bg-yellow-500' },
-  { id: 'denner', name: 'Denner', color: 'bg-red-600' },
-  { id: 'spar', name: 'Spar', color: 'bg-green-600' },
-  { id: 'volg', name: 'Volg', color: 'bg-red-500' },
-  { id: 'manor', name: 'Manor', color: 'bg-purple-600' },
-  { id: 'other', name: 'Andere', color: 'bg-gray-500' },
+// Helper functions to get translated values (will be used inside component)
+const getStores = (t: (key: string) => string) => [
+  { id: 'migros', name: t('shopping.stores.migros'), color: 'bg-orange-500' },
+  { id: 'coop', name: t('shopping.stores.coop'), color: 'bg-orange-600' },
+  { id: 'aldi', name: t('shopping.stores.aldi'), color: 'bg-blue-600' },
+  { id: 'lidl', name: t('shopping.stores.lidl'), color: 'bg-yellow-500' },
+  { id: 'denner', name: t('shopping.stores.denner'), color: 'bg-red-600' },
+  { id: 'spar', name: t('shopping.stores.spar'), color: 'bg-green-600' },
+  { id: 'volg', name: t('shopping.stores.volg'), color: 'bg-red-500' },
+  { id: 'manor', name: t('shopping.stores.manor'), color: 'bg-purple-600' },
+  { id: 'other', name: t('shopping.stores.other'), color: 'bg-gray-500' },
 ];
 
-// Category icons and colors
-const categoryConfig: Record<string, { icon: any; color: string; bg: string; chartColor: string }> = {
-  'Lebensmittel': { icon: Apple, color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30', chartColor: '#16a34a' },
-  'Haushalt': { icon: HomeIcon, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30', chartColor: '#2563eb' },
-  'Hygiene': { icon: Heart, color: 'text-pink-600', bg: 'bg-pink-100 dark:bg-pink-900/30', chartColor: '#db2777' },
-  'Elektronik': { icon: Cpu, color: 'text-yellow-600', bg: 'bg-yellow-100 dark:bg-yellow-900/30', chartColor: '#ca8a04' },
-  'Kleidung': { icon: Shirt, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30', chartColor: '#9333ea' },
-  'Sonstiges': { icon: Package, color: 'text-gray-600', bg: 'bg-gray-100 dark:bg-gray-900/30', chartColor: '#6b7280' },
-};
+// Category keys mapping (internal keys, not translated)
+const categoryKeys = {
+  food: 'food',
+  household: 'household',
+  hygiene: 'hygiene',
+  electronics: 'electronics',
+  clothing: 'clothing',
+  other: 'other',
+} as const;
 
-// Default quick add templates
-const defaultQuickAddTemplates: QuickAddTemplate[] = [
-  { id: '1', name: 'Milch', category: 'Lebensmittel', price: 1.80 },
-  { id: '2', name: 'Brot', category: 'Lebensmittel', price: 3.50 },
-  { id: '3', name: 'Eier (6er)', category: 'Lebensmittel', price: 4.20 },
-  { id: '4', name: 'Butter', category: 'Lebensmittel', price: 2.90 },
-  { id: '5', name: 'Käse', category: 'Lebensmittel', price: 5.50 },
-  { id: '6', name: 'Bananen', category: 'Lebensmittel', price: 2.50 },
-  { id: '7', name: 'Äpfel', category: 'Lebensmittel', price: 3.90 },
-  { id: '8', name: 'Toilettenpapier', category: 'Haushalt', price: 8.90 },
-  { id: '9', name: 'Waschmittel', category: 'Haushalt', price: 12.90 },
-  { id: '10', name: 'Zahnpasta', category: 'Hygiene', price: 3.50 },
-  { id: '11', name: 'Shampoo', category: 'Hygiene', price: 5.90 },
-  { id: '12', name: 'Duschgel', category: 'Hygiene', price: 4.50 },
+const getCategoryConfig = (t: (key: string) => string): Record<string, { icon: any; color: string; bg: string; chartColor: string }> => ({
+  [categoryKeys.food]: { icon: Apple, color: 'text-green-600', bg: 'bg-green-100 dark:bg-green-900/30', chartColor: '#16a34a' },
+  [categoryKeys.household]: { icon: HomeIcon, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30', chartColor: '#2563eb' },
+  [categoryKeys.hygiene]: { icon: Heart, color: 'text-pink-600', bg: 'bg-pink-100 dark:bg-pink-900/30', chartColor: '#db2777' },
+  [categoryKeys.electronics]: { icon: Cpu, color: 'text-yellow-600', bg: 'bg-yellow-100 dark:bg-yellow-900/30', chartColor: '#ca8a04' },
+  [categoryKeys.clothing]: { icon: Shirt, color: 'text-purple-600', bg: 'bg-purple-100 dark:bg-purple-900/30', chartColor: '#9333ea' },
+  [categoryKeys.other]: { icon: Package, color: 'text-gray-600', bg: 'bg-gray-100 dark:bg-gray-900/30', chartColor: '#6b7280' },
+});
+
+const getDefaultQuickAddTemplates = (t: (key: string) => string): QuickAddTemplate[] => [
+  { id: '1', name: t('shopping.quickAddTemplates.milk'), category: categoryKeys.food, price: 1.80 },
+  { id: '2', name: t('shopping.quickAddTemplates.bread'), category: categoryKeys.food, price: 3.50 },
+  { id: '3', name: t('shopping.quickAddTemplates.eggs'), category: categoryKeys.food, price: 4.20 },
+  { id: '4', name: t('shopping.quickAddTemplates.butter'), category: categoryKeys.food, price: 2.90 },
+  { id: '5', name: t('shopping.quickAddTemplates.cheese'), category: categoryKeys.food, price: 5.50 },
+  { id: '6', name: t('shopping.quickAddTemplates.bananas'), category: categoryKeys.food, price: 2.50 },
+  { id: '7', name: t('shopping.quickAddTemplates.apples'), category: categoryKeys.food, price: 3.90 },
+  { id: '8', name: t('shopping.quickAddTemplates.toiletPaper'), category: categoryKeys.household, price: 8.90 },
+  { id: '9', name: t('shopping.quickAddTemplates.detergent'), category: categoryKeys.household, price: 12.90 },
+  { id: '10', name: t('shopping.quickAddTemplates.toothpaste'), category: categoryKeys.hygiene, price: 3.50 },
+  { id: '11', name: t('shopping.quickAddTemplates.shampoo'), category: categoryKeys.hygiene, price: 5.90 },
+  { id: '12', name: t('shopping.quickAddTemplates.showerGel'), category: categoryKeys.hygiene, price: 4.50 },
 ];
 
-// Shopping list templates
-const listTemplates = [
+const getListTemplates = (t: (key: string) => string) => [
   { 
-    name: 'Wocheneinkauf Basics', 
+    name: t('shopping.listTemplates.weeklyBasics'), 
     icon: ShoppingCart,
-    items: ['Milch', 'Brot', 'Eier (6er)', 'Butter', 'Käse', 'Joghurt', 'Obst', 'Gemüse'] 
+    items: [
+      t('shopping.quickAddTemplates.milk'),
+      t('shopping.quickAddTemplates.bread'),
+      t('shopping.quickAddTemplates.eggs'),
+      t('shopping.quickAddTemplates.butter'),
+      t('shopping.quickAddTemplates.cheese'),
+      t('shopping.listTemplates.yogurt'),
+      t('shopping.listTemplates.fruit'),
+      t('shopping.listTemplates.vegetables'),
+    ] 
   },
   { 
-    name: 'Party / Gäste', 
+    name: t('shopping.listTemplates.party'), 
     icon: ShoppingBag,
-    items: ['Chips', 'Getränke', 'Dips', 'Servietten', 'Snacks', 'Dessert'] 
+    items: [
+      t('shopping.listTemplates.chips'),
+      t('shopping.listTemplates.drinks'),
+      t('shopping.listTemplates.dips'),
+      t('shopping.listTemplates.napkins'),
+      t('shopping.listTemplates.snacks'),
+      t('shopping.listTemplates.dessert'),
+    ] 
   },
   { 
-    name: 'Haushalts-Nachfüllung', 
+    name: t('shopping.listTemplates.householdRefill'), 
     icon: HomeIcon,
-    items: ['Toilettenpapier', 'Küchenrolle', 'Müllbeutel', 'Spülmittel', 'Waschmittel'] 
+    items: [
+      t('shopping.quickAddTemplates.toiletPaper'),
+      t('shopping.listTemplates.kitchenRoll'),
+      t('shopping.listTemplates.trashBags'),
+      t('shopping.listTemplates.dishSoap'),
+      t('shopping.quickAddTemplates.detergent'),
+    ] 
   },
 ];
 
@@ -124,6 +155,20 @@ export default function Shopping() {
   const { data: items = [], isLoading, refetch } = useShoppingList();
   const [optimisticItems, setOptimisticItems] = useState<ShoppingItem[]>([]);
   const [isDeleting, setIsDeleting] = useState<Set<string>>(new Set());
+  
+  // Get translated constants
+  const stores = useMemo(() => getStores(t), [t]);
+  const categoryConfig = useMemo(() => getCategoryConfig(t), [t]);
+  const defaultQuickAddTemplates = useMemo(() => getDefaultQuickAddTemplates(t), [t]);
+  const listTemplates = useMemo(() => getListTemplates(t), [t]);
+  const categories = useMemo(() => [
+    t('shopping.categories.food'),
+    t('shopping.categories.household'),
+    t('shopping.categories.hygiene'),
+    t('shopping.categories.electronics'),
+    t('shopping.categories.clothing'),
+    t('shopping.categories.other'),
+  ], [t]);
   
   // Sync optimistic items with actual items
   useEffect(() => {
@@ -154,7 +199,7 @@ export default function Shopping() {
   const [hasMigrated, setHasMigrated] = useState(false);
   const [showQuickAddManager, setShowQuickAddManager] = useState(false);
   const [editingQuickAdd, setEditingQuickAdd] = useState<typeof quickAddTemplates[0] | null>(null);
-  const [newQuickAdd, setNewQuickAdd] = useState({ name: '', category: 'Lebensmittel', price: 0 });
+  const [newQuickAdd, setNewQuickAdd] = useState({ name: '', category: categoryKeys.food, price: 0 });
   
   // Store state
   const [selectedStore, setSelectedStore] = useState<string>('');
@@ -194,7 +239,7 @@ export default function Shopping() {
   const [newItem, setNewItem] = useState({
     item: '',
     quantity: 1,
-    category: 'Lebensmittel',
+    category: categoryKeys.food,
     estimatedPrice: 0,
     currency: 'CHF',
     store: '',
@@ -208,7 +253,7 @@ export default function Shopping() {
   const [showItemSuggestions, setShowItemSuggestions] = useState(false);
   const itemInputRef = useRef<HTMLInputElement>(null);
 
-  const categories = ['Lebensmittel', 'Haushalt', 'Hygiene', 'Elektronik', 'Kleidung', 'Sonstiges'];
+  // categories is now defined above using useMemo
 
   // Migrate from localStorage to Firebase UserSettings on first load
   useEffect(() => {
@@ -311,6 +356,7 @@ export default function Shopping() {
   // Multi-select state for deletion
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+  const [showClearAllDialog, setShowClearAllDialog] = useState(false);
 
   const totalEstimated = notBoughtItems.reduce((sum, i) => sum + (i.estimatedPrice * i.quantity), 0) / 100;
   const totalSpent = boughtItems.reduce((sum, i) => sum + ((i.actualPrice || i.estimatedPrice) * i.quantity), 0) / 100;
@@ -365,13 +411,13 @@ export default function Shopping() {
       setBudget({ amount, isSet: true });
       setShowBudgetDialog(false);
       setBudgetInput('');
-      toast.success(`Budget auf CHF ${amount.toFixed(2)} gesetzt`);
+      toast.success(t('shopping.budgetSet', 'Budget auf CHF {{amount}} gesetzt', { amount: amount.toFixed(2) }));
     }
   };
 
   const handleClearBudget = () => {
     setBudget({ amount: 0, isSet: false });
-    toast.success('Budget zurückgesetzt');
+    toast.success(t('shopping.budgetReset', 'Budget zurückgesetzt'));
   };
 
   // Quick Add Management
@@ -380,14 +426,14 @@ export default function Shopping() {
       setQuickAddTemplates(prev => 
         prev.map(t => t.id === editingQuickAdd.id ? editingQuickAdd : t)
       );
-      toast.success('Artikel aktualisiert');
+      toast.success(t('shopping.itemUpdated'));
     } else if (newQuickAdd.name.trim()) {
       setQuickAddTemplates(prev => [
         ...prev,
         { ...newQuickAdd, id: Date.now().toString() }
       ]);
-      setNewQuickAdd({ name: '', category: 'Lebensmittel', price: 0 });
-      toast.success('Artikel hinzugefügt');
+      setNewQuickAdd({ name: '', category: categoryKeys.food, price: 0 });
+      toast.success(t('shopping.itemAdded'));
     }
     setEditingQuickAdd(null);
   };
@@ -399,13 +445,13 @@ export default function Shopping() {
   const confirmDeleteQuickAdd = () => {
     if (!deleteQuickAddId) return;
     setQuickAddTemplates(prev => prev.filter(t => t.id !== deleteQuickAddId));
-    toast.success('Artikel entfernt');
+    toast.success(t('shopping.itemRemoved'));
     setDeleteQuickAddId(null);
   };
 
   const handleResetQuickAdd = () => {
     setQuickAddTemplates(defaultQuickAddTemplates);
-    toast.success('Schnell-Artikel zurückgesetzt');
+    toast.success(t('shopping.quickAddReset'));
   };
 
   // ============================================
@@ -449,16 +495,16 @@ export default function Shopping() {
         
         if (data.success && data.items.length > 0) {
           setScannedListItems(data.items.map((item: any) => ({ ...item, selected: true })));
-          toast.success(`${data.items.length} Artikel erkannt!`);
+          toast.success(t('shopping.itemsRecognized', { count: data.items.length }));
         } else {
-          toast.error('Keine Artikel erkannt. Versuche ein anderes Bild.');
+          toast.error(t('shopping.noItemsRecognized'));
         }
         
         setIsListScanning(false);
       };
       reader.readAsDataURL(file);
     } catch (error: any) {
-      toast.error('Fehler beim Scannen: ' + error.message);
+      toast.error(t('shopping.scanError') + error.message);
       setIsListScanning(false);
     }
   };
@@ -467,7 +513,7 @@ export default function Shopping() {
   const handleAddScannedItems = async () => {
     const selectedItems = scannedListItems.filter(item => item.selected);
     if (selectedItems.length === 0) {
-      toast.error('Bitte mindestens einen Artikel auswählen');
+      toast.error(t('shopping.selectAtLeastOneItem', 'Bitte mindestens einen Artikel auswählen'));
       return;
     }
     
@@ -476,33 +522,33 @@ export default function Shopping() {
         await createShoppingItem({
           item: item.name,
           quantity: item.quantity || 1,
-          category: item.category || 'Sonstiges',
+          category: item.category || categoryKeys.other,
           estimatedPrice: 0,
           currency: 'CHF',
           store: '',
         });
       }
       
-      toast.success(`${selectedItems.length} Artikel hinzugefügt!`);
+      toast.success(t('shopping.itemsAdded', { count: selectedItems.length }));
       refetch();
       
       // Show save template dialog
       setShowSaveTemplateDialog(true);
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
     }
   };
 
   // Save scanned list as template
   const handleSaveTemplate = async () => {
     if (!newTemplateName.trim()) {
-      toast.error('Bitte Namen eingeben');
+      toast.error(t('shopping.pleaseEnterName'));
       return;
     }
     
     const selectedItems = scannedListItems.filter(item => item.selected);
     if (selectedItems.length === 0) {
-      toast.error('Keine Artikel zum Speichern');
+      toast.error(t('shopping.noItemsToSave'));
       return;
     }
     
@@ -514,12 +560,12 @@ export default function Shopping() {
           name: item.name,
           quantity: item.quantity || 1,
           unit: item.unit,
-          category: item.category || 'Sonstiges',
+          category: item.category || categoryKeys.other,
         })),
         sourceImage: scannedListImage,
       });
       
-      toast.success('Liste im Archiv gespeichert!');
+      toast.success(t('shopping.listSavedToArchive'));
       setShowSaveTemplateDialog(false);
       setNewTemplateName('');
       setShowListScanner(false);
@@ -527,7 +573,7 @@ export default function Shopping() {
       setScannedListImage(null);
       loadTemplates();
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
     }
   };
 
@@ -538,11 +584,11 @@ export default function Shopping() {
       const result = await useTemplate({ templateId });
       const data = result.data as any;
       
-      toast.success(`${data.addedCount} Artikel hinzugefügt!`);
+      toast.success(t('shopping.itemsAdded', { count: data.addedCount }));
       refetch();
       loadTemplates();
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
     }
   };
 
@@ -556,11 +602,11 @@ export default function Shopping() {
     try {
       const deleteTemplate = httpsCallable(functions, 'deleteShoppingListTemplate');
       await deleteTemplate({ templateId: deleteTemplateId });
-      toast.success('Liste aus Archiv gelöscht');
+      toast.success(t('shopping.listDeletedFromArchive'));
       loadTemplates();
       setDeleteTemplateId(null);
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
       setDeleteTemplateId(null);
     }
   };
@@ -572,7 +618,7 @@ export default function Shopping() {
 
   const handleAddItem = useCallback(async () => {
     if (!newItem.item.trim()) {
-      toast.error('Bitte Artikel eingeben');
+      toast.error(t('shopping.pleaseEnterItem'));
       return;
     }
 
@@ -581,11 +627,11 @@ export default function Shopping() {
         ...newItem,
         estimatedPrice: newItem.estimatedPrice * 100, // Convert to cents
       });
-      toast.success('Artikel hinzugefügt');
+      toast.success(t('shopping.itemAdded'));
       setNewItem({
         item: '',
         quantity: 1,
-        category: 'Lebensmittel',
+        category: categoryKeys.food,
         estimatedPrice: 0,
         currency: 'CHF',
         store: '',
@@ -593,7 +639,7 @@ export default function Shopping() {
       // Refetch in background
       setTimeout(() => refetch(), 100);
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
     }
   }, [newItem, refetch]);
 
@@ -606,10 +652,10 @@ export default function Shopping() {
         estimatedPrice: template.price * 100,
         currency: 'CHF',
       });
-      toast.success(`${template.name} hinzugefügt`);
+      toast.success(t('shopping.itemAddedFromTemplate', '{{name}} hinzugefügt', { name: template.name }));
       refetch();
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
     }
   };
 
@@ -623,13 +669,13 @@ export default function Shopping() {
     
     try {
       await markShoppingItemAsBought(itemId, estimatedPrice, true);
-      toast.success('Als eingekauft markiert ✓');
+      toast.success(t('shopping.markedAsBought', 'Als eingekauft markiert ✓'));
       // Refetch in background
       setTimeout(() => refetch(), 100);
     } catch (error: any) {
       // Rollback on error
       refetch();
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
     }
   }, [refetch]);
 
@@ -646,13 +692,13 @@ export default function Shopping() {
     
     try {
       await deleteShoppingItem(deleteItemId);
-      toast.success('Artikel entfernt');
+      toast.success(t('shopping.itemRemoved'));
       // Refetch in background to ensure sync
       setTimeout(() => refetch(), 100);
     } catch (error: any) {
       // Rollback on error
       refetch();
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
     } finally {
       setIsDeleting(prev => {
         const newSet = new Set(prev);
@@ -666,7 +712,7 @@ export default function Shopping() {
   // Multi-select functions
   const handleDeleteMultipleItems = useCallback(async () => {
     if (selectedItemIds.size === 0) {
-      toast.error('Bitte wählen Sie mindestens einen Artikel aus');
+      toast.error(t('shopping.pleaseSelectAtLeastOneItem'));
       return;
     }
 
@@ -688,13 +734,13 @@ export default function Shopping() {
       // Delete in background
       const deletePromises = idsToDelete.map(id => deleteShoppingItem(id));
       await Promise.all(deletePromises);
-      toast.success(`${idsToDelete.length} Artikel gelöscht`);
+      toast.success(t('shopping.itemsDeleted', { count: idsToDelete.length }));
       // Refetch in background to ensure sync
       setTimeout(() => refetch(), 100);
     } catch (error: any) {
       // Rollback on error
       refetch();
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
     } finally {
       setIsDeleting(prev => {
         const newSet = new Set(prev);
@@ -739,17 +785,17 @@ export default function Shopping() {
         await createShoppingItem({
           item: itemName,
           quantity: 1,
-          category: template?.category || 'Lebensmittel',
+          category: template?.category || categoryKeys.food,
           estimatedPrice: (template?.price || 0) * 100,
           currency: 'CHF',
         });
       }
-      toast.success(`${selectedTemplate.items.length} Artikel hinzugefügt`);
+      toast.success(t('shopping.itemsAdded', { count: selectedTemplate.items.length }));
       setShowTemplateDialog(false);
       setSelectedTemplate(null);
       refetch();
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
     }
   };
 
@@ -769,13 +815,13 @@ export default function Shopping() {
       // Delete in parallel for better performance
       const deletePromises = boughtItemIds.map(id => deleteShoppingItem(id));
       await Promise.all(deletePromises);
-      toast.success('Eingekaufte Artikel gelöscht');
+      toast.success(t('shopping.boughtItemsDeleted'));
       // Refetch in background
       setTimeout(() => refetch(), 100);
     } catch (error: any) {
       // Rollback on error
       refetch();
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
     } finally {
       setIsDeleting(prev => {
         const newSet = new Set(prev);
@@ -791,7 +837,7 @@ export default function Shopping() {
       setPendingFinanceAmount(totalSpent);
       setShowFinanceConfirm(true);
     } else {
-      toast.error('Keine Ausgaben zum Synchronisieren');
+      toast.error(t('shopping.noExpensesToSync'));
     }
   };
 
@@ -800,14 +846,14 @@ export default function Shopping() {
       await createFinanceEntry({
         date: new Date().toISOString(),
         type: 'ausgabe',
-        category: 'Lebensmittel',
+        category: categoryKeys.food,
         amount: Math.round(pendingFinanceAmount * 100),
         currency: 'CHF',
-        notes: `Einkauf (${boughtItems.length} Artikel)`,
-        paymentMethod: 'Karte',
+        notes: t('shopping.purchaseNotes', { count: boughtItems.length }),
+        paymentMethod: t('shopping.paymentCard'),
         isRecurring: false,
       });
-      toast.success(`CHF ${pendingFinanceAmount.toFixed(2)} zu Finanzen hinzugefügt`);
+      toast.success(t('shopping.addedToFinance', { amount: pendingFinanceAmount.toFixed(2) }));
       setShowFinanceConfirm(false);
       
       // Update budget
@@ -818,7 +864,7 @@ export default function Shopping() {
         }));
       }
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
     }
   };
 
@@ -829,12 +875,12 @@ export default function Shopping() {
     
     if (navigator.share) {
       navigator.share({
-        title: 'Meine Einkaufsliste',
+        title: t('shopping.myShoppingList'),
         text: listText,
       });
     } else {
       navigator.clipboard.writeText(listText);
-      toast.success('Liste in Zwischenablage kopiert');
+      toast.success(t('shopping.listCopiedToClipboard'));
     }
   };
 
@@ -842,7 +888,7 @@ export default function Shopping() {
   const handleExportPDF = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      toast.error('Popup blockiert');
+      toast.error(t('shopping.popupBlocked'));
       return;
     }
 
@@ -857,7 +903,7 @@ export default function Shopping() {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Einkaufsliste</title>
+        <title>${t('shopping.title')}</title>
         <style>
           body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
           h1 { font-size: 20px; margin-bottom: 5px; }
@@ -873,8 +919,15 @@ export default function Shopping() {
         </style>
       </head>
       <body>
-        <h1>Einkaufsliste</h1>
-        <p class="date">${new Date().toLocaleDateString('de-CH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+        <h1>${t('shopping.title')}</h1>
+        <p class="date">${(() => {
+          const date = new Date();
+          const dayKey = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'][date.getDay() === 0 ? 6 : date.getDay() - 1];
+          const monthKey = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'][date.getMonth()];
+          const dayName = t('calendar.fullDays.' + dayKey, 'Sonntag');
+          const monthName = t('calendar.months.' + monthKey, 'Januar');
+          return dayName + ' ' + date.getDate() + '. ' + monthName + ' ' + date.getFullYear();
+        })()}</p>
         ${Object.entries(groupedByCategory).map(([category, items]) => `
           <div class="category">${category}</div>
           ${items.map(item => `
@@ -887,7 +940,7 @@ export default function Shopping() {
           `).join('')}
         `).join('')}
         <div class="total">
-          <span>Total (${notBoughtItems.length} Artikel)</span>
+          <span>${t('shopping.total')} (${notBoughtItems.length} ${t('shopping.items')})</span>
           <span>CHF ${totalPrice.toFixed(2)}</span>
         </div>
         <script>window.print();</script>
@@ -895,13 +948,13 @@ export default function Shopping() {
       </html>
     `);
     printWindow.document.close();
-    toast.success('PDF wird erstellt');
+    toast.success(t('shopping.pdfCreating'));
   };
 
   // Delete all not bought items
   const handleClearAllItems = useCallback(async () => {
     if (notBoughtItems.length === 0) {
-      toast.error('Keine Artikel zum Löschen');
+      toast.error(t('shopping.noItemsToDelete'));
       return;
     }
     
@@ -919,13 +972,13 @@ export default function Shopping() {
       // Delete in parallel for better performance
       const deletePromises = itemIds.map(id => deleteShoppingItem(id));
       await Promise.all(deletePromises);
-      toast.success(`${itemIds.length} Artikel gelöscht`);
+      toast.success(t('shopping.itemsDeleted', { count: itemIds.length }));
       // Refetch in background
       setTimeout(() => refetch(), 100);
     } catch (error: any) {
       // Rollback on error
       refetch();
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
     } finally {
       setIsDeleting(prev => {
         const newSet = new Set(prev);
@@ -938,7 +991,7 @@ export default function Shopping() {
   // Re-add bought items back to list
   const handleReAddBoughtItems = async () => {
     if (boughtItems.length === 0) {
-      toast.error('Keine gekauften Artikel vorhanden');
+      toast.error(t('shopping.noBoughtItems', 'Keine gekauften Artikel vorhanden'));
       return;
     }
     
@@ -953,10 +1006,10 @@ export default function Shopping() {
           store: (item as any).store || '',
         });
       }
-      toast.success(`${boughtItems.length} Artikel wieder hinzugefügt`);
+      toast.success(t('shopping.itemsReAdded', '{{count}} Artikel wieder hinzugefügt', { count: boughtItems.length }));
       refetch();
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
     }
   };
 
@@ -979,7 +1032,7 @@ export default function Shopping() {
     try {
       // Check if camera is available
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        toast.error('Kamera wird nicht unterstützt. Bitte Bild hochladen.');
+        toast.error(t('shopping.cameraNotSupported', 'Kamera wird nicht unterstützt. Bitte Bild hochladen.'));
         return;
       }
       
@@ -998,18 +1051,18 @@ export default function Shopping() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
-        toast.success('Scanner aktiv - Quittung im Rahmen positionieren');
+        toast.success(t('shopping.scannerActive'));
         
         // Start edge detection loop
         startEdgeDetection();
       }
     } catch (error: any) {
       if (error.name === 'NotAllowedError') {
-        toast.error('Kamera-Berechtigung verweigert. Bitte in Browsereinstellungen erlauben.');
+        toast.error(t('shopping.cameraPermissionDenied'));
       } else if (error.name === 'NotFoundError') {
-        toast.error('Keine Kamera gefunden. Bitte Bild hochladen.');
+        toast.error(t('shopping.noCameraFound'));
       } else {
-        toast.error('Kamera-Fehler: ' + error.message);
+        toast.error(t('shopping.cameraError') + error.message);
       }
     }
   };
@@ -1050,7 +1103,7 @@ export default function Shopping() {
       
       // Check if video has actual content
       if (video.videoWidth === 0 || video.videoHeight === 0) {
-        toast.error('Kamera noch nicht bereit. Bitte warten...');
+        toast.error(t('shopping.cameraNotReady'));
         setScannerStatus('scanning');
         return;
       }
@@ -1074,7 +1127,7 @@ export default function Shopping() {
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(video, 0, 0);
         
-        toast.success('Foto aufgenommen!');
+        toast.success(t('shopping.photoTaken'));
         
         canvas.toBlob((blob) => {
           if (blob) {
@@ -1082,14 +1135,14 @@ export default function Shopping() {
             stopCamera();
             processReceipt(file);
           } else {
-            toast.error('Fehler beim Erstellen des Bildes');
+            toast.error(t('shopping.errorCreatingImage'));
             setScannerStatus('scanning');
             startEdgeDetection();
           }
         }, 'image/jpeg', 0.95); // Higher quality
       }
     } else {
-      toast.error('Video-Element nicht verfügbar');
+      toast.error(t('shopping.videoElementNotAvailable'));
     }
   };
 
@@ -1137,7 +1190,7 @@ export default function Shopping() {
           const base64 = (reader.result as string).split(',')[1];
           setReceiptImage(reader.result as string);
           
-          toast.info('Analysiere Quittung mit OCR...');
+          toast.info(t('shopping.analyzingReceipt'));
           
           // Use intelligent receipt analyzer
           const analyzeReceiptFn = httpsCallable(functions, 'analyzeReceipt');
@@ -1151,33 +1204,33 @@ export default function Shopping() {
           
           if (data.success && data.items && data.items.length > 0) {
             setReceiptData({
-              store: data.store || { name: 'Unbekannt' },
+              store: data.store || { name: t('shopping.unknown') },
               purchase: data.purchase || {},
               items: data.items,
               totals: data.totals || { total: 0 },
               confidence: data.confidence || 50,
             });
             setScannedReceiptItems(data.items.map((item: ReceiptItem) => ({ ...item, selected: true })));
-            toast.success(`${data.items.length} Artikel erkannt (${data.confidence || 50}% Konfidenz)`);
+            toast.success(t('shopping.itemsRecognizedWithConfidence', { count: data.items.length, confidence: data.confidence || 50 }));
           } else if (data.rawText) {
             // Show raw text for debugging
-            toast.error(`Keine Artikel erkannt. Text gefunden: "${data.rawText.substring(0, 100)}..."`);
+            toast.error(t('shopping.noItemsRecognizedWithText', { text: data.rawText.substring(0, 100) }));
           } else {
-            toast.error(data.error || 'Keine Artikel erkannt. Versuche bessere Bildqualität.');
+            toast.error(data.error || t('shopping.noItemsRecognizedTryBetter'));
           }
         } catch (innerError: any) {
-          toast.error('Analysefehler: ' + (innerError.message || 'Unbekannter Fehler'));
+          toast.error(t('shopping.analysisError') + (innerError.message || t('common.error')));
         }
         
         setIsScanning(false);
       };
       reader.onerror = () => {
-        toast.error('Fehler beim Lesen der Datei');
+        toast.error(t('shopping.errorReadingFile'));
         setIsScanning(false);
       };
       reader.readAsDataURL(file);
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
       setIsScanning(false);
     }
   };
@@ -1185,26 +1238,28 @@ export default function Shopping() {
   // Categorize item based on name
   const categorizeReceiptItem = (name: string): string => {
     const lowerName = name.toLowerCase();
-    const categories: Record<string, string[]> = {
-      'Getränke': ['bier', 'wein', 'saft', 'wasser', 'cola', 'fanta', 'sprite', 'energy', 'shot', 'drink'],
-      'Lebensmittel': ['apfel', 'orange', 'banane', 'tomate', 'salat', 'gurke', 'karotte', 'bio oran', 'gemüse', 'milch', 'joghurt', 'käse', 'butter', 'sahne', 'quark', 'naturejog', 'fleisch', 'steak', 'wurst', 'schinken', 'poulet', 'brot', 'brötchen', 'toast'],
-      'Süsswaren': ['schoko', 'bonbon', 'gummi', 'chips', 'zucker', 'gelatine'],
-      'Haushalt': ['waschmittel', 'spülmittel', 'reiniger', 'papier', 'müll', 'tüte'],
-      'Hygiene': ['shampoo', 'duschgel', 'seife', 'zahnpasta', 'deo', 'creme'],
+    const categoryKeywords: Record<string, string[]> = {
+      drinks: ['bier', 'wein', 'saft', 'wasser', 'cola', 'fanta', 'sprite', 'energy', 'shot', 'drink'],
+      [categoryKeys.food]: ['apfel', 'orange', 'banane', 'tomate', 'salat', 'gurke', 'karotte', 'bio oran', 'gemüse', 'milch', 'joghurt', 'käse', 'butter', 'sahne', 'quark', 'naturejog', 'fleisch', 'steak', 'wurst', 'schinken', 'poulet', 'brot', 'brötchen', 'toast'],
+      sweets: ['schoko', 'bonbon', 'gummi', 'chips', 'zucker', 'gelatine'],
+      [categoryKeys.household]: ['waschmittel', 'spülmittel', 'reiniger', 'papier', 'müll', 'tüte'],
+      [categoryKeys.hygiene]: ['shampoo', 'duschgel', 'seife', 'zahnpasta', 'deo', 'creme'],
+      [categoryKeys.electronics]: ['elektronik', 'computer', 'laptop', 'smartphone', 'tablet'],
+      [categoryKeys.clothing]: ['kleidung', 'shirt', 'hose', 'schuhe', 'jacke'],
     };
 
-    for (const [category, keywords] of Object.entries(categories)) {
+    for (const [category, keywords] of Object.entries(categoryKeywords)) {
       if (keywords.some(kw => lowerName.includes(kw))) {
         return category;
       }
     }
-    return 'Lebensmittel';
+    return categoryKeys.food;
   };
 
   const handleAddReceiptScannedItems = async () => {
     const selected = scannedReceiptItems.filter(i => i.selected);
     if (selected.length === 0) {
-      toast.error('Bitte mindestens einen Artikel auswählen');
+      toast.error(t('shopping.selectAtLeastOneItem', 'Bitte mindestens einen Artikel auswählen'));
       return;
     }
     
@@ -1219,11 +1274,11 @@ export default function Shopping() {
           store: receiptData?.store?.name || '',
         });
       }
-      toast.success(`${selected.length} Artikel hinzugefügt`);
+      toast.success(t('shopping.itemsAdded', { count: selected.length }));
       closeReceiptScanner();
       refetch();
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
     }
   };
 
@@ -1233,9 +1288,9 @@ export default function Shopping() {
     try {
       const saveReceiptFn = httpsCallable(functions, 'saveReceipt');
       await saveReceiptFn({ receiptData });
-      toast.success('Quittung gespeichert!');
+      toast.success(t('shopping.receiptSaved'));
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
     }
   };
 
@@ -1246,18 +1301,18 @@ export default function Shopping() {
       await createFinanceEntry({
         type: 'ausgabe',
         amount: Math.round(receiptData.totals.total * 100),
-        category: 'Lebensmittel',
-        notes: `Einkauf bei ${receiptData.store.name}`,
+        category: t('shopping.categories.food'),
+        notes: `${t('shopping.purchaseAt')} ${receiptData.store.name}`,
         date: receiptData.purchase.date || new Date().toISOString().split('T')[0],
-        paymentMethod: receiptData.purchase.paymentMethod || 'Karte',
-        status: 'bezahlt',
+        paymentMethod: receiptData.purchase.paymentMethod || t('shopping.paymentCard'),
+        status: 'paid',
         currency: 'CHF',
         isRecurring: false,
       });
-      toast.success('Zu Finanzen hinzugefügt!');
+      toast.success(t('shopping.addedToFinance'));
       closeReceiptScanner();
     } catch (error: any) {
-      toast.error('Fehler: ' + error.message);
+      toast.error(t('shopping.error') + error.message);
     }
   };
 
@@ -1284,7 +1339,7 @@ export default function Shopping() {
                   <Wallet className={`w-5 h-5 ${isOverBudget ? 'text-red-600' : 'text-blue-600'}`} />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground font-medium">Budget</p>
+                  <p className="text-xs text-muted-foreground font-medium">{t('shopping.budget')}</p>
                   {budget.isSet ? (
                     <p className="text-lg font-bold">CHF {budget.amount.toFixed(0)}</p>
                   ) : (
@@ -1293,7 +1348,7 @@ export default function Shopping() {
                       className="p-0 h-auto text-sm font-semibold text-blue-600"
                       onClick={() => setShowBudgetDialog(true)}
                     >
-                      Setzen →
+                      {t('shopping.setBudget')}
                     </Button>
                   )}
                 </div>
@@ -1309,7 +1364,7 @@ export default function Shopping() {
                   <Banknote className={`w-5 h-5 ${isOverBudget ? 'text-red-600' : 'text-orange-600'}`} />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground font-medium">Ausgegeben</p>
+                  <p className="text-xs text-muted-foreground font-medium">{t('shopping.spent')}</p>
                   <p className={`text-lg font-bold ${isOverBudget ? 'text-red-600' : 'text-orange-600'}`}>
                     CHF {totalSpent.toFixed(2)}
                   </p>
@@ -1326,8 +1381,8 @@ export default function Shopping() {
                   <ShoppingCart className="w-5 h-5 text-purple-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground font-medium">Offen</p>
-                  <p className="text-lg font-bold">{notBoughtItems.length} <span className="text-sm font-normal text-muted-foreground">Artikel</span></p>
+                  <p className="text-xs text-muted-foreground font-medium">{t('shopping.open')}</p>
+                  <p className="text-lg font-bold">{notBoughtItems.length} <span className="text-sm font-normal text-muted-foreground">{t('shopping.items')}</span></p>
                 </div>
               </div>
             </CardContent>
@@ -1341,8 +1396,8 @@ export default function Shopping() {
                   <Check className="w-5 h-5 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground font-medium">Eingekauft</p>
-                  <p className="text-lg font-bold">{boughtItems.length} <span className="text-sm font-normal text-muted-foreground">Artikel</span></p>
+                  <p className="text-xs text-muted-foreground font-medium">{t('shopping.bought')}</p>
+                  <p className="text-lg font-bold">{boughtItems.length} <span className="text-sm font-normal text-muted-foreground">{t('shopping.items')}</span></p>
                 </div>
               </div>
             </CardContent>
@@ -1355,7 +1410,7 @@ export default function Shopping() {
           <Card className="lg:col-span-2">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium">Budget-Übersicht</CardTitle>
+                <CardTitle className="text-sm font-medium">{t('shopping.budgetOverview')}</CardTitle>
                 {budget.isSet && (
                   <div className="flex gap-1">
                     <UITooltip>
@@ -1364,7 +1419,7 @@ export default function Shopping() {
                           <Edit2 className="w-3 h-3" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>Budget bearbeiten</TooltipContent>
+                      <TooltipContent>{t('shopping.editBudget')}</TooltipContent>
                     </UITooltip>
                     <UITooltip>
                       <TooltipTrigger asChild>
@@ -1372,7 +1427,7 @@ export default function Shopping() {
                           <X className="w-3 h-3" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>Budget löschen</TooltipContent>
+                      <TooltipContent>{t('shopping.deleteBudget')}</TooltipContent>
                     </UITooltip>
                   </div>
                 )}
@@ -1385,12 +1440,12 @@ export default function Shopping() {
                     <div>
                       <p className="text-2xl font-bold">CHF {budgetRemaining.toFixed(2)}</p>
                       <p className="text-xs text-muted-foreground">
-                        {isOverBudget ? 'über Budget' : 'verbleibend'}
+                        {isOverBudget ? t('shopping.overBudget') : t('shopping.remaining')}
                       </p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-muted-foreground">
-                        {Math.round(budgetProgress)}% verwendet
+                        {Math.round(budgetProgress)}% {t('shopping.used')}
                       </p>
                     </div>
                   </div>
@@ -1399,8 +1454,8 @@ export default function Shopping() {
                     className={`h-3 ${isOverBudget ? '[&>div]:bg-red-500' : '[&>div]:bg-primary'}`} 
                   />
                   <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>CHF {totalSpent.toFixed(2)} ausgegeben</span>
-                    <span>CHF {budget.amount.toFixed(2)} Budget</span>
+                    <span>CHF {totalSpent.toFixed(2)} {t('shopping.spentLabel')}</span>
+                    <span>CHF {budget.amount.toFixed(2)} {t('shopping.budgetLabel')}</span>
                   </div>
                   {totalSpent > 0 && (
                     <Button 
@@ -1410,16 +1465,16 @@ export default function Shopping() {
                       onClick={handleSyncToFinance}
                     >
                       <Banknote className="w-4 h-4 mr-2" />
-                      CHF {totalSpent.toFixed(2)} zu Finanzen hinzufügen
+                      CHF {totalSpent.toFixed(2)} {t('shopping.addToFinance')}
                     </Button>
                   )}
                 </div>
               ) : (
                 <div className="text-center py-6">
                   <Wallet className="w-10 h-10 mx-auto text-muted-foreground/30 mb-3" />
-                  <p className="text-sm text-muted-foreground mb-3">Kein Budget gesetzt</p>
+                  <p className="text-sm text-muted-foreground mb-3">{t('shopping.noBudgetSet')}</p>
                   <Button onClick={() => setShowBudgetDialog(true)}>
-                    Budget setzen
+                    {t('shopping.setBudgetButton')}
                   </Button>
                 </div>
               )}
@@ -1429,7 +1484,7 @@ export default function Shopping() {
           {/* Category Chart */}
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Nach Kategorie</CardTitle>
+              <CardTitle className="text-sm font-medium">{t('shopping.byCategory')}</CardTitle>
             </CardHeader>
             <CardContent>
               {categoryChartData.length > 0 ? (
@@ -1471,7 +1526,7 @@ export default function Shopping() {
                 </div>
               ) : (
                 <div className="text-center py-4">
-                  <p className="text-xs text-muted-foreground">Noch keine Artikel</p>
+                  <p className="text-xs text-muted-foreground">{t('shopping.noItemsYet')}</p>
                 </div>
               )}
             </CardContent>
@@ -1486,7 +1541,7 @@ export default function Shopping() {
             onClick={() => setShowTemplateDialog(true)}
           >
             <ListChecks className="w-4 h-4 mr-2" />
-            Vorlagen
+            {t('shopping.templates')}
           </Button>
           <Button 
             variant="outline" 
@@ -1494,7 +1549,7 @@ export default function Shopping() {
             onClick={() => setShowReceiptScanner(true)}
           >
             <ScanLine className="w-4 h-4 mr-2" />
-            Quittung
+            {t('shopping.receipt')}
           </Button>
           <Button 
             variant="outline" 
@@ -1502,7 +1557,7 @@ export default function Shopping() {
             onClick={() => { setShowListScanner(true); setListScannerMode('scan'); }}
           >
             <FileText className="w-4 h-4 mr-2" />
-            Liste scannen
+            {t('shopping.scanList')}
           </Button>
           <Button 
             variant="outline" 
@@ -1510,7 +1565,7 @@ export default function Shopping() {
             onClick={() => { setShowListScanner(true); setListScannerMode('archive'); loadTemplates(); }}
           >
             <Copy className="w-4 h-4 mr-2" />
-            Archiv ({savedTemplates.length})
+            {t('shopping.archive')} ({savedTemplates.length})
           </Button>
           <Button 
             variant="outline" 
@@ -1518,7 +1573,7 @@ export default function Shopping() {
             onClick={() => setShowQuickAddManager(true)}
           >
             <Settings className="w-4 h-4 mr-2" />
-            Schnell-Artikel
+            {t('shopping.quickAdd')}
           </Button>
           <Button 
             variant="outline" 
@@ -1526,7 +1581,7 @@ export default function Shopping() {
             onClick={handleShareList}
           >
             <Share2 className="w-4 h-4 mr-2" />
-            Teilen
+            {t('calendar.share')}
           </Button>
           <Button 
             variant="outline" 
@@ -1543,7 +1598,7 @@ export default function Shopping() {
               onClick={() => setShowClearConfirm(true)}
             >
               <RotateCcw className="w-4 h-4 mr-2" />
-              Aufräumen
+              {t('shopping.cleanup')}
             </Button>
           )}
         </div>
@@ -1552,7 +1607,7 @@ export default function Shopping() {
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium">Schnell hinzufügen</CardTitle>
+              <CardTitle className="text-sm font-medium">{t('shopping.quickAdd')}</CardTitle>
               <div className="flex items-center gap-2">
                 {quickAddTemplates.length > 8 && (
                   <Button 
@@ -1560,7 +1615,7 @@ export default function Shopping() {
                     size="sm"
                     onClick={() => setShowAllQuickAdd(!showAllQuickAdd)}
                   >
-                    {showAllQuickAdd ? 'Weniger' : `Alle ${quickAddTemplates.length} anzeigen`}
+                    {showAllQuickAdd ? t('common.showLess') : t('common.showAll', { count: quickAddTemplates.length })}
                   </Button>
                 )}
                 <Button 
@@ -1569,7 +1624,7 @@ export default function Shopping() {
                   onClick={() => setShowQuickAddManager(true)}
                 >
                   <Edit2 className="w-3 h-3 mr-1" />
-                  Bearbeiten
+                  {t('common.edit')}
                 </Button>
               </div>
             </div>
@@ -1577,7 +1632,7 @@ export default function Shopping() {
           <CardContent>
             <div className="flex flex-wrap gap-2">
               {(showAllQuickAdd ? quickAddTemplates : quickAddTemplates.slice(0, 8)).map((template) => {
-                const config = categoryConfig[template.category] || categoryConfig['Sonstiges'];
+                const config = categoryConfig[template.category] || categoryConfig[categoryKeys.other];
                 return (
                   <Button
                     key={template.id}
@@ -1602,7 +1657,7 @@ export default function Shopping() {
                 className="mt-2 p-0 h-auto text-xs"
                 onClick={() => setShowAllQuickAdd(true)}
               >
-                + {quickAddTemplates.length - 8} weitere Artikel anzeigen
+                + {quickAddTemplates.length - 8} {t('shopping.moreItemsToShow')}
               </Button>
             )}
           </CardContent>
@@ -1613,14 +1668,14 @@ export default function Shopping() {
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Plus className="w-4 h-4" />
-              Neuer Artikel
+              {t('shopping.newItem')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             {/* Row 1: Artikel + Menge */}
             <div className="flex gap-3 mb-3">
               <div className="flex-1 relative">
-                <Label className="text-xs text-muted-foreground">Artikel</Label>
+                <Label className="text-xs text-muted-foreground">{t('shopping.item')}</Label>
                 <Input
                   ref={itemInputRef}
                   value={newItem.item}
@@ -1630,7 +1685,7 @@ export default function Shopping() {
                   }}
                   onFocus={() => setShowItemSuggestions(true)}
                   onBlur={() => setTimeout(() => setShowItemSuggestions(false), 200)}
-                  placeholder="z.B. Bio-Milch"
+                  placeholder={t('shopping.itemPlaceholder')}
                   onKeyDown={(e) => e.key === 'Enter' && handleAddItem()}
                 />
                 {/* Item suggestions dropdown */}
@@ -1647,7 +1702,7 @@ export default function Shopping() {
                             ...newItem, 
                             item: suggestion.name,
                             estimatedPrice: suggestion.lastPrice,
-                            category: suggestion.category || 'Lebensmittel'
+                            category: suggestion.category || categoryKeys.food
                           });
                           setShowItemSuggestions(false);
                         }}
@@ -1660,14 +1715,14 @@ export default function Shopping() {
                     ))}
                     {selectedStoreForSuggestions && (
                       <div className="px-3 py-1.5 text-xs text-muted-foreground border-t bg-muted/50">
-                        Vorschläge von {selectedStoreForSuggestions}
+                        {t('shopping.suggestionsFrom')} {selectedStoreForSuggestions}
                       </div>
                     )}
                   </div>
                 )}
               </div>
               <div className="w-20">
-                <Label className="text-xs text-muted-foreground">Menge</Label>
+                <Label className="text-xs text-muted-foreground">{t('shopping.quantity')}</Label>
                 <Input
                   type="number"
                   value={newItem.quantity}
@@ -1680,7 +1735,7 @@ export default function Shopping() {
             {/* Row 2: Kategorie + Laden + Preis + Button */}
             <div className="flex flex-wrap gap-4 items-end">
               <div className="w-[160px]">
-                <Label className="text-xs text-muted-foreground">Kategorie</Label>
+                <Label className="text-xs text-muted-foreground">{t('shopping.category')}</Label>
                 <Select value={newItem.category} onValueChange={(value) => setNewItem({ ...newItem, category: value })}>
                   <SelectTrigger>
                     <SelectValue />
@@ -1702,13 +1757,13 @@ export default function Shopping() {
                 </Select>
               </div>
               <div className="w-[140px]">
-                <Label className="text-xs text-muted-foreground">Laden</Label>
+                <Label className="text-xs text-muted-foreground">{t('shopping.store')}</Label>
                 <Select value={newItem.store} onValueChange={(value) => setNewItem({ ...newItem, store: value })}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Optional" />
+                    <SelectValue placeholder={t('common.optional')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Kein Laden</SelectItem>
+                    <SelectItem value="none">{t('shopping.noStore')}</SelectItem>
                     {stores.map(store => (
                       <SelectItem key={store.id} value={store.id}>
                         <div className="flex items-center gap-2">
@@ -1721,7 +1776,7 @@ export default function Shopping() {
                 </Select>
               </div>
               <div className="w-[100px]">
-                <Label className="text-xs text-muted-foreground">Preis (CHF)</Label>
+                <Label className="text-xs text-muted-foreground">{t('shopping.priceCHF')}</Label>
                 <Input
                   type="number"
                   value={newItem.estimatedPrice || ''}
@@ -1733,7 +1788,7 @@ export default function Shopping() {
               </div>
               <Button onClick={handleAddItem} className="h-10">
                 <Plus className="w-4 h-4 mr-1" />
-                Hinzufügen
+                {t('common.add')}
               </Button>
             </div>
           </CardContent>
@@ -1744,10 +1799,10 @@ export default function Shopping() {
           <Select value={filterCategory} onValueChange={setFilterCategory}>
             <SelectTrigger className="w-[160px] h-9">
               <Tag className="w-4 h-4 mr-2 shrink-0" />
-              <SelectValue placeholder="Kategorie" />
+              <SelectValue placeholder={t('shopping.category')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Alle Kategorien</SelectItem>
+              <SelectItem value="all">{t('shopping.allCategories')}</SelectItem>
               {categories.map(cat => (
                 <SelectItem key={cat} value={cat}>{cat}</SelectItem>
               ))}
@@ -1756,10 +1811,10 @@ export default function Shopping() {
           <Select value={filterStore} onValueChange={setFilterStore}>
             <SelectTrigger className="w-[160px] h-9">
               <Store className="w-4 h-4 mr-2 shrink-0" />
-              <SelectValue placeholder="Laden" />
+              <SelectValue placeholder={t('shopping.store')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Alle Läden</SelectItem>
+              <SelectItem value="all">{t('shopping.allStores')}</SelectItem>
               {stores.map(store => (
                 <SelectItem key={store.id} value={store.id}>{store.name}</SelectItem>
               ))}
@@ -1767,18 +1822,18 @@ export default function Shopping() {
           </Select>
           <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
             <SelectTrigger className="w-[160px] h-9">
-              <SelectValue placeholder="Sortieren" />
+              <SelectValue placeholder={t('shopping.sort')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="category">Nach Kategorie</SelectItem>
-              <SelectItem value="name">Nach Name</SelectItem>
-              <SelectItem value="price">Nach Preis</SelectItem>
-              <SelectItem value="store">Nach Laden</SelectItem>
+              <SelectItem value="category">{t('shopping.sortByCategory')}</SelectItem>
+              <SelectItem value="name">{t('shopping.sortByName')}</SelectItem>
+              <SelectItem value="price">{t('shopping.sortByPrice')}</SelectItem>
+              <SelectItem value="store">{t('shopping.sortByStore')}</SelectItem>
             </SelectContent>
           </Select>
           {(filterCategory !== 'all' || filterStore !== 'all') && (
             <Button variant="ghost" size="sm" onClick={() => { setFilterCategory('all'); setFilterStore('all'); }}>
-              Filter zurücksetzen
+              {t('shopping.resetFilter')}
             </Button>
           )}
           {!selectionMode ? (
@@ -1788,14 +1843,10 @@ export default function Shopping() {
                   variant="ghost" 
                   size="sm" 
                   className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                  onClick={() => {
-                    if (confirm(`Alle ${notBoughtItems.length} Artikel löschen?`)) {
-                      handleClearAllItems();
-                    }
-                  }}
+                  onClick={() => setShowClearAllDialog(true)}
                 >
                   <Trash2 className="w-4 h-4 mr-1" />
-                  Alle löschen
+                  {t('shopping.deleteAll')}
                 </Button>
               )}
               <Button 
@@ -1804,7 +1855,7 @@ export default function Shopping() {
                 onClick={() => setSelectionMode(true)}
               >
                 <Check className="w-4 h-4 mr-1" />
-                Auswählen
+                {t('shopping.select')}
               </Button>
             </>
           ) : (
@@ -1814,10 +1865,10 @@ export default function Shopping() {
                 size="sm" 
                 onClick={toggleSelectAll}
               >
-                {selectedItemIds.size === notBoughtItems.length + boughtItems.length ? 'Alle abwählen' : 'Alle auswählen'}
+                {selectedItemIds.size === notBoughtItems.length + boughtItems.length ? t('shopping.deselectAll') : t('shopping.selectAll')}
               </Button>
               <span className="text-sm text-muted-foreground">
-                {selectedItemIds.size} ausgewählt
+                {selectedItemIds.size} {t('shopping.selected')}
               </span>
               {selectedItemIds.size > 0 && (
                 <Button 
@@ -1826,7 +1877,7 @@ export default function Shopping() {
                   onClick={handleDeleteMultipleItems}
                 >
                   <Trash2 className="w-4 h-4 mr-1" />
-                  Löschen ({selectedItemIds.size})
+                  {t('common.delete')} ({selectedItemIds.size})
                 </Button>
               )}
               <Button 
@@ -1835,7 +1886,7 @@ export default function Shopping() {
                 onClick={exitSelectionMode}
               >
                 <X className="w-4 h-4 mr-1" />
-                Abbrechen
+                {t('common.cancel')}
               </Button>
             </>
           )}
@@ -1849,23 +1900,23 @@ export default function Shopping() {
             {isLoading ? (
               <Card className="h-full">
                 <CardContent className="py-8 text-center text-muted-foreground h-full flex items-center justify-center">
-                  Wird geladen...
+                  {t('common.loading')}
                 </CardContent>
               </Card>
             ) : notBoughtItems.length === 0 ? (
               <Card className="h-full">
                 <CardContent className="py-8 text-center h-full flex flex-col items-center justify-center">
                   <ShoppingBag className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-                  <p className="text-muted-foreground text-sm">Deine Einkaufsliste ist leer</p>
+                  <p className="text-muted-foreground text-sm">{t('shopping.emptyList')}</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Füge Artikel hinzu oder nutze eine Vorlage
+                    {t('shopping.addItemsOrUseTemplate')}
                   </p>
                 </CardContent>
               </Card>
             ) : (
               <div className="space-y-4">
                 {Object.entries(groupedItems).map(([category, categoryItems]) => {
-                  const config = categoryConfig[category] || categoryConfig['Sonstiges'];
+                  const config = categoryConfig[category] || categoryConfig[categoryKeys.other];
                   const Icon = config.icon;
                   return (
                     <Card key={category}>
@@ -1884,12 +1935,30 @@ export default function Shopping() {
                         <div className="space-y-1">
                           {categoryItems.map((item) => {
                             const store = stores.find(s => s.id === (item as any).store);
+                            
+                            // Build context menu actions
+                            const contextMenuActions = [
+                              {
+                                id: 'mark-bought',
+                                label: t('shopping.markAsBought', 'Als gekauft markieren'),
+                                icon: <Check className="w-4 h-4" />,
+                                onClick: () => handleMarkAsBought(item.id, item.estimatedPrice),
+                              },
+                              {
+                                id: 'delete',
+                                label: t('common.delete'),
+                                icon: <Trash2 className="w-4 h-4" />,
+                                onClick: () => handleDelete(item.id),
+                                variant: 'destructive' as const,
+                              },
+                            ];
+
                             return (
-                              <div
-                                key={item.id}
-                                className={`flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 group ${selectionMode && selectedItemIds.has(item.id) ? 'ring-2 ring-primary bg-primary/5' : ''}`}
-                                onClick={selectionMode ? () => toggleItemSelection(item.id) : undefined}
-                              >
+                              <ContextMenu key={item.id} actions={contextMenuActions} disabled={selectionMode}>
+                                <div
+                                  className={`flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 group ${selectionMode && selectedItemIds.has(item.id) ? 'ring-2 ring-primary bg-primary/5' : ''}`}
+                                  onClick={selectionMode ? () => toggleItemSelection(item.id) : undefined}
+                                >
                                 {selectionMode ? (
                                   <Checkbox
                                     checked={selectedItemIds.has(item.id)}
@@ -1930,6 +1999,7 @@ export default function Shopping() {
                                   </Button>
                                 )}
                               </div>
+                              </ContextMenu>
                             );
                           })}
                         </div>
@@ -1948,11 +2018,11 @@ export default function Shopping() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm flex items-center gap-2">
                     <Check className="w-4 h-4 text-green-600" />
-                    Eingekauft ({boughtItems.length})
+                    {t('shopping.bought')} ({boughtItems.length})
                   </CardTitle>
                   {boughtItems.length > 0 && !selectionMode && (
                     <Button variant="ghost" size="sm" onClick={() => setShowClearConfirm(true)}>
-                      Leeren
+                      {t('shopping.clear')}
                     </Button>
                   )}
                 </div>
@@ -1961,7 +2031,7 @@ export default function Shopping() {
                 {boughtItems.length === 0 ? (
                   <div className="flex-1 flex items-center justify-center">
                     <p className="text-sm text-muted-foreground">
-                      Noch nichts eingekauft
+                      {t('shopping.nothingBoughtYet')}
                     </p>
                   </div>
                 ) : (
@@ -1996,7 +2066,7 @@ export default function Shopping() {
                 {boughtItems.length > 0 && (
                   <div className="mt-auto pt-3 border-t">
                     <div className="flex justify-between items-center text-sm">
-                      <span className="text-muted-foreground">Gesamt:</span>
+                      <span className="text-muted-foreground">{t('shopping.total')}:</span>
                       <span className="font-bold">CHF {totalSpent.toFixed(2)}</span>
                     </div>
                     <div className="flex gap-2 mt-2">
@@ -2006,13 +2076,13 @@ export default function Shopping() {
                         onClick={handleSyncToFinance}
                       >
                         <Banknote className="w-4 h-4 mr-1" />
-                        Zu Finanzen
+                        {t('shopping.toFinance')}
                       </Button>
                       <Button 
                         variant="outline"
                         size="sm"
                         onClick={handleReAddBoughtItems}
-                        title="Artikel erneut zur Liste hinzufügen"
+                        title={t('shopping.reAddToList')}
                       >
                         <RotateCcw className="w-4 h-4" />
                       </Button>
@@ -2031,21 +2101,21 @@ export default function Shopping() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Wallet className="w-5 h-5" />
-              Budget setzen
+              {t('shopping.setBudget')}
             </DialogTitle>
             <DialogDescription>
-              Setze ein Budget für deinen Einkauf
+              {t('shopping.setBudgetDescription')}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4">
             <div>
-              <Label>Budget (CHF)</Label>
+              <Label>{t('shopping.budgetCHF')}</Label>
               <Input
                 type="number"
                 value={budgetInput}
                 onChange={(e) => setBudgetInput(e.target.value)}
-                placeholder="z.B. 100.00"
+                placeholder={t('shopping.pricePlaceholder')}
                 min={0}
                 step={10}
               />
@@ -2067,10 +2137,10 @@ export default function Shopping() {
           
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowBudgetDialog(false)}>
-              Abbrechen
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleSetBudget}>
-              Budget setzen
+              {t('shopping.setBudget')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2082,20 +2152,20 @@ export default function Shopping() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings className="w-5 h-5" />
-              Schnell-Artikel verwalten
+              {t('shopping.manageQuickItems')}
             </DialogTitle>
             <DialogDescription>
-              Bearbeite Preise oder füge neue Artikel hinzu
+              {t('shopping.manageQuickItemsDescription')}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4">
             {/* Add new item */}
             <div className="p-3 border rounded-lg space-y-3">
-              <p className="text-sm font-medium">Neuer Artikel</p>
+              <p className="text-sm font-medium">{t('shopping.newItem')}</p>
               <div className="grid grid-cols-3 gap-2">
                 <Input
-                  placeholder="Name"
+                  placeholder={t('common.name')}
                   value={newQuickAdd.name}
                   onChange={(e) => setNewQuickAdd({ ...newQuickAdd, name: e.target.value })}
                 />
@@ -2115,7 +2185,7 @@ export default function Shopping() {
                 <div className="flex gap-1">
                   <Input
                     type="number"
-                    placeholder="Preis"
+                    placeholder={t('shopping.price')}
                     value={newQuickAdd.price || ''}
                     onChange={(e) => setNewQuickAdd({ ...newQuickAdd, price: parseFloat(e.target.value) || 0 })}
                     step={0.1}
@@ -2126,12 +2196,12 @@ export default function Shopping() {
                         size="icon" 
                         onClick={handleSaveQuickAdd} 
                         disabled={!newQuickAdd.name.trim()}
-                        aria-label="Schnell-Artikel hinzufügen"
+                        aria-label={t('shopping.addQuickItem')}
                       >
                         <Plus className="w-4 h-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Schnell-Artikel hinzufügen</TooltipContent>
+                    <TooltipContent>{t('shopping.addQuickItem')}</TooltipContent>
                   </UITooltip>
                 </div>
               </div>
@@ -2157,19 +2227,19 @@ export default function Shopping() {
                       />
                       <UITooltip>
                         <TooltipTrigger asChild>
-                          <Button size="icon" variant="ghost" onClick={handleSaveQuickAdd} aria-label="Speichern">
+                          <Button size="icon" variant="ghost" onClick={handleSaveQuickAdd} aria-label={t('common.save')}>
                             <Save className="w-4 h-4" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Speichern</TooltipContent>
+                        <TooltipContent>{t('common.save')}</TooltipContent>
                       </UITooltip>
                       <UITooltip>
                         <TooltipTrigger asChild>
-                          <Button size="icon" variant="ghost" onClick={() => setEditingQuickAdd(null)} aria-label="Abbrechen">
+                          <Button size="icon" variant="ghost" onClick={() => setEditingQuickAdd(null)} aria-label={t('common.cancel')}>
                             <X className="w-4 h-4" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Abbrechen</TooltipContent>
+                        <TooltipContent>{t('common.cancel')}</TooltipContent>
                       </UITooltip>
                     </>
                   ) : (
@@ -2179,19 +2249,19 @@ export default function Shopping() {
                       <span className="text-sm text-muted-foreground">CHF {template.price.toFixed(2)}</span>
                       <UITooltip>
                         <TooltipTrigger asChild>
-                          <Button size="icon" variant="ghost" onClick={() => setEditingQuickAdd(template)} aria-label="Bearbeiten">
+                          <Button size="icon" variant="ghost" onClick={() => setEditingQuickAdd(template)} aria-label={t('common.edit')}>
                             <Edit2 className="w-4 h-4" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Bearbeiten</TooltipContent>
+                        <TooltipContent>{t('common.edit')}</TooltipContent>
                       </UITooltip>
                       <UITooltip>
                         <TooltipTrigger asChild>
-                          <Button size="icon" variant="ghost" onClick={() => handleDeleteQuickAdd(template.id)} aria-label="Löschen">
+                          <Button size="icon" variant="ghost" onClick={() => handleDeleteQuickAdd(template.id)} aria-label={t('common.delete')}>
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Löschen</TooltipContent>
+                        <TooltipContent>{t('common.delete')}</TooltipContent>
                       </UITooltip>
                     </>
                   )}
@@ -2217,10 +2287,10 @@ export default function Shopping() {
           <DialogHeader className="pr-8">
             <DialogTitle className="flex items-center gap-2">
               <ScanLine className="w-5 h-5" />
-              Quittung scannen
+              {t('shopping.scanner.title')}
             </DialogTitle>
             <DialogDescription>
-              Lade ein Foto deiner Quittung hoch oder scanne sie mit der Kamera
+              {t('shopping.scanner.description')}
             </DialogDescription>
           </DialogHeader>
           
@@ -2260,7 +2330,7 @@ export default function Shopping() {
                     }}
                     tabIndex={0}
                     role="button"
-                    aria-label="Datei hochladen"
+                    aria-label={t('common.uploadFile')}
                   >
                     <FileText className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
                     <p className="text-sm text-muted-foreground">
@@ -2356,9 +2426,9 @@ export default function Shopping() {
                                 scannerStatus === 'detected' ? 'bg-green-500/80 text-white' :
                                 'bg-black/60 text-white'
                               }`}>
-                                {scannerStatus === 'capturing' && 'Aufnahme...'}
-                                {scannerStatus === 'detected' && `Erkannt! Halte still... ${Math.round(detectionProgress)}%`}
-                                {scannerStatus === 'scanning' && 'Suche Quittung...'}
+                                {scannerStatus === 'capturing' && t('shopping.scanner.capturing', 'Aufnahme...')}
+                                {scannerStatus === 'detected' && t('shopping.scanner.detected', 'Erkannt! Halte still... {{progress}}%', { progress: Math.round(detectionProgress) })}
+                                {scannerStatus === 'scanning' && t('shopping.scanner.scanning', 'Suche Quittung...')}
                               </div>
                             </div>
                             
@@ -2380,8 +2450,8 @@ export default function Shopping() {
                           <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center mb-4">
                             <Camera className="w-10 h-10 text-white/60" />
                           </div>
-                          <p className="text-white/80 text-base font-medium">Scanner bereit</p>
-                          <p className="text-white/50 text-sm mt-1">Tippe auf "Scanner starten"</p>
+                          <p className="text-white/80 text-base font-medium">{t('shopping.scanner.ready', 'Scanner bereit')}</p>
+                          <p className="text-white/50 text-sm mt-1">{t('shopping.scanner.tapToStart', 'Tippe auf "Scanner starten"')}</p>
                         </div>
                       )}
                     </div>
@@ -2391,13 +2461,13 @@ export default function Shopping() {
                       <div className="bg-muted rounded-lg p-3 text-sm space-y-1">
                         <p className="font-medium flex items-center gap-2">
                           <ScanLine className="w-4 h-4 text-primary" />
-                          Automatischer Scanner aktiv
+                          {t('shopping.scannerActive')}
                         </p>
                         <ul className="text-muted-foreground text-xs space-y-0.5 ml-6">
-                          <li>• Quittung flach halten</li>
-                          <li>• Gute Beleuchtung sicherstellen</li>
-                          <li>• Quittung im Rahmen positionieren</li>
-                          <li>• Foto wird automatisch aufgenommen</li>
+                          <li>• {t('shopping.scanner.instructions.holdFlat', 'Quittung flach halten')}</li>
+                          <li>• {t('shopping.scanner.instructions.goodLighting', 'Gute Beleuchtung sicherstellen')}</li>
+                          <li>• {t('shopping.scanner.instructions.positionInFrame', 'Quittung im Rahmen positionieren')}</li>
+                          <li>• {t('shopping.scanner.instructions.autoCapture', 'Foto wird automatisch aufgenommen')}</li>
                         </ul>
                       </div>
                     )}
@@ -2430,7 +2500,7 @@ export default function Shopping() {
             {isScanning && (
               <div className="text-center py-8">
                 <div className="animate-spin w-10 h-10 border-3 border-primary border-t-transparent rounded-full mx-auto mb-3" />
-                <p className="text-muted-foreground">Analysiere Quittung mit KI...</p>
+                <p className="text-muted-foreground">{t('shopping.analyzingReceiptWithAI')}</p>
               </div>
             )}
 
@@ -2445,7 +2515,7 @@ export default function Shopping() {
                   >
                     <div className="flex items-center gap-3">
                       <Store className="w-5 h-5 text-primary" />
-                      <span className="font-semibold">Geschäft</span>
+                      <span className="font-semibold">{t('shopping.storeSection')}</span>
                     </div>
                     {showReceiptStore ? <ChevronRight className="w-5 h-5 rotate-90" /> : <ChevronRight className="w-5 h-5" />}
                   </button>
@@ -2464,11 +2534,15 @@ export default function Shopping() {
                         {receiptData.purchase.date && (
                           <span className="flex items-center gap-1">
                             <Clock className="w-4 h-4" />
-                            {new Date(receiptData.purchase.date).toLocaleDateString('de-CH')}
+                            {(() => {
+                              const date = new Date(receiptData.purchase.date);
+                              const locale = i18n.language === 'de' ? 'de-CH' : i18n.language === 'en' ? 'en-GB' : i18n.language === 'es' ? 'es-ES' : i18n.language === 'nl' ? 'nl-NL' : i18n.language === 'it' ? 'it-IT' : i18n.language === 'fr' ? 'fr-FR' : 'de-CH';
+                              return date.toLocaleDateString(locale);
+                            })()}
                           </span>
                         )}
                         {receiptData.purchase.time && (
-                          <span>{receiptData.purchase.time} Uhr</span>
+                          <span>{receiptData.purchase.time} {t('common.clock')}</span>
                         )}
                       </div>
                     </div>
@@ -2483,9 +2557,9 @@ export default function Shopping() {
                   >
                     <div className="flex items-center gap-3">
                       <ShoppingCart className="w-5 h-5 text-primary" />
-                      <span className="font-semibold">Artikel ({scannedReceiptItems.length})</span>
+                      <span className="font-semibold">{t('shopping.items')} ({scannedReceiptItems.length})</span>
                       <Badge variant="secondary">
-                        {scannedReceiptItems.filter(i => i.selected).length} ausgewählt
+                        {scannedReceiptItems.filter(i => i.selected).length} {t('shopping.selected')}
                       </Badge>
                     </div>
                     {showReceiptItems ? <ChevronRight className="w-5 h-5 rotate-90" /> : <ChevronRight className="w-5 h-5" />}
@@ -2497,7 +2571,7 @@ export default function Shopping() {
                           onClick={() => setScannedReceiptItems(items => items.map(i => ({ ...i, selected: !scannedReceiptItems.every(x => x.selected) })))}
                           className="text-sm text-primary hover:underline"
                         >
-                          {scannedReceiptItems.every(i => i.selected) ? 'Alle abwählen' : 'Alle auswählen'}
+                          {scannedReceiptItems.every(i => i.selected) ? t('shopping.deselectAll', 'Alle abwählen') : t('shopping.selectAll', 'Alle auswählen')}
                         </button>
                       </div>
                       <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -2545,7 +2619,7 @@ export default function Shopping() {
                   >
                     <div className="flex items-center gap-3">
                       <Wallet className="w-5 h-5 text-primary" />
-                      <span className="font-semibold">Zahlung</span>
+                      <span className="font-semibold">{t('shopping.payment')}</span>
                     </div>
                     {showReceiptPayment ? <ChevronRight className="w-5 h-5 rotate-90" /> : <ChevronRight className="w-5 h-5" />}
                   </button>
@@ -2553,23 +2627,23 @@ export default function Shopping() {
                     <div className="px-4 pb-4 pt-0 space-y-2">
                       {receiptData.totals.subtotal && (
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Zwischensumme</span>
+                          <span className="text-muted-foreground">{t('shopping.subtotal')}</span>
                           <span>CHF {receiptData.totals.subtotal.toFixed(2)}</span>
                         </div>
                       )}
                       {receiptData.totals.rounding && (
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Rundung</span>
+                          <span className="text-muted-foreground">{t('shopping.rounding')}</span>
                           <span>CHF {receiptData.totals.rounding.toFixed(2)}</span>
                         </div>
                       )}
                       <div className="flex justify-between text-xl font-bold pt-2 border-t">
-                        <span>Total</span>
+                        <span>{t('shopping.total')}</span>
                         <span>CHF {receiptData.totals.total.toFixed(2)}</span>
                       </div>
                       {receiptData.purchase.paymentMethod && (
                         <p className="text-sm text-muted-foreground">
-                          Bezahlt mit: {receiptData.purchase.paymentMethod}
+                          {t('shopping.paidWith')}: {receiptData.purchase.paymentMethod}
                         </p>
                       )}
                     </div>
@@ -2582,7 +2656,7 @@ export default function Shopping() {
                     receiptData.confidence >= 70 ? 'bg-green-500' : 
                     receiptData.confidence >= 40 ? 'bg-yellow-500' : 'bg-red-500'
                   }`} />
-                  Erkennungsqualität: {receiptData.confidence}%
+                  {t('shopping.recognitionQuality')}: {receiptData.confidence}%
                 </div>
 
                 {/* Action Buttons */}
@@ -2593,17 +2667,17 @@ export default function Shopping() {
                     size="lg"
                   >
                     <Plus className="w-5 h-5 mr-2" />
-                    {scannedReceiptItems.filter(i => i.selected).length} Artikel zur Liste hinzufügen
+                    {scannedReceiptItems.filter(i => i.selected).length} {t('shopping.addItemsToList')}
                   </Button>
                   
                   <div className="grid grid-cols-2 gap-3">
                     <Button variant="outline" onClick={handleSaveReceipt}>
                       <Save className="w-4 h-4 mr-2" />
-                      Speichern
+                      {t('common.save')}
                     </Button>
                     <Button variant="outline" onClick={handleAddReceiptToFinance}>
                       <Banknote className="w-4 h-4 mr-2" />
-                      Zu Finanzen
+                      {t('shopping.toFinance')}
                     </Button>
                   </div>
                   
@@ -2616,7 +2690,7 @@ export default function Shopping() {
                       setReceiptImage(null);
                     }}
                   >
-                    Neue Quittung scannen
+                    {t('shopping.scanNewReceipt')}
                   </Button>
                 </div>
               </div>
@@ -2631,21 +2705,21 @@ export default function Shopping() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <Banknote className="w-5 h-5" />
-              Ausgabe zu Finanzen hinzufügen?
+              {t('shopping.addExpenseToFinance')}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Möchtest du CHF {pendingFinanceAmount.toFixed(2)} als Ausgabe in deinen Finanzen erfassen?
+              {t('shopping.confirmAddExpense', { amount: pendingFinanceAmount.toFixed(2) })}
               {budget.isSet && (
                 <span className="block mt-2 text-orange-600">
-                  Dein verbleibendes Budget wird entsprechend reduziert.
+                  {t('shopping.budgetWillBeReduced')}
                 </span>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={confirmSyncToFinance}>
-              Ja, hinzufügen
+              {t('shopping.yesAdd')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2655,14 +2729,14 @@ export default function Shopping() {
       <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Eingekaufte Artikel löschen?</AlertDialogTitle>
+            <AlertDialogTitle>{t('shopping.deleteBoughtItemsTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Alle {boughtItems.length} eingekauften Artikel werden aus der Liste entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
+              {t('shopping.deleteBoughtItemsDescription', { count: boughtItems.length })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-            <AlertDialogAction onClick={handleClearBought}>Löschen</AlertDialogAction>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleClearBought}>{t('common.delete')}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -2671,15 +2745,15 @@ export default function Shopping() {
       <AlertDialog open={!!deleteItemId} onOpenChange={(open) => !open && setDeleteItemId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Artikel löschen?</AlertDialogTitle>
+            <AlertDialogTitle>{t('shopping.deleteItemTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Dieser Artikel wird aus der Einkaufsliste entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
+              {t('shopping.deleteItemDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDeleteItem} className="bg-red-600 hover:bg-red-700">
-              Löschen
+              {t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2689,15 +2763,15 @@ export default function Shopping() {
       <AlertDialog open={!!deleteQuickAddId} onOpenChange={(open) => !open && setDeleteQuickAddId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Schnell-Artikel löschen?</AlertDialogTitle>
+            <AlertDialogTitle>{t('shopping.deleteQuickItemTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Dieser Schnell-Artikel wird entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
+              {t('shopping.deleteQuickItemDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDeleteQuickAdd} className="bg-red-600 hover:bg-red-700">
-              Löschen
+              {t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2707,15 +2781,15 @@ export default function Shopping() {
       <AlertDialog open={!!deleteTemplateId} onOpenChange={(open) => !open && setDeleteTemplateId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Liste aus Archiv löschen?</AlertDialogTitle>
+            <AlertDialogTitle>{t('shopping.deleteTemplateTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Diese gespeicherte Liste wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.
+              {t('shopping.deleteTemplateDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDeleteTemplate} className="bg-red-600 hover:bg-red-700">
-              Löschen
+              {t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2727,13 +2801,13 @@ export default function Shopping() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ListChecks className="w-5 h-5" />
-              Vorlagen
+              {t('shopping.templates')}
             </DialogTitle>
           </DialogHeader>
           
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Wähle eine Vorlage, um schnell mehrere Artikel hinzuzufügen
+              {t('shopping.chooseTemplateDescription')}
             </p>
             
             <div className="grid gap-3">
@@ -2757,7 +2831,7 @@ export default function Shopping() {
                       <div className="flex-1">
                         <p className="font-medium">{template.name}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {template.items.length} Artikel
+                          {template.items.length} {t('shopping.items')}
                         </p>
                       </div>
                       {isSelected && <Check className="w-5 h-5 text-primary" />}
@@ -2770,7 +2844,7 @@ export default function Shopping() {
                       ))}
                       {template.items.length > 5 && (
                         <Badge variant="outline" className="text-xs">
-                          +{template.items.length - 5} mehr
+                          +{template.items.length - 5} {t('common.more')}
                         </Badge>
                       )}
                     </div>
@@ -2781,7 +2855,7 @@ export default function Shopping() {
 
             {/* Quick Add Items */}
             <div className="border-t pt-4">
-              <p className="text-sm font-medium mb-3">Oder einzelne Artikel:</p>
+              <p className="text-sm font-medium mb-3">{t('shopping.orSingleItems')}:</p>
               <div className="flex flex-wrap gap-2">
                 {quickAddTemplates.slice(0, 8).map((template) => (
                   <Button
@@ -2802,10 +2876,10 @@ export default function Shopping() {
           
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowTemplateDialog(false)}>
-              Abbrechen
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleApplyTemplate} disabled={!selectedTemplate}>
-              {selectedTemplate ? `${selectedTemplate.items.length} Artikel hinzufügen` : 'Vorlage wählen'}
+              {selectedTemplate ? `${selectedTemplate.items.length} ${t('shopping.addItems')}` : t('shopping.chooseTemplate')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2819,19 +2893,19 @@ export default function Shopping() {
               {listScannerMode === 'scan' ? (
                 <>
                   <FileText className="w-5 h-5" />
-                  Einkaufsliste scannen
+                  {t('shopping.scanShoppingList')}
                 </>
               ) : (
                 <>
                   <Copy className="w-5 h-5" />
-                  Listen-Archiv
+                  {t('shopping.listArchive')}
                 </>
               )}
             </DialogTitle>
             <DialogDescription>
               {listScannerMode === 'scan' 
-                ? 'Scanne ein Foto deiner Einkaufsliste und füge alle Artikel hinzu'
-                : 'Verwende gespeicherte Listen wieder'
+                ? t('shopping.scanShoppingListDescription')
+                : t('shopping.useSavedLists')
               }
             </DialogDescription>
           </DialogHeader>
@@ -2844,7 +2918,7 @@ export default function Shopping() {
               onClick={() => setListScannerMode('scan')}
             >
               <ScanLine className="w-4 h-4 mr-2" />
-              Scannen
+              {t('shopping.scan')}
             </Button>
             <Button
               variant={listScannerMode === 'archive' ? 'default' : 'outline'}
@@ -2852,7 +2926,7 @@ export default function Shopping() {
               onClick={() => { setListScannerMode('archive'); loadTemplates(); }}
             >
               <Copy className="w-4 h-4 mr-2" />
-              Archiv ({savedTemplates.length})
+              {t('shopping.archive')} ({savedTemplates.length})
             </Button>
           </div>
 
@@ -2865,9 +2939,9 @@ export default function Shopping() {
                   onClick={() => listScannerFileRef.current?.click()}
                 >
                   <Upload className="w-12 h-12 mx-auto mb-4 text-slate-400" />
-                  <p className="font-medium">Einkaufsliste hochladen</p>
+                  <p className="font-medium">{t('shopping.uploadShoppingList')}</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    JPG, PNG oder PDF - handgeschrieben oder gedruckt
+                    {t('shopping.uploadShoppingListFormats')}
                   </p>
                   <input
                     ref={listScannerFileRef}
@@ -2883,7 +2957,7 @@ export default function Shopping() {
               {isListScanning && (
                 <div className="text-center py-8">
                   <div className="animate-spin w-8 h-8 border-2 border-slate-300 border-t-slate-600 rounded-full mx-auto mb-4" />
-                  <p className="text-sm text-muted-foreground">Analysiere Einkaufsliste...</p>
+                  <p className="text-sm text-muted-foreground">{t('shopping.analyzingList')}</p>
                 </div>
               )}
 
@@ -2891,19 +2965,19 @@ export default function Shopping() {
               {scannedListImage && !isListScanning && (
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm font-medium">Gescannte Liste</span>
+                    <span className="text-sm font-medium">{t('shopping.scannedList')}</span>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => { setScannedListImage(null); setScannedListItems([]); }}
                     >
                       <X className="w-4 h-4 mr-1" />
-                      Neu scannen
+                      {t('shopping.scanAgain')}
                     </Button>
                   </div>
                   <img 
                     src={scannedListImage} 
-                    alt="Scanned list" 
+                    alt={t('shopping.scanner.scannedListAlt', 'Gescannte Liste')} 
                     className="max-h-40 w-auto mx-auto rounded-lg border"
                   />
                 </div>
@@ -2914,14 +2988,14 @@ export default function Shopping() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">
-                      Erkannte Artikel ({scannedListItems.filter(i => i.selected).length}/{scannedListItems.length})
+                      {t('shopping.recognizedItems')} ({scannedListItems.filter(i => i.selected).length}/{scannedListItems.length})
                     </span>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => setScannedListItems(items => items.map(i => ({ ...i, selected: !scannedListItems.every(x => x.selected) })))}
                     >
-                      {scannedListItems.every(i => i.selected) ? 'Alle abwählen' : 'Alle auswählen'}
+                      {scannedListItems.every(i => i.selected) ? t('shopping.deselectAll', 'Alle abwählen') : t('shopping.selectAll', 'Alle auswählen')}
                     </Button>
                   </div>
                   
@@ -2950,7 +3024,7 @@ export default function Shopping() {
                           )}
                         </div>
                         <Badge variant="outline" className="text-xs shrink-0">
-                          {item.category || 'Sonstiges'}
+                          {item.category ? t(`shopping.categories.${item.category}`) : t('shopping.categories.other')}
                         </Badge>
                       </div>
                     ))}
@@ -2964,8 +3038,8 @@ export default function Shopping() {
               {savedTemplates.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Copy className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                  <p>Noch keine Listen im Archiv</p>
-                  <p className="text-sm mt-1">Scanne eine Liste und speichere sie für später</p>
+                  <p>{t('shopping.noListsInArchive')}</p>
+                  <p className="text-sm mt-1">{t('shopping.scanAndSaveForLater')}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -2978,7 +3052,7 @@ export default function Shopping() {
                         <div>
                           <h4 className="font-medium">{template.name}</h4>
                           <p className="text-xs text-muted-foreground">
-                            {template.items.length} Artikel · {template.usageCount}× verwendet
+                            {template.items.length} {t('shopping.items')} · {template.usageCount}× {t('shopping.used')}
                           </p>
                         </div>
                         <div className="flex gap-2">
@@ -2987,7 +3061,7 @@ export default function Shopping() {
                             onClick={() => handleUseTemplate(template.id)}
                           >
                             <Plus className="w-4 h-4 mr-1" />
-                            Verwenden
+                            {t('shopping.use')}
                           </Button>
                           <Button
                             size="sm"
@@ -3006,7 +3080,7 @@ export default function Shopping() {
                         ))}
                         {template.items.length > 6 && (
                           <Badge variant="outline" className="text-xs">
-                            +{template.items.length - 6} mehr
+                            +{template.items.length - 6} {t('common.more')}
                           </Badge>
                         )}
                       </div>
@@ -3019,12 +3093,12 @@ export default function Shopping() {
           
           <DialogFooter className="pt-4">
             <Button variant="outline" onClick={() => setShowListScanner(false)}>
-              Schliessen
+              {t('common.close')}
             </Button>
             {listScannerMode === 'scan' && scannedListItems.length > 0 && (
               <Button onClick={handleAddScannedItems}>
                 <Plus className="w-4 h-4 mr-2" />
-                {scannedListItems.filter(i => i.selected).length} Artikel hinzufügen
+                {scannedListItems.filter(i => i.selected).length} {t('shopping.addItems')}
               </Button>
             )}
           </DialogFooter>
@@ -3037,39 +3111,60 @@ export default function Shopping() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Save className="w-5 h-5" />
-              Liste im Archiv speichern
+              {t('shopping.saveListToArchive')}
             </DialogTitle>
             <DialogDescription>
-              Speichere diese Liste für späteren Gebrauch
+              {t('shopping.saveListToArchiveDescription')}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Name der Liste</Label>
+              <Label>{t('shopping.listName')}</Label>
               <Input
-                placeholder="z.B. Wocheneinkauf, Party-Einkauf..."
+                placeholder={t('shopping.templateNamePlaceholder')}
                 value={newTemplateName}
                 onChange={(e) => setNewTemplateName(e.target.value)}
               />
             </div>
             
             <div className="text-sm text-muted-foreground">
-              {scannedListItems.filter(i => i.selected).length} Artikel werden gespeichert
+              {t('shopping.itemsWillBeSaved', { count: scannedListItems.filter(i => i.selected).length })}
             </div>
           </div>
           
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowSaveTemplateDialog(false)}>
-              Überspringen
+              {t('common.skip')}
             </Button>
             <Button onClick={handleSaveTemplate}>
               <Save className="w-4 h-4 mr-2" />
-              Im Archiv speichern
+              {t('shopping.saveToArchive')}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Clear All Items Confirmation Dialog */}
+      <AlertDialog open={showClearAllDialog} onOpenChange={setShowClearAllDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('shopping.clearAllTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('shopping.clearAllConfirm', { count: notBoughtItems.length })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              handleClearAllItems();
+              setShowClearAllDialog(false);
+            }} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {t('common.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Layout>
   );
 }

@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import i18n from '@/lib/i18n';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
@@ -33,18 +35,34 @@ interface VacationPlannerDialogProps {
   initialDate?: Date;
 }
 
-const VACATION_TYPES = [
-  { value: 'vacation', label: 'Ferien', icon: Palmtree },
-  { value: 'sick', label: 'Krankheit', icon: Thermometer },
-  { value: 'personal', label: 'Persönlich', icon: Heart },
-  { value: 'holiday', label: 'Feiertag', icon: Star },
-  { value: 'other', label: 'Sonstiges', icon: Calendar },
-];
-
-const monthNames = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+// VACATION_TYPES will be defined inside the component to use t()
 
 export default function VacationPlannerDialog({ open, onOpenChange, onDataChanged, initialDate }: VacationPlannerDialogProps) {
+  const { t } = useTranslation();
   const { data: people = [], isLoading: peopleLoading } = usePeople();
+  
+  const VACATION_TYPES = useMemo(() => [
+    { value: 'vacation', label: t('calendar.vacationTypes.vacation', 'Ferien'), icon: Palmtree },
+    { value: 'sick', label: t('calendar.vacationTypes.sick', 'Krankheit'), icon: Thermometer },
+    { value: 'personal', label: t('calendar.vacationTypes.personal', 'Persönlich'), icon: Heart },
+    { value: 'holiday', label: t('calendar.vacationTypes.holiday', 'Feiertag'), icon: Star },
+    { value: 'other', label: t('calendar.vacationTypes.other', 'Sonstiges'), icon: Calendar },
+  ], [t]);
+  
+  const monthNames = useMemo(() => [
+    t('calendar.months.january'),
+    t('calendar.months.february'),
+    t('calendar.months.march'),
+    t('calendar.months.april'),
+    t('calendar.months.may'),
+    t('calendar.months.june'),
+    t('calendar.months.july'),
+    t('calendar.months.august'),
+    t('calendar.months.september'),
+    t('calendar.months.october'),
+    t('calendar.months.november'),
+    t('calendar.months.december'),
+  ], [t]);
   const [vacations, setVacations] = useState<Vacation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -119,7 +137,7 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
 
   const handleSave = async () => {
     if (!formData.personId || !formData.startDate || !formData.endDate || !formData.title) {
-      toast.error('Bitte alle Pflichtfelder ausfüllen');
+      toast.error(t('calendar.vacationPlanner.fillAllFields', 'Bitte alle Pflichtfelder ausfüllen'));
       return;
     }
 
@@ -127,18 +145,18 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
       if (editingVacation) {
         const updateVacationFunc = httpsCallable(functions, 'updateVacation');
         await updateVacationFunc({ id: editingVacation.id, ...formData });
-        toast.success('Aktualisiert');
+        toast.success(t('common.updated', 'Aktualisiert'));
       } else {
         const createVacationFunc = httpsCallable(functions, 'createVacation');
         await createVacationFunc(formData);
-        toast.success('Eingetragen');
+        toast.success(t('calendar.vacationPlanner.entered', 'Eingetragen'));
       }
       setShowAddDialog(false);
       resetForm();
       fetchVacations();
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      toast.error('Fehler beim Speichern');
+      toast.error(t('calendar.vacationPlanner.saveError', 'Fehler beim Speichern'));
     }
   };
 
@@ -147,12 +165,12 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
     try {
       const deleteVacationFunc = httpsCallable(functions, 'deleteVacation');
       await deleteVacationFunc({ id: deleteConfirmId });
-      toast.success('Gelöscht');
+      toast.success(t('common.deleted', 'Gelöscht'));
       setDeleteConfirmId(null);
       fetchVacations();
       if (onDataChanged) onDataChanged();
     } catch (error) {
-      toast.error('Fehler beim Löschen');
+      toast.error(t('calendar.vacationPlanner.deleteError', 'Fehler beim Löschen'));
     }
   };
 
@@ -164,7 +182,10 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
 
   const getTypeInfo = (type: string) => VACATION_TYPES.find(t => t.value === type) || VACATION_TYPES[0];
 
-  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const formatDate = (dateStr: string) => {
+    const locale = i18n.language === 'de' ? 'de-CH' : i18n.language === 'en' ? 'en-GB' : i18n.language === 'fr' ? 'fr-CH' : i18n.language === 'it' ? 'it-CH' : i18n.language;
+    return new Date(dateStr).toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
 
   const getMonthVacations = () => {
     const year = currentMonth.getFullYear();
@@ -194,7 +215,7 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
           <DialogHeader className="pb-4">
             <DialogTitle className="flex items-center gap-2 text-lg">
               <Palmtree className="w-5 h-5" />
-              Ferienplaner
+              {t('calendar.vacationPlanner.title', 'Ferienplaner')}
             </DialogTitle>
           </DialogHeader>
 
@@ -205,7 +226,7 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
           ) : householdMembers.length === 0 ? (
             <div className="text-center py-12">
               <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-              <p className="text-muted-foreground">Keine Haushaltsmitglieder gefunden</p>
+              <p className="text-muted-foreground">{t('calendar.vacationPlanner.noHouseholdMembers', 'Keine Haushaltsmitglieder gefunden')}</p>
             </div>
           ) : (
             <div className="space-y-5">
@@ -216,13 +237,13 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
                     const stats = getPersonStats(person.id);
                     return (
                       <span key={person.id}>
-                        <strong>{person.name}:</strong> {stats.days} Tage
+                        <strong>{person.name}:</strong> {stats.days} {t('calendar.vacationPlanner.days', 'Tage')}
                       </span>
                     );
                   })}
                 </div>
                 <div className="ml-auto text-sm">
-                  <strong>{totalDays}</strong> Tage gesamt
+                  <strong>{totalDays}</strong> {t('calendar.vacationPlanner.daysTotal', 'Tage gesamt')}
                 </div>
               </div>
 
@@ -240,7 +261,7 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
                 <div className="flex-1" />
                 <Button size="sm" onClick={openAddDialog}>
                   <Plus className="w-4 h-4 mr-1" />
-                  Hinzufügen
+                  {t('common.add', 'Hinzufügen')}
                 </Button>
               </div>
 
@@ -252,7 +273,7 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
               ) : getMonthVacations().length === 0 ? (
                 <div className="text-center py-12 border rounded-lg">
                   <Palmtree className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-                  <p className="text-muted-foreground">Keine Einträge für diesen Monat</p>
+                  <p className="text-muted-foreground">{t('calendar.vacationPlanner.noEntriesThisMonth', 'Keine Einträge für diesen Monat')}</p>
                 </div>
               ) : (
                 <div className="border rounded-lg divide-y">
@@ -267,7 +288,7 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
                         <div className="flex-1 min-w-0">
                           <div className="font-medium">{vacation.title}</div>
                           <div className="text-sm text-muted-foreground">
-                            {vacation.personName} · {formatDate(vacation.startDate)} – {formatDate(vacation.endDate)} · {days} {days === 1 ? 'Tag' : 'Tage'}
+                            {vacation.personName} · {formatDate(vacation.startDate)} – {formatDate(vacation.endDate)} · {days} {days === 1 ? t('calendar.vacationPlanner.day', 'Tag') : t('calendar.vacationPlanner.days', 'Tage')}
                           </div>
                           {vacation.notes && (
                             <div className="text-sm text-muted-foreground mt-1">{vacation.notes}</div>
@@ -293,60 +314,60 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingVacation ? 'Eintrag bearbeiten' : 'Neuer Eintrag'}</DialogTitle>
+            <DialogTitle>{editingVacation ? t('calendar.vacationPlanner.editEntry', 'Eintrag bearbeiten') : t('calendar.vacationPlanner.newEntry', 'Neuer Eintrag')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
-              <Label>Person</Label>
+              <Label>{t('calendar.vacationPlanner.person', 'Person')}</Label>
               <Select value={formData.personId} onValueChange={(v) => {
                 const p = householdMembers.find(x => x.id === v);
                 setFormData(prev => ({ ...prev, personId: v, personName: p?.name || '' }));
               }}>
-                <SelectTrigger className="mt-1.5"><SelectValue placeholder="Wählen..." /></SelectTrigger>
+                <SelectTrigger className="mt-1.5"><SelectValue placeholder={t('common.select', 'Wählen...')} /></SelectTrigger>
                 <SelectContent>
                   {householdMembers.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Typ</Label>
+              <Label>{t('calendar.vacationPlanner.type', 'Typ')}</Label>
               <Select value={formData.type} onValueChange={(v) => setFormData(prev => ({ ...prev, type: v as Vacation['type'] }))}>
                 <SelectTrigger className="mt-1.5"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {VACATION_TYPES.map(t => {
-                    const I = t.icon;
-                    return <SelectItem key={t.value} value={t.value}><span className="flex items-center gap-2"><I className="w-4 h-4" />{t.label}</span></SelectItem>;
+                  {VACATION_TYPES.map(type => {
+                    const I = type.icon;
+                    return <SelectItem key={type.value} value={type.value}><span className="flex items-center gap-2"><I className="w-4 h-4" />{type.label}</span></SelectItem>;
                   })}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Titel</Label>
-              <Input value={formData.title} onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))} placeholder="z.B. Sommerferien" className="mt-1.5" />
+              <Label>{t('calendar.vacationPlanner.title', 'Titel')}</Label>
+              <Input value={formData.title} onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))} placeholder={t('calendar.vacationPlanner.titlePlaceholder', 'z.B. Sommerferien')} className="mt-1.5" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Von</Label>
+                <Label>{t('calendar.vacationPlanner.from', 'Von')}</Label>
                 <Input type="date" value={formData.startDate} onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))} className="mt-1.5" />
               </div>
               <div>
-                <Label>Bis</Label>
+                <Label>{t('calendar.vacationPlanner.to', 'Bis')}</Label>
                 <Input type="date" value={formData.endDate} onChange={(e) => setFormData(prev => ({ ...prev, endDate: e.target.value }))} className="mt-1.5" />
               </div>
             </div>
             {formData.startDate && formData.endDate && (
               <div className="text-center py-2 border rounded">
-                <strong>{calculateDays(formData.startDate, formData.endDate)}</strong> Tage
+                <strong>{calculateDays(formData.startDate, formData.endDate)}</strong> {t('calendar.vacationPlanner.days', 'Tage')}
               </div>
             )}
             <div>
-              <Label>Notizen</Label>
-              <Textarea value={formData.notes} onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))} placeholder="Optional..." className="mt-1.5" rows={2} />
+              <Label>{t('calendar.vacationPlanner.notes', 'Notizen')}</Label>
+              <Textarea value={formData.notes} onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))} placeholder={t('common.optional', 'Optional...')} className="mt-1.5" rows={2} />
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowAddDialog(false)}>Abbrechen</Button>
-            <Button onClick={handleSave}>{editingVacation ? 'Speichern' : 'Hinzufügen'}</Button>
+            <Button variant="outline" onClick={() => setShowAddDialog(false)}>{t('common.cancel', 'Abbrechen')}</Button>
+            <Button onClick={handleSave}>{editingVacation ? t('common.save', 'Speichern') : t('common.add', 'Hinzufügen')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -355,12 +376,12 @@ export default function VacationPlannerDialog({ open, onOpenChange, onDataChange
       <AlertDialog open={!!deleteConfirmId} onOpenChange={(o) => !o && setDeleteConfirmId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Eintrag löschen?</AlertDialogTitle>
-            <AlertDialogDescription>Diese Aktion kann nicht rückgängig gemacht werden.</AlertDialogDescription>
+            <AlertDialogTitle>{t('calendar.vacationPlanner.deleteEntry', 'Eintrag löschen?')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('common.cannotUndo', 'Diese Aktion kann nicht rückgängig gemacht werden.')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Löschen</AlertDialogAction>
+            <AlertDialogCancel>{t('common.cancel', 'Abbrechen')}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>{t('common.delete', 'Löschen')}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
